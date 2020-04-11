@@ -14,12 +14,33 @@ import hashlib as hashlib
 # Hans Buehler, Jan 2013
 # =============================================================================
 
+types_functions = (
+    types.FunctionType,
+    types.LambdaType,
+    types.CodeType,
+    #types.MappingProxyType,
+    #types.SimpleNamespace,
+    types.GeneratorType,
+    types.CoroutineType,
+    types.AsyncGeneratorType,
+    types.MethodType,
+    types.BuiltinFunctionType,
+    types.BuiltinMethodType,
+    types.WrapperDescriptorType,
+    types.MethodWrapperType,
+    types.MethodDescriptorType,
+    types.ClassMethodDescriptorType,
+    #types.ModuleType,
+    #types.TracebackType,
+    #types.FrameType,
+    types.GetSetDescriptorType,
+    types.MemberDescriptorType,
+    types.DynamicClassAttribute
+)
+
 def isFunction(f):
-    """ checks whether 'f' is a function """
-    return isinstance(f,types.FunctionType) \
-        or isinstance(f,types.LambdaType) \
-        or isinstance(f,types.GeneratorType) \
-        or isinstance(f,types.MethodType) 
+    """ checks whether 'f' is a function in an extended sense. Check 'types_functions' for what is tested against"""
+    return isinstance(f,types_functions)
 
 def isAtomic( o ):
     """ returns true if 'o' is a string, int, float, date or bool """
@@ -57,10 +78,10 @@ def fmt(text,*args,**kwargs):
 
 def prnt(text,*args,**kwargs):
     """ prints a fmt() string """
-    print(fmt(text,args,kwargs))
+    print(_fmt(text,args,kwargs))
 def write(text,*args,**kwargs):
     """ prints a fmt() string without EOL """
-    print(fmt(text,args,kwargs),end='')
+    print(_fmt(text,args,kwargs),end='')
 
 # =============================================================================
 # Conversion of arbitrary python elements into re-usable versions
@@ -216,11 +237,15 @@ class Generic(object):
     Hans Buehler, 2013
     """
     
-    def __init__(self, **kwargs):
+    def __init__(self, *vargs, **kwargs):
         """ Initialize object; use keyword notation such as
                 Generic(a=1, b=2)
+                
+            The 'vargs' argument allows passing on existing Generic, dict or generic objects;
+            see merge() for further information
         """
-        self.__dict__.update(kwargs)
+        # allow construction the object as Generic(a=1,b=2)
+        self.merge(*vargs,**kwargs)
     
     # make it behave like a dictionary    
     
@@ -255,9 +280,54 @@ class Generic(object):
         """ like dict.get() """
         if len(kargs) == 0 or key in self:
             return self[key]
-        if len(kargs) != 1: raise ValueError("get(): no or one argument expected; found %ld arguments", len(kargs))
+        if len(kargs) != 1:
+            raise ValueError("get(): no or one argument expected; found %ld arguments", len(kargs))
         return kargs[0]
     
+    def __add__(self, o):
+        """ Allows merging dicts or other Generics. To add other objects, use merge() explicitly """
+        out = Generic(self)
+        if isinstance(o,dict):
+            out.__dict__.update(o)
+        elif isinstance(o,Generic):
+            out.__dict__.update(o.__dict__)
+        else:
+            raise ValueError("Cannot handle type %s. Use merge() explicitly to add object members" % type(o))
+        return out
     
+    def merge_object(self, o):
+        """ Allows loading data elements from a list, another Generic or any object """
+        if isinstance(o,dict):
+            self.__dict__.update(o)
+        elif isinstance(o,Generic):
+            self.__dict__.update(o.__dict__)
+        else:
+            dct = getattr(o,"__dict__",None)
+            if dct is None:
+                raise ValueError("Cannot handle type %s. It has no __dict__",type(o))
+            for e in dct:
+                if not isFunction(e):
+                    self.__dict__.__setitem__(e,dct[e])
     
-
+    def merge(self,*vargs,**kwargs):
+        """ merges various data into the generic.
+                vargs are treated like dictionaries and merged
+                kwargs are treated like key/value pairs and added
+                
+            Example
+                in1 = { 'a':1, 'b':2 }
+                in2 = Generic(c=3,d=4)
+                def O(object):
+                    def __init__(self):
+                        self.e = 5
+                in3 = O()
+                
+                merge( in1, in2, in3, f=6 )
+                
+            Note
+                The function first processes the 'vargs' list, and then
+                any explicit keywords which will overwrite any duplicates
+        """
+        for o in vargs:
+            self.merge_object(o)
+        self.merge_object(kwargs)
