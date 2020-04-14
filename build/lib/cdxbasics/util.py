@@ -2,12 +2,25 @@
 Basic utilities
 """
 
-import numpy as np
-import pandas as pd
 import datetime as datetime
 import types as types
 from functools import wraps
 import hashlib as hashlib
+
+np = None
+pd = None
+
+# support for numpy and pandas is optional
+# for this module
+# April'20
+try:
+    import numpy as np
+except:
+    pass
+try:
+    import pandas as pd
+except:
+    pass
 
 # =============================================================================
 # basic indentification short cuts
@@ -67,11 +80,19 @@ def isFunction(f):
 
 def isAtomic( o ):
     """ returns true if 'o' is a string, int, float, date or bool """
-    return  type(o) in [str,int,bool,float,datetime.date] or isinstance(o,np.float) or isinstance(o,np.int)
+    if type(o) in [str,int,bool,float,datetime.date]:
+        return True
+    if not np is None and isinstance(o,(np.float,np.int)):
+        return True
+    return False
 
 def isFloat( o ):
     """ checks whether a type is a float """
-    return type(o) is float or isinstance(o,np.float)
+    if type(o) is float:
+        return True
+    if not np is None and isinstance(o,np.float):
+        return True
+    return False
 
 # =============================================================================
 # string formatting
@@ -120,10 +141,8 @@ def plain( inn, sorted = False ):
     """
     # basics
     if isAtomic(inn) \
-        or isinstance(inn,np.ndarray) \
-        or isinstance(inn,datetime.time) \
-        or isinstance(inn,datetime.date) \
-        or isinstance(inn,datetime.datetime) \
+        or isinstance(inn,(datetime.time,datetime.date,datetime.datetime))\
+        or (False if np is None else isinstance(inn,np.ndarray)) \
         or inn is None:
         return inn
     # can't handle functions --> return None
@@ -135,6 +154,12 @@ def plain( inn, sorted = False ):
         for k in inn:
             out[k] = plain(inn[k])
         return out
+    # pandas
+    if not pd is None and isinstance(inn,pd.DataFrame):
+        plain(inn.columns)
+        plain(inn.index)
+        plain(inn.as_matrix())
+        return
     # lists, tuples and everything which looks like it --> lists
     if not getattr(inn,"__iter__",None) is None: #isinstance(inn,list) or isinstance(inn,tuple):
         return [ plain(k) for k in inn ]
@@ -158,14 +183,11 @@ def unqiueHash(*args, **kwargs):
     def visit(inn):
         # basics
         if isAtomic(inn) \
-            or isinstance(inn,np.ndarray) \
-            or isinstance(inn,datetime.time) \
-            or isinstance(inn,datetime.date) \
-            or isinstance(inn,datetime.datetime) \
+            or isinstance(inn,datetime.time,datetime.date,datetime.datetime) \
+            or (False if np is None else isinstance(inn,np.ndarray)) \
             or inn is None:
             m.update(inn)
             return
-        # can't hand
         # can't handle functions --> return None
         if isFunction(inn) or isinstance(inn,property):
             return None
@@ -178,13 +200,13 @@ def unqiueHash(*args, **kwargs):
                 visit(inn[k])
             return
         # pandas
-        if isinstance(inn,pd.DataFrame):
+        if not pd is None and isinstance(inn,pd.DataFrame):
             m.update(inn.columns)
             m.update(inn.index)
             m.update(inn.as_matrix())
             return
         # lists, tuples and everything which looks like it --> lists
-        if not getattr(inn,"__iter__",None) is None: #isinstance(inn,list) or isinstance(inn,tuple):
+        if not getattr(inn,"__iter__",None) is None:
             try:
                 for k in inn:
                     visit(k)
@@ -285,7 +307,7 @@ class Generic(object):
         self.__dict__.__setitem__(key,value)
         
     def __delitem__(self,key):
-        self.__dict__.delitem(key)
+        self.__dict__.__delitem__(key)
 
     def __iter__(self):
         return self.__dict__.__iter__()
@@ -318,24 +340,10 @@ class Generic(object):
             raise ValueError("Cannot handle type %s. Use merge() explicitly to add object members" % type(o))
         return out
     
-    def merge_object(self, o):
-        """ Allows loading data elements from a list, another Generic or any object """
-        if isinstance(o,dict):
-            self.__dict__.update(o)
-        elif isinstance(o,Generic):
-            self.__dict__.update(o.__dict__)
-        else:
-            dct = getattr(o,"__dict__",None)
-            if dct is None:
-                raise ValueError("Cannot handle type %s. It has no __dict__",type(o))
-            for e in dct:
-                if not isFunction(e):
-                    self.__dict__.__setitem__(e,dct[e])
-    
     def merge(self,*vargs,**kwargs):
         """ merges various data into the generic.
-                vargs are treated like dictionaries and merged
-                kwargs are treated like key/value pairs and added
+                varargs: for each element, add the key/value pairs of dictionaries, Generics or any object (in the latter case __dict__ is used for non-functions)
+                kwargs: are kwarg name/value p[airs all added directly, e.g. merge(a=1) adds 'a' with a value of '1' to self
                 
             Example
                 in1 = { 'a':1, 'b':2 }
@@ -351,6 +359,19 @@ class Generic(object):
                 The function first processes the 'vargs' list, and then
                 any explicit keywords which will overwrite any duplicates
         """
+        def merge_object_dict(o):
+            """ Allows loading data elements from a list, another Generic or any object """
+            if isinstance(o,dict):
+                self.__dict__.update(o)
+            elif isinstance(o,Generic):
+                self.__dict__.update(o.__dict__)
+            else:
+                dct = getattr(o,"__dict__",None)
+                if dct is None:
+                    raise ValueError("Cannot handle type %s. It has no __dict__",type(o))
+                for e in dct:
+                    if not isFunction(e):
+                        self.__dict__.__setitem__(e,dct[e])        
         for o in vargs:
-            self.merge_object(o)
-        self.merge_object(kwargs)
+            merge_object_dict(o)
+        merge_object_dict(kwargs)
