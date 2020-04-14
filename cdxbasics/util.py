@@ -2,12 +2,23 @@
 Basic utilities
 """
 
-import numpy as np
-import pandas as pd
 import datetime as datetime
 import types as types
 from functools import wraps
 import hashlib as hashlib
+
+np = None
+pd = None
+
+# support for numpy and pandas is optional.
+try:
+    import numpy as np
+except:
+    pass
+try:
+    import pandas as pd
+except:
+    pass
 
 # =============================================================================
 # basic indentification short cuts
@@ -67,11 +78,19 @@ def isFunction(f):
 
 def isAtomic( o ):
     """ returns true if 'o' is a string, int, float, date or bool """
-    return  type(o) in [str,int,bool,float,datetime.date] or isinstance(o,np.float) or isinstance(o,np.int)
+    if type(o) in [str,int,bool,float,datetime.date]:
+        return True
+    if not np is None and isinstance(o,np.float,np.int):
+        return True
+    return False
 
 def isFloat( o ):
     """ checks whether a type is a float """
-    return type(o) is float or isinstance(o,np.float)
+    if type(o) is float:
+        return True
+    if not np is None and isinstance(o,np.float):
+        return True
+    return False
 
 # =============================================================================
 # string formatting
@@ -120,10 +139,8 @@ def plain( inn, sorted = False ):
     """
     # basics
     if isAtomic(inn) \
-        or isinstance(inn,np.ndarray) \
-        or isinstance(inn,datetime.time) \
-        or isinstance(inn,datetime.date) \
-        or isinstance(inn,datetime.datetime) \
+        or isinstance(inn,datetime.time,datetime.date,datetime.datetime)\
+        or (False if np is None else isinstance(inn,np.ndarray)) \
         or inn is None:
         return inn
     # can't handle functions --> return None
@@ -135,6 +152,12 @@ def plain( inn, sorted = False ):
         for k in inn:
             out[k] = plain(inn[k])
         return out
+    # pandas
+    if not pd is None and isinstance(inn,pd.DataFrame):
+        plain(inn.columns)
+        plain(inn.index)
+        plain(inn.as_matrix())
+        return
     # lists, tuples and everything which looks like it --> lists
     if not getattr(inn,"__iter__",None) is None: #isinstance(inn,list) or isinstance(inn,tuple):
         return [ plain(k) for k in inn ]
@@ -158,14 +181,11 @@ def unqiueHash(*args, **kwargs):
     def visit(inn):
         # basics
         if isAtomic(inn) \
-            or isinstance(inn,np.ndarray) \
-            or isinstance(inn,datetime.time) \
-            or isinstance(inn,datetime.date) \
-            or isinstance(inn,datetime.datetime) \
+            or isinstance(inn,datetime.time,datetime.date,datetime.datetime) \
+            or (False if np is None else isinstance(inn,np.ndarray)) \
             or inn is None:
             m.update(inn)
             return
-        # can't hand
         # can't handle functions --> return None
         if isFunction(inn) or isinstance(inn,property):
             return None
@@ -178,13 +198,13 @@ def unqiueHash(*args, **kwargs):
                 visit(inn[k])
             return
         # pandas
-        if isinstance(inn,pd.DataFrame):
+        if not pd is None and isinstance(inn,pd.DataFrame):
             m.update(inn.columns)
             m.update(inn.index)
             m.update(inn.as_matrix())
             return
         # lists, tuples and everything which looks like it --> lists
-        if not getattr(inn,"__iter__",None) is None: #isinstance(inn,list) or isinstance(inn,tuple):
+        if not getattr(inn,"__iter__",None) is None:
             try:
                 for k in inn:
                     visit(k)
