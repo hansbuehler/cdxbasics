@@ -15,6 +15,7 @@ class CDXBasicsTest(unittest.TestCase):
 
     def test_dctkwargs(self):
         dctkwargs = mdl_kwargs.dctkwargs
+
         def f1(**kwargs):
             kwargs = dctkwargs(kwargs)
             a = kwargs('a',1)      # with default
