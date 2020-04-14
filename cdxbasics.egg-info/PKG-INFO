@@ -1,8 +1,8 @@
 Metadata-Version: 2.1
 Name: cdxbasics
-Version: 0.0.9
+Version: 0.0.11
 Summary: Basic Python tools
-Home-page: https://github.com/IamProbably/cdxbasics
+Home-page: https://github.com/hansbuehler/cdxbasics
 Author: Hans Buehler
 Author-email: github@buehler.london
 License: UNKNOWN

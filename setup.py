@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="cdxbasics", 
-    version="0.0.10",
+    version="0.0.11",
     author="Hans Buehler",
     author_email="github@buehler.london",
     description="Basic Python tools",
