@@ -285,7 +285,7 @@ class Generic(object):
         self.__dict__.__setitem__(key,value)
         
     def __delitem__(self,key):
-        self.__dict__.delitem(key)
+        self.__dict__.__delitem__(key)
 
     def __iter__(self):
         return self.__dict__.__iter__()
@@ -318,24 +318,10 @@ class Generic(object):
             raise ValueError("Cannot handle type %s. Use merge() explicitly to add object members" % type(o))
         return out
     
-    def merge_object(self, o):
-        """ Allows loading data elements from a list, another Generic or any object """
-        if isinstance(o,dict):
-            self.__dict__.update(o)
-        elif isinstance(o,Generic):
-            self.__dict__.update(o.__dict__)
-        else:
-            dct = getattr(o,"__dict__",None)
-            if dct is None:
-                raise ValueError("Cannot handle type %s. It has no __dict__",type(o))
-            for e in dct:
-                if not isFunction(e):
-                    self.__dict__.__setitem__(e,dct[e])
-    
     def merge(self,*vargs,**kwargs):
         """ merges various data into the generic.
-                vargs are treated like dictionaries and merged
-                kwargs are treated like key/value pairs and added
+                varargs: for each element, add the key/value pairs of dictionaries, Generics or any object (in the latter case __dict__ is used for non-functions)
+                kwargs: are kwarg name/value p[airs all added directly, e.g. merge(a=1) adds 'a' with a value of '1' to self
                 
             Example
                 in1 = { 'a':1, 'b':2 }
@@ -351,6 +337,19 @@ class Generic(object):
                 The function first processes the 'vargs' list, and then
                 any explicit keywords which will overwrite any duplicates
         """
+        def merge_object_dict(o):
+            """ Allows loading data elements from a list, another Generic or any object """
+            if isinstance(o,dict):
+                self.__dict__.update(o)
+            elif isinstance(o,Generic):
+                self.__dict__.update(o.__dict__)
+            else:
+                dct = getattr(o,"__dict__",None)
+                if dct is None:
+                    raise ValueError("Cannot handle type %s. It has no __dict__",type(o))
+                for e in dct:
+                    if not isFunction(e):
+                        self.__dict__.__setitem__(e,dct[e])        
         for o in vargs:
-            self.merge_object(o)
-        self.merge_object(kwargs)
+            merge_object_dict(o)
+        merge_object_dict(kwargs)

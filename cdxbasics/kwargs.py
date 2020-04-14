@@ -20,7 +20,7 @@ def dctkwargs(kwargs):
                 kwargs = dctkwargs(kwargs)
                 a = kwargs('a',0)      # with default
                 b = kwargs['a']        # no default; must exist
-                c = kwargs['c',1]      # with default
+                c = kwargs.get('c',2)  # with default
       
         Hans Buehler 2018
     """
@@ -77,7 +77,8 @@ def dctkwargs(kwargs):
                 nice error messages
             """
             keys = sorted( set(self.kwargs.keys()).difference(self.requested) )
-            if len(keys) == 0: return None
+            if len(keys) == 0:
+                return ""
             lst = ""
             for k in keys:
                 lst += k + ", "
@@ -103,7 +104,5 @@ def dctkwargs(kwargs):
             """ Ignore any keywords which have not been processed """
             self.check_on_exit = False
             
-    if isinstance(kwargs,_dctkwargs):
-        return kwargs
-    return _dctkwargs(kwargs)
+    return kwargs if isinstance(kwargs,_dctkwargs) else _dctkwargs(kwargs)
             
