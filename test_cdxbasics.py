@@ -88,6 +88,38 @@ class CDXBasicsTest(unittest.TestCase):
         g1.merge(o,x=0)
         self.assertEqual(g1.x, 0)
         
+        # functions        
+        def F(self,x):
+            self.x = x
+        
+        g = util.Generic()
+        g.F = F
+        g.F(2)
+        self.assertEqual(g.x,2)
+        
+        g2 = util.Generic()
+        g2.F = g.F
+        g2.F(3)
+        self.assertEqual(g2.x,3) # new value only for this object is 3
+        self.assertEqual(g.x,2)  # old value remains 2
+
+        g2 = util.Generic(g)
+        g2.F(3)
+        self.assertEqual(g2.x,3) # new value only for this object is 3
+        self.assertEqual(g.x,2)  # old value remains 2
+
+        g2 = util.Generic()
+        g2.merge(g)
+        g2.F(3)
+        self.assertEqual(g2.x,3) # new value only for this object is 3
+        self.assertEqual(g.x,2)  # old value remains 2
+        
+        with self.assertRaises(TypeError):
+            def G():
+                return 1        
+            g.G = G        
+            g.G()        
+        
     def test_basics(self):
         
         import datetime as datetime

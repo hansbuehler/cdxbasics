@@ -7,13 +7,13 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="cdxbasics", 
-    version="0.0.9",
+    version="0.0.10",
     author="Hans Buehler",
     author_email="github@buehler.london",
     description="Basic Python tools",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/IamProbably/cdxbasics",
+    url="https://github.com/hansbuehler/cdxbasics",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
