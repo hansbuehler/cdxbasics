@@ -17,10 +17,11 @@ import hashlib as hashlib
 __types_functions = None
 
 def types_functions():
+    """ utility function which returns all types.* considered function """
     global __types_functions
     if __types_functions is None:
         __types_functions = set()
-        try: _types_functions.add(types.FunctionType)
+        try: __types_functions.add(types.FunctionType)
         except: pass
         try: __types_functions.add(types.LambdaType)
         except: pass
