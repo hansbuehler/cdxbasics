@@ -1,0 +1,10 @@
+README.md
+setup.py
+cdxbasics/__init__.py
+cdxbasics/kwargs.py
+cdxbasics/logger.py
+cdxbasics/util.py
+cdxbasics.egg-info/PKG-INFO
+cdxbasics.egg-info/SOURCES.txt
+cdxbasics.egg-info/dependency_links.txt
+cdxbasics.egg-info/top_level.txt
