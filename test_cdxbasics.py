@@ -88,7 +88,40 @@ class CDXBasicsTest(unittest.TestCase):
         g1.merge(o,x=0)
         self.assertEqual(g1.x, 0)
         
+    def test_basics(self):
         
+        import datetime as datetime
+        class O(object):
+            def __init__(self):
+                self.x = -1
+            def fx(self):
+                pass
+            @property
+            def gr(self):
+                return 1
+        
+        self.assertEqual( util.isAtomic(True), True )
+        self.assertEqual( util.isAtomic('Test'), True )
+        self.assertEqual( util.isAtomic(1.0), True )
+        self.assertEqual( util.isAtomic(1), True )
+        self.assertEqual( util.isAtomic(datetime.date(2020,4,1)), True )
+        self.assertEqual( util.isAtomic(datetime.datetime(2020,4,1,11,0,0)), False )
+        self.assertEqual( util.isAtomic(O()), False  )
+        
+        def f(x):
+            pass
+        
+        self.assertTrue( util.isFunction(f) )
+        self.assertTrue( util.isFunction(O.fx) )
+        self.assertTrue( util.isFunction(O().fx) )
+        self.assertTrue( util.isFunction(self.test_basics) )
+        self.assertTrue( util.isFunction(lambda x : x*x) )
+        self.assertFalse( util.isFunction(O) )
+        self.assertFalse( util.isFunction(O.gr) )
+        self.assertFalse( util.isFunction(O().gr) )
+        self.assertFalse( util.isFunction(1) )
+        self.assertFalse( util.isFunction("str") )
+        self.assertFalse( util.isFunction(1.0) )
 
 if __name__ == '__main__':
     unittest.main()

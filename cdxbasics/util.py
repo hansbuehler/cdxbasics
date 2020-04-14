@@ -12,6 +12,7 @@ pd = None
 
 # support for numpy and pandas is optional
 # for this module
+# April'20
 try:
     import numpy as np
 except:
@@ -81,7 +82,7 @@ def isAtomic( o ):
     """ returns true if 'o' is a string, int, float, date or bool """
     if type(o) in [str,int,bool,float,datetime.date]:
         return True
-    if not np is None and isinstance(o,np.float,np.int):
+    if not np is None and isinstance(o,(np.float,np.int)):
         return True
     return False
 
@@ -140,7 +141,7 @@ def plain( inn, sorted = False ):
     """
     # basics
     if isAtomic(inn) \
-        or isinstance(inn,datetime.time,datetime.date,datetime.datetime)\
+        or isinstance(inn,(datetime.time,datetime.date,datetime.datetime))\
         or (False if np is None else isinstance(inn,np.ndarray)) \
         or inn is None:
         return inn
