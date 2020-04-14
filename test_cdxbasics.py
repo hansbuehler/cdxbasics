@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Apr 14 21:24:52 2020
-
 @author: hansb
-
-import test.test_cdxbasics as tstcdxb
 """
 
 import unittest

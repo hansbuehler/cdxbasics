@@ -10,7 +10,8 @@ import hashlib as hashlib
 np = None
 pd = None
 
-# support for numpy and pandas is optional.
+# support for numpy and pandas is optional
+# for this module
 try:
     import numpy as np
 except:
