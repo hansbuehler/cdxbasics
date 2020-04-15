@@ -8,6 +8,21 @@ import unittest
 import cdxbasics.util as util
 import cdxbasics.kwargs as mdl_kwargs
 
+# support for numpy and pandas is optional
+# for this module
+# April'20
+np = None
+pd = None
+
+try:
+    import numpy as np
+except:
+    pass
+try:
+    import pandas as pd
+except:
+    pass
+
 class CDXBasicsTest(unittest.TestCase):
 
     def test_dctkwargs(self):
@@ -154,6 +169,57 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertFalse( util.isFunction(1) )
         self.assertFalse( util.isFunction("str") )
         self.assertFalse( util.isFunction(1.0) )
+        
+    def test_fmt(self):
+        fmt = util.fmt
+        self.assertEqual(fmt("number %d %d",1,2),"number 1 2")
+        self.assertEqual(fmt("number %(two)d %(one)d",one=1,two=2),"number 2 1")
+
+        with self.assertRaises(KeyError):
+            fmt("number %(two)d %(one)d",one=1)
+        with self.assertRaises(TypeError):
+            fmt("number %d %d",1)
+        with self.assertRaises(TypeError):
+            fmt("number %d %d",1,2,3)        
+        
+    def test_uniqueHash_plain(self):
+        
+        class Object(object):
+            def __init__(self):
+                self.x = [ 1,2,3. ]
+                self.y = { 'a':1, 'b':2 }
+                self.z = util.Generic(c=3,d=4)
+                
+                def ff():
+                    pass
+                
+                self.ff = ff
+                self.gg = lambda x : x*x
+                
+                if not np is None:
+                    self.a = np.array([1,2,3])
+                    self.b = np.zeros((3,4,2))
+                if not pd is None:
+                    self.c = pd.DataFrame({'a':np.array([1,2,3]),'b':np.array([10,20,30]),'c':np.array([100,200,300]),  })
+            
+            def f(self):
+                pass
+            
+            @staticmethod
+            def g(self):
+                pass
+            
+            @property
+            def h(self):
+                return self.x
+
+        o = Object()
+        u = util.uniqueHash(o)
+        self.assertEqual(u,"d41d8cd98f00b204e9800998ecf8427e")
+        p = util.plain(o)
+        p = str(p).replace(' ','').replace('\n','')
+        tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':['c','d'],'a':array([1,2,3]),'b':array([[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]]]),'c':None}"
+        self.assertEqual(p,tst)
 
 if __name__ == '__main__':
     unittest.main()

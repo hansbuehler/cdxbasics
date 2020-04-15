@@ -7,12 +7,12 @@ import types as types
 from functools import wraps
 import hashlib as hashlib
 
-np = None
-pd = None
-
 # support for numpy and pandas is optional
 # for this module
 # April'20
+np = None
+pd = None
+
 try:
     import numpy as np
 except:
@@ -158,7 +158,7 @@ def plain( inn, sorted = False ):
     if not pd is None and isinstance(inn,pd.DataFrame):
         plain(inn.columns)
         plain(inn.index)
-        plain(inn.as_matrix())
+        plain(inn.to_numpy())
         return
     # lists, tuples and everything which looks like it --> lists
     if not getattr(inn,"__iter__",None) is None: #isinstance(inn,list) or isinstance(inn,tuple):
@@ -174,7 +174,7 @@ def plain( inn, sorted = False ):
     # nothing we can do
     raise TypeError(fmt("Cannot handle type %s", type(inn)))
 
-def unqiueHash(*args, **kwargs):
+def uniqueHash(*args, **kwargs):
     """ Generates a hash key for any collection of python objects.
         Typical use is for key'ing data vs a unique configuation
         Hans Buehler 207
@@ -183,7 +183,7 @@ def unqiueHash(*args, **kwargs):
     def visit(inn):
         # basics
         if isAtomic(inn) \
-            or isinstance(inn,datetime.time,datetime.date,datetime.datetime) \
+            or isinstance(inn,(datetime.time,datetime.date,datetime.datetime)) \
             or (False if np is None else isinstance(inn,np.ndarray)) \
             or inn is None:
             m.update(inn)
@@ -193,7 +193,7 @@ def unqiueHash(*args, **kwargs):
             return None
         # dictionaries
         if isinstance(inn,dict):
-            inns = list(inn.keys)
+            inns = list(inn.keys())
             inns.sort()            
             for k in inn:
                 m.update(k)
@@ -203,7 +203,7 @@ def unqiueHash(*args, **kwargs):
         if not pd is None and isinstance(inn,pd.DataFrame):
             m.update(inn.columns)
             m.update(inn.index)
-            m.update(inn.as_matrix())
+            m.update(inn.to_numpy())
             return
         # lists, tuples and everything which looks like it --> lists
         if not getattr(inn,"__iter__",None) is None:
