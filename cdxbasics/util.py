@@ -22,6 +22,9 @@ try:
 except:
     pass
 
+#np = None
+#pd = None
+
 # =============================================================================
 # basic indentification short cuts
 # Hans Buehler, Jan 2013
@@ -176,50 +179,62 @@ def plain( inn, sorted = False ):
 
 def uniqueHash(*args, **kwargs):
     """ Generates a hash key for any collection of python objects.
-        Typical use is for key'ing data vs a unique configuation
-        Hans Buehler 207
+        Typical use is for key'ing data vs a unique configuation.
+        
+        The function
+            1) uses the repr() function to feed objects to the hash algorithm.
+               that means is only distinguishes floats up to str conversion precision
+            2) keys of dictionaries, and sets are sorted to ensure equality of hashes
+               accross different memory setups of strings
+        
+        Hans Buehler 2017
     """    
     m = hashlib.md5()
+    def update(s):
+        m.update(repr(s).encode('utf-8'))
     def visit(inn):
         # basics
-        if isAtomic(inn) \
-            or isinstance(inn,(datetime.time,datetime.date,datetime.datetime)) \
-            or (False if np is None else isinstance(inn,np.ndarray)) \
-            or inn is None:
-            m.update(inn)
+        if inn is None:
             return
         # can't handle functions --> return None
         if isFunction(inn) or isinstance(inn,property):
             return None
-        # dictionaries
-        if isinstance(inn,dict):
-            inns = list(inn.keys())
-            inns.sort()            
-            for k in inn:
-                m.update(k)
-                visit(inn[k])
+        # basic elements
+        if isAtomic(inn):
+            update(inn)
+            return
+        # some standard types
+        if isinstance(inn,(datetime.time,datetime.date,datetime.datetime)):
+            update(inn)
+            return
+        # numpy
+        if not np is None and isinstance(inn,np.ndarray):
+            update(inn)
             return
         # pandas
         if not pd is None and isinstance(inn,pd.DataFrame):
-            m.update(inn.columns)
-            m.update(inn.index)
-            m.update(inn.to_numpy())
+            update(inn)
             return
+        # sets --> sorted list
+        if isinstance(inn,set):
+            inn = list(inn)
+            inn.sort()
         # lists, tuples and everything which looks like it --> lists
         if not getattr(inn,"__iter__",None) is None:
-            try:
-                for k in inn:
-                    visit(k)
-            except TypeError:
-                pass #
+            for k in inn:
+                visit(k)
             return
-        # handle objects as dictionaries, removing all functions
-        dct = getattr(inn,"__dict__",None)
-        if not dct is None:
-            visit(dct)
-            return
-        # nothing we can do
-        raise TypeError(fmt("Cannot handle type %s", type(inn)))
+        # dictionaries
+        if not isinstance(inn,dict):
+            inn = getattr(inn,"__dict__",None)
+            if inn is None: raise TypeError(fmt("Cannot handle type %s", type(inn)))
+        
+        inns = list(inn.keys())
+        inns.sort() # this ensures that dictionaries are always in the right order
+        for k in inn:
+            update(k)
+            visit(inn[k])
+        return
         
     visit(args)
     visit(kwargs)

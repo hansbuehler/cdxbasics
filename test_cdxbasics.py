@@ -11,17 +11,8 @@ import cdxbasics.kwargs as mdl_kwargs
 # support for numpy and pandas is optional
 # for this module
 # April'20
-np = None
-pd = None
-
-try:
-    import numpy as np
-except:
-    pass
-try:
-    import pandas as pd
-except:
-    pass
+np = util.np   # might be None
+pd = util.pd   # might be None
 
 class CDXBasicsTest(unittest.TestCase):
 
@@ -184,11 +175,13 @@ class CDXBasicsTest(unittest.TestCase):
         
     def test_uniqueHash_plain(self):
         
+        tst = self
         class Object(object):
             def __init__(self):
                 self.x = [ 1,2,3. ]
                 self.y = { 'a':1, 'b':2 }
                 self.z = util.Generic(c=3,d=4)
+                self.r = set([65,6234,1231,123123,12312]) 
                 
                 def ff():
                     pass
@@ -196,11 +189,13 @@ class CDXBasicsTest(unittest.TestCase):
                 self.ff = ff
                 self.gg = lambda x : x*x
                 
-                if not np is None:
+                if not np is None and not pd is None:
                     self.a = np.array([1,2,3])
                     self.b = np.zeros((3,4,2))
-                if not pd is None:
                     self.c = pd.DataFrame({'a':np.array([1,2,3]),'b':np.array([10,20,30]),'c':np.array([100,200,300]),  })
+                    
+                    u = util.uniqueHash(self.c)
+                    tst.assertEqual(u,"61af55defe5d0d51d5cad16c944460c9")
             
             def f(self):
                 pass
@@ -213,12 +208,23 @@ class CDXBasicsTest(unittest.TestCase):
             def h(self):
                 return self.x
 
+        if not np is None:
+            x = np.array([1,2,3,4.])
+            u = util.uniqueHash(x)
+            self.assertEqual(u,"d819f0b72b849d66112e139fa3b7c9f1")
+
         o = Object()
         u = util.uniqueHash(o)
-        self.assertEqual(u,"d41d8cd98f00b204e9800998ecf8427e")
+        if (not np is None) and (not pd is None):
+            self.assertEqual(u,"fabf6f1ae209dec8c9afc020d642c2c5")
+        else:
+            self.assertEqual(u,"a0a5d25d01daad0025420024a933e068")
         p = util.plain(o)
         p = str(p).replace(' ','').replace('\n','')
-        tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':['c','d'],'a':array([1,2,3]),'b':array([[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]]]),'c':None}"
+        if (not np is None) and (not pd is None):
+            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':['c','d'],'r':[65,1231,123123,12312,6234],'a':array([1,2,3]),'b':array([[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]]]),'c':None}"
+        else:
+            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':['c','d'],'r':[65,1231,123123,12312,6234]}"
         self.assertEqual(p,tst)
 
 if __name__ == '__main__':
