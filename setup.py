@@ -17,7 +17,7 @@ setuptools.setup(
     packages=setuptools.find_packages(),
 # The utility package optionally supports numpy and pandas. 
 # however, there is no actual dependency on them. The code themselves
-# will roll over if either is not present
+# will roll over if either is not present.
     install_requires=[
          'numpy','pandas'
      ],
