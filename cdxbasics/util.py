@@ -13,6 +13,9 @@ import hashlib as hashlib
 np = None
 pd = None
 
+import numpy as np
+import pandas as pd
+
 try:
     import numpy as np
 except:
