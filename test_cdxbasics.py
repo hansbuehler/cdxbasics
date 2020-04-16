@@ -216,6 +216,7 @@ class CDXBasicsTest(unittest.TestCase):
         o = Object()
         u = util.uniqueHash(o)
         if (not np is None) and (not pd is None):
+            print("np")
             self.assertEqual(u,"fabf6f1ae209dec8c9afc020d642c2c5")
         else:
             self.assertEqual(u,"a0a5d25d01daad0025420024a933e068")
