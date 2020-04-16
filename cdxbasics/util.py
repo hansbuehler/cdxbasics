@@ -11,7 +11,7 @@ import hashlib as hashlib
 # At the moment both are listed as dependencies in setup.py to ensure
 # they are tested in github
 # April'20
-np = Non
+np = None
 pd = None
 
 try:
