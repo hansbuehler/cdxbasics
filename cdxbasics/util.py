@@ -7,14 +7,12 @@ import types as types
 from functools import wraps
 import hashlib as hashlib
 
-# support for numpy and pandas is optional
-# for this module
+# support for numpy and pandas is optional for this module
+# At the moment both are listed as dependencies in setup.py to ensure
+# they are tested in github
 # April'20
 np = None
 pd = None
-
-import numpy as np
-import pandas as pd
 
 try:
     import numpy as np
@@ -24,9 +22,6 @@ try:
     import pandas as pd
 except:
     pass
-
-#np = None
-#pd = None
 
 # =============================================================================
 # basic indentification short cuts

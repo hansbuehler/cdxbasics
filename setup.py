@@ -15,9 +15,12 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/hansbuehler/cdxbasics",
     packages=setuptools.find_packages(),
+# The utility package optionally supports numpy and pandas. 
+# however, there is no actual dependency on them. The code themselves
+# will roll over if either is not present
     install_requires=[
-          'numpy','pandas'
-      ],
+         'numpy','pandas'
+     ],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
