@@ -4,7 +4,7 @@ Collection of basic tools for Python development. Highlights are
 
 <ul>
     <li><tt>Generic()</tt>: object which operates both like a dictionary and like an object, e.g. one can write<br>
-        <tt>
+        <tt><code>
             &nbsp;&nbsp;&nbsp;&nbsp;from cdxbasics import Generic<br>
             &nbsp;&nbsp;&nbsp;&nbsp;g = Generic(a=1, b=2)  # construction with nice keywords<br>
             &nbsp;&nbsp;&nbsp;&nbsp;g.c = 3<br>
@@ -14,6 +14,7 @@ Collection of basic tools for Python development. Highlights are
             &nbsp;&nbsp;&nbsp;&nbsp;e = g('e',None)  # with default<br>
             &nbsp;&nbsp;&nbsp;&nbsp;del c<br>
             &nbsp;&nbsp;&nbsp;&nbsp;del ....
+            </code>
         </tt>
     <li><tt>Logger</tt>: classic C++ style defensive programming VERIFY tools, e.g.<br>
         <tt>
