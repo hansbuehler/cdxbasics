@@ -86,12 +86,12 @@ class CDXBasicsTest(unittest.TestCase):
                 self.x = -1
         
         o = O()
-        g1.merge(o)
+        g1.update(o)
         self.assertEqual(g1.x, -1)
         del g1['x']
-        g1.merge(o)
+        g1.update(o)
         self.assertEqual(g1.x, -1)        
-        g1.merge(o,x=0)
+        g1.update(o,x=0)
         self.assertEqual(g1.x, 0)
         
         # functions        
@@ -115,7 +115,7 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual(g.x,2)  # old value remains 2
 
         g2 = util.Generic()
-        g2.merge(g)
+        g2.update(g)
         g2.F(3)
         self.assertEqual(g2.x,3) # new value only for this object is 3
         self.assertEqual(g.x,2)  # old value remains 2
@@ -216,7 +216,6 @@ class CDXBasicsTest(unittest.TestCase):
         o = Object()
         u = util.uniqueHash(o)
         if (not np is None) and (not pd is None):
-            print("np")
             self.assertEqual(u,"fabf6f1ae209dec8c9afc020d642c2c5")
         else:
             self.assertEqual(u,"a0a5d25d01daad0025420024a933e068")

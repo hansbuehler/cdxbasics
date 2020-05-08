@@ -184,6 +184,7 @@ def uniqueHash(*args, **kwargs):
                that means is only distinguishes floats up to str conversion precision
             2) keys of dictionaries, and sets are sorted to ensure equality of hashes
                accross different memory setups of strings
+            3) Members with leading '_' are ignored
         
         Hans Buehler 2017
     """    
@@ -230,8 +231,9 @@ def uniqueHash(*args, **kwargs):
         inns = list(inn.keys())
         inns.sort() # this ensures that dictionaries are always in the right order
         for k in inn:
-            update(k)
-            visit(inn[k])
+            if k[0] != '_':
+                update(k)
+                visit(inn[k])
         return
         
     visit(args)
@@ -315,7 +317,7 @@ class Generic(object):
             see merge() for further information
         """
         # allow construction the object as Generic(a=1,b=2)
-        self.merge(*vargs,**kwargs)
+        self.update(*vargs,**kwargs)
     
     # make it behave like a dictionary    
     
@@ -388,10 +390,10 @@ class Generic(object):
             raise ValueError("Cannot handle type %s. Use merge() explicitly to add object members" % type(o))
         return Generic(self,o)
     
-    def merge(self,*vargs,**kwargs):
+    def update(self,*vargs,**kwargs):
         """ merges various data into the generic.
                 varargs: for each element, add the key/value pairs of dictionaries, Generics or any object. For Generics, the function re-points methods
-                kwargs: are kwarg name/value p[airs all added directly, e.g. merge(a=1) adds 'a' with a value of '1' to self
+                kwargs: are kwarg name/value pairs all added directly, e.g. merge(a=1) adds 'a' with a value of '1' to self
                 
             Example
                 in1 = { 'a':1, 'b':2 }
@@ -403,7 +405,7 @@ class Generic(object):
                     def __init__(self):
                         self.e = 5
                 in3 = O()                
-                merge( in1, in2, in3, g=6 )
+                update( in1, in2, in3, g=6 )
                 
             Note
                 The function first processes the 'vargs' list, and then
