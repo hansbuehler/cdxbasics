@@ -238,6 +238,9 @@ class CDXBasicsTest(unittest.TestCase):
         sub['y'] = 2
         sub.write('z',3)
         sub.writeString('l',"hallo")
+
+        lst = str(sorted(sub.keys()))
+        self.assertEqual(lst, "['l', 'x', 'y', 'z']")
         
         self.assertEqual(sub.x,1)
         self.assertEqual(sub.y,2)
@@ -267,6 +270,20 @@ class CDXBasicsTest(unittest.TestCase):
             del sub['x']
         with self.assertRaises(KeyError):
             sub.delete('x',throwOnError=True)
+            
+        s2 = sub("subDir/")
+        s3 = sub.subDir("subDir3")
+        s4 = SubDir(sub,"subDir4")
+        self.assertEqual(s2.path, sub.path + "subDir/")
+        self.assertEqual(s3.path, sub.path + "subDir3/")
+        self.assertEqual(s4.path, sub.path + "subDir4/")
+        lst = str(sorted(sub.subDirs()))
+        self.assertEqual(lst, "['subDir', 'subDir3', 'subDir4']")
+
+        sub.deleteAllContent()
+        self.assertEqual(len(sub.keys()),0)
+        self.assertEqual(len(sub.subDirs()),0)
+        sub.eraseEverything()
         
 if __name__ == '__main__':
     unittest.main()
