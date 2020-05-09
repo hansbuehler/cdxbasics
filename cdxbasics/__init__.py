@@ -4,7 +4,7 @@ Created on Fri Apr  3 19:46:36 2020
 @author: hansb
 """
 
-__version__ = "0.0.14"
+__version__ = "0.0.20"
 
 from .util import *
 from .logger import Logger

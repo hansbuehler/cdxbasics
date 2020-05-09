@@ -12,7 +12,7 @@ Collection of basic tools for Python development. Highlights are
             &nbsp;&nbsp;&nbsp;&nbsp;a = g['a'] <br>
             &nbsp;&nbsp;&nbsp;&nbsp;d = g.get('d',None)  # with default<br>
             &nbsp;&nbsp;&nbsp;&nbsp;e = g('e',None)  # with default<br>
-            &nbsp;&nbsp;&nbsp;&nbsp;del c<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;del g.c<br>
             &nbsp;&nbsp;&nbsp;&nbsp;del ....
             </code>
         </tt>
@@ -33,8 +33,12 @@ Collection of basic tools for Python development. Highlights are
             &nbsp;&nbsp;&nbsp;&nbsp;    &nbsp;&nbsp;&nbsp;&nbsp;b = kwargs('b', None)   # with default <br>
             &nbsp;&nbsp;&nbsp;&nbsp;    &nbsp;&nbsp;&nbsp;&nbsp;assert kwargs.isDone(), "Unknown keywords: %s" % str(kwargs)
         </tt>
-    <li><tt>fmt()</tt>: integrated short cut
-    <li><tt>uniqueHash()</tt>: runs a standard hash over most combinations of standard elements or objects
-    <li><tt>plain()</tt>: converts most combinations of standards elements or objects into plain list/dict structures
+    <li><tt>fmt()</tt>: C++ style format function.
+    <li><tt>uniqueHash()</tt>: runs a standard hash over most combinations of standard elements or objects.
+    <li><tt>plain()</tt>: converts most combinations of standards elements or objects into plain list/dict structures.
 </ul>
+
+Version 0.20 also contains a few tools to handle file i/o in a transparent way in the new <tt>subdir</tt> module. For the time being this is experimental.
+Please share any bugs with the author in case you do end up using them.
+
 

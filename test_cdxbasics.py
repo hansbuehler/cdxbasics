@@ -7,6 +7,7 @@ Created on Tue Apr 14 21:24:52 2020
 import unittest
 import cdxbasics.util as util
 import cdxbasics.kwargs as mdl_kwargs
+import cdxbasics.subdir as mdl_subdir
 
 # support for numpy and pandas is optional
 # for this module
@@ -227,6 +228,46 @@ class CDXBasicsTest(unittest.TestCase):
             tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':['c','d'],'r':[65,1231,123123,12312,6234]}"
         self.assertEqual(p,tst)
 
+    def test_subdir(self):
+        
+        Root = mdl_subdir.Root
+        SubDir = mdl_subdir.SubDir
+        
+        sub = Root("!/.tmp_test_for_cdxbasics.subdir")
+        sub.x = 1
+        sub['y'] = 2
+        sub.write('z',3)
+        sub.writeString('l',"hallo")
+        
+        self.assertEqual(sub.x,1)
+        self.assertEqual(sub.y,2)
+        self.assertEqual(sub.z,3)
+        self.assertEqual(sub.readString('l'),"hallo")
+
+        self.assertEqual(sub['x'],1)
+        self.assertEqual(sub.read('x'),1)
+        self.assertEqual(sub.read('x',None),1)
+
+        self.assertEqual(sub.read('u',None),None)
+        
+        with self.assertRaises(KeyError):
+            print(sub.x2)
+        with self.assertRaises(KeyError):
+            print(sub['x2'])
+        with self.assertRaises(KeyError):
+            print(sub.read('x2',throwOnError=True))
+            
+        del sub.x
+        del sub['y']
+        sub.delete('z')
+
+        with self.assertRaises(KeyError):
+            del sub.x
+        with self.assertRaises(KeyError):
+            del sub['x']
+        with self.assertRaises(KeyError):
+            sub.delete('x',throwOnError=True)
+        
 if __name__ == '__main__':
     unittest.main()
 
