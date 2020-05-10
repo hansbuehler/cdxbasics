@@ -8,6 +8,17 @@ import unittest
 import cdxbasics.util as util
 import cdxbasics.kwargs as mdl_kwargs
 import cdxbasics.subdir as mdl_subdir
+import cdxbasics.logger as mdl_logger
+
+Root = mdl_subdir.Root
+SubDir = mdl_subdir.SubDir
+Logger = mdl_logger.Logger
+LogException = Logger.LogException
+dctkwargs = mdl_kwargs.dctkwargs
+Generic = util.Generic
+fmt = util.fmt
+
+mdl_subdir._log.setLevel(Logger.CRITICAL)   # no logging in testing
 
 # support for numpy and pandas is optional
 # for this module
@@ -18,8 +29,7 @@ pd = util.pd   # might be None
 class CDXBasicsTest(unittest.TestCase):
 
     def test_dctkwargs(self):
-        dctkwargs = mdl_kwargs.dctkwargs
-
+ 
         def f1(**kwargs):
             kwargs = dctkwargs(kwargs)
             a = kwargs('a',1)      # with default
@@ -45,7 +55,6 @@ class CDXBasicsTest(unittest.TestCase):
             f2(b=2,d=4)   # d does not exist
 
     def test_Generic(self):
-        Generic = util.Generic
         
         g1 = Generic(a=1)
         g1.b = 2
@@ -163,7 +172,6 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertFalse( util.isFunction(1.0) )
         
     def test_fmt(self):
-        fmt = util.fmt
         self.assertEqual(fmt("number %d %d",1,2),"number 1 2")
         self.assertEqual(fmt("number %(two)d %(one)d",one=1,two=2),"number 2 1")
 
@@ -230,36 +238,41 @@ class CDXBasicsTest(unittest.TestCase):
 
     def test_subdir(self):
         
-        Root = mdl_subdir.Root
-        SubDir = mdl_subdir.SubDir
-        
-        sub = Root("!/.tmp_test_for_cdxbasics.subdir")
+        sub = Root("!/.tmp_test_for_cdxbasics.subdir", raiseOnError=True )
         sub.x = 1
         sub['y'] = 2
         sub.write('z',3)
         sub.writeString('l',"hallo")
+        sub.write(['a','b'],[11,22])
 
         lst = str(sorted(sub.keys()))
-        self.assertEqual(lst, "['l', 'x', 'y', 'z']")
-        
+        self.assertEqual(lst, "['a', 'b', 'l', 'x', 'y', 'z']")
+
+        # read them all back        
         self.assertEqual(sub.x,1)
         self.assertEqual(sub.y,2)
         self.assertEqual(sub.z,3)
         self.assertEqual(sub.readString('l'),"hallo")
+        self.assertEqual(sub.a,11)
+        self.assertEqual(sub.b,22)
 
+        # test alternatives
         self.assertEqual(sub['x'],1)
         self.assertEqual(sub.read('x'),1)
         self.assertEqual(sub.read('x',None),1)
-
         self.assertEqual(sub.read('u',None),None)
+        self.assertEqual(sub('x',None),1)
+        self.assertEqual(sub('u',None),None)
         
+        # missing objects
         with self.assertRaises(KeyError):
             print(sub.x2)
         with self.assertRaises(KeyError):
             print(sub['x2'])
         with self.assertRaises(KeyError):
-            print(sub.read('x2',throwOnError=True))
-            
+            print(sub.read('x2',raiseOnError=True))
+        
+        # delete & confirm they are gone            
         del sub.x
         del sub['y']
         sub.delete('z')
@@ -269,21 +282,98 @@ class CDXBasicsTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             del sub['x']
         with self.assertRaises(KeyError):
-            sub.delete('x',throwOnError=True)
-            
-        s2 = sub("subDir/")
+            sub.delete('x',raiseOnError=True)
+
+        # sub dirs            
+        s1 = sub("subDir1")
+        s2 = sub("subDir2/")
         s3 = sub.subDir("subDir3")
         s4 = SubDir(sub,"subDir4")
-        self.assertEqual(s2.path, sub.path + "subDir/")
+        self.assertEqual(s1.path, sub.path + "subDir1/")
+        self.assertEqual(s2.path, sub.path + "subDir2/")
         self.assertEqual(s3.path, sub.path + "subDir3/")
         self.assertEqual(s4.path, sub.path + "subDir4/")
         lst = str(sorted(sub.subDirs()))
-        self.assertEqual(lst, "['subDir', 'subDir3', 'subDir4']")
+        self.assertEqual(lst, "['subDir1', 'subDir2', 'subDir3', 'subDir4']")
 
         sub.deleteAllContent()
         self.assertEqual(len(sub.keys()),0)
         self.assertEqual(len(sub.subDirs()),0)
         sub.eraseEverything()
+
+        # version without KeyErrors
+        sub = Root("!/.tmp_test_for_cdxbasics.subdir", raiseOnError=False )
+        sub.x = 1
+        self.assertEqual(sub.x, 1)
+        self.assertEqual(sub.z, None)
+        self.assertEqual(sub['z'], None)
+        
+        # do not throw
+        del sub.z
+        del sub['z']
+        sub.eraseEverything()
+        
+        # test vectors
+        sub = Root("!/.tmp_test_for_cdxbasics.subdir", raiseOnError=False )
+        sub.x = 1
+        sub[['y','z']] = [2,3]
+        
+        self.assertEqual(sub[['x','y','z','r']], [1,2,3,None])
+        self.assertEqual(sub.read(['x','r'],default=None), [1,None])
+        self.assertEqual(sub(['x','r'],default=None), [1,None])
+
+        sub.write(['a','b'],1)
+        self.assertEqual(sub.read(['a','b']),[1,1])
+        with self.assertRaises(LogException):
+            sub.write(['x','y'],[1,2,3])
+        with self.assertRaises(LogException):
+            sub.write(['x','y'],[1,2,3])
+        sub.eraseEverything()
+
+# testing our auto-logger
+# need to auto-clean up
+
+class CDXBasicsCacheTest(unittest.TestCase):
+
+    cacheRoot = Root("!/test_caching", eraseEverything=True)
+
+    @cacheRoot.cache     
+    def f(self, x, y):
+        return x*y
+
+    @staticmethod
+    @cacheRoot.cache     
+    def g(x, y):
+        return x*y
+    
+    def __del__(self):
+        CDXBasicsCacheTest.cacheRoot.eraseEverything(keepDirectory=False)
+    
+    def test_cache(self):
+        
+        x = 1
+        y = 2
+        a = self.f(x,y)
+        self.assertFalse( self.f.cached )
+        self.assertEqual( self.f.cacheArgKey, "da0cebdccaf3e9c0efd964e0d8453b62" )
+        a = self.f(x*2,y*2)
+        self.assertNotEqual( self.f.cacheArgKey, "da0cebdccaf3e9c0efd964e0d8453b62" )
+
+        a = self.f(x,y)
+        self.assertTrue( self.f.cached )
+        a = self.f(x,y,caching='no')
+        self.assertFalse( self.f.cached )
+        a = self.f(x,y)
+        self.assertTrue( self.f.cached )
+        a = self.f(x,y,caching='clear')
+        self.assertFalse( self.f.cached )
+        
+        a = CDXBasicsCacheTest.g(x,y)
+        self.assertFalse( self.g.cached )
+        self.assertEqual( self.g.cacheArgKey, "6a0e30f2e8c690a679340a9b44ef474b" )
+        
+        CDXBasicsCacheTest.cacheRoot.eraseEverything()
+        
         
 if __name__ == '__main__':
     unittest.main()

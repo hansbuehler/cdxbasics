@@ -88,55 +88,75 @@ class SubDir(object):
         
         Hans Buehler May 2020
     """
-    
+    class __RETURN_SUB_DIRECTORY(object):
+        pass
+  
     DEFAULT_EXT = "pck"
+    DEFAULT_RAISE_ON_ERROR = False
+    RETURN_SUB_DIRECTORY = __RETURN_SUB_DIRECTORY     # comparison between classes is unique accross Python name space
     
-    def __init__(self, root, subdir = None, ext = None ):
+    def __init__(self, root, subdir = None, ext = None, raiseOnError = None, eraseEverything = False ):
         """ 
         Creates a sub directory
-            SubDir("C:/temp")            - absolute path
-            SubDir("subdir")             - relative to current workign directory
-            SubDir("C:/temp","subdir")   - relative to specified root directory
-            sd = SubDir("C:/temp")
-            sd2 = SubDir(sd,"subdir")    - relative to other sub directory
+            sd  = SubDir("C:/temp")            - absolute path
+            sd  = SubDir("subdir")             - relative to current working directory
+            sd  = SubDir("./subdir")           - relative to current working directory
+            sd  = SubDir("!/subdir")           - relative to system temp directory
+            sd  = SubDir("~/subdir")           - relative to user home directory
+            sd  = SubDir("C:/temp","subdir")   - relative to specified root directory
+            sd2 = SubDir(sd,"subdir")          - relative to other sub directory
         Alternative version:
-            sd = SubDir("C:/temp")
-            sd2 = sd(sub="subdir")       
-            sd2 = sd("subdir/")          - using call operator requires trailing '/'
+            sd   = SubDir("C:/temp")
+            sd2 = sd("subdir")                 - using call operator
+            sd2 = sd.subDir("subdir")          - explict subDir() call
             
         Construction arguments:
-            root   - root directory; can be a string or another SubDir.
-                     It may starty with
-                         '.' for current directory
-                         '~' for home directory
-                         '!' for default temp directory
-            subdir - subdirectory. If left empty, it is set to root
-            ext    - file extenson for data files. If None, SubDir.DEFAULT_EXT is used. Set to "" to turn off.
+            root           - root directory; can be a string or another SubDir.
+                             It may starty with
+                               '.' for current directory
+                               '~' for home directory
+                               '!' for default temp directory
+            subdir         - subdirectory. If left empty, it is set to root
+            ext            - file extenson for data files. If None, SubDir.DEFAULT_EXT is used. Set to "" to turn off.
+            raiseOnError   - if False, the following operations change behaviour if 'key' does not exist
+                                subdir.key        - returns None
+                                subdir['key']     - returns None
+                                del subdir.key    - does not do anything, silently
+                                del subdir['key'] - does not do anything, silently
+                             if True, then the above will throw KeyErrors.
+                             if None, and root is a SubDir, then it will copy the respective setting from root.
+                                    if root is not a SubDir, the value is set to SubDir.DEFAULT_RAISE_ON_ERROR (False)
+            eraseEverything - delete all contents in the newly created subdir
         """
+        # operational flags
+        self._raiseOnError = raiseOnError if not raiseOnError is None else SubDir.DEFAULT_RAISE_ON_ERROR
+        
         # extension
         # we strongly recommend to use non-empty extension
         if ext is None:
-            self.ext = "." + SubDir.DEFAULT_EXT
+            self._ext = "." + SubDir.DEFAULT_EXT
         else:
             _log.verify( isinstance(ext,str), "'ext' must be a string. Found type %s", type(ext))
             if len(ext) == 0:
-                self.ext = ""
+                self._ext = ""
             else:
                 _log.verify( not ext in ['.','/','\\'], "'ext' name missing; found %s", ext )
                 sub, _ = os.path.split(ext)
                 _log.verify( len(sub) == 0, "'ext' %s contains directory information", ext)
-                self.ext = ("." + ext) if ext[0] != '.' else ext
+                self._ext = ("." + ext) if ext[0] != '.' else ext
 
         # identify root
         if isinstance(root,SubDir):
-            _log.verify( ext is None or ext == root.ext, "Cannot specify 'ext' if root is a SubDir")
-            self.ext = root.ext
-            root = root.path
+            _log.verify( ext is None or ext == root._ext, "Cannot specify 'ext' if root is a SubDir")
+            self._ext = root._ext
+            self._raiseOnError = root._raiseOnError if raiseOnError is None else raiseOnError
+            root = root._path
         elif isinstance(root, dict):
             # for being to construct object from repr()
             _log.verify( subdir is None and ext is None, "Cannot specify 'subdir' nor 'ext' when constucting from dictionary")
             root = root['path']
-            ext = root['ext']
+            self._ext = root['ext']
+            self._raiseOnError = root['raiseOnError']
         else:
             _log.verify( isinstance(root,str), "'root' must be a string or a SubDir. Found type %s", type(root))    
             _log.verify( len(root) > 0, "'root' cannot be empty. Use '.', '~' or '!'")
@@ -170,7 +190,7 @@ class SubDir(object):
 
         # add subdir if provided                
         if subdir is None:
-            self.path = root
+            self._path = root
         else:
             _log.verify( isinstance(subdir,str), "'subdir' must be a non-empty string. Found type %s", type(subdir))
             if len(subdir) > 0:
@@ -179,39 +199,47 @@ class SubDir(object):
                 elif subdir[-1] != '/':
                     subdir += '/'
                 _log.verify( subdir != '/', "'subdir' cannot be the root symbol %s. Construct root access explicitly.", subdir)                
-            self.path = root + subdir
+            self._path = root + subdir
 
         # ensure it does not have the same extension, if provided
-        if len(self.ext) > 0 and len(self.path) > len(self.ext):
-            sd = self.path[-len(self.ext)-1:-1]
-            _log.verify( sd != self.ext, "Cannot specify sub directory '%s' as it contains extension '%s", self.path, ext)
+        if len(self._ext) > 0 and len(self._path) > len(self._ext):
+            sd = self._path[-len(self._ext)-1:-1]
+            _log.verify( sd != self._ext, "Cannot specify sub directory '%s' as it contains extension '%s", self._path, ext)
 
         # expand from current working directory
-        self.path = os.path.abspath(self.path[:-1]) + '/'
-        self.path = self.path.replace('\\','/')
+        self._path = os.path.abspath(self._path[:-1]) + '/'
+        self._path = self._path.replace('\\','/')
             
         # create directory
-        if not os.path.exists( self.path[:-1] ):
-            os.makedirs( self.path[:-1] )
+        if not os.path.exists( self._path[:-1] ):
+            os.makedirs( self._path[:-1] )
         else:
-            _log.verify( os.path.isdir(self.path[:-1]), "Cannot use sub directory %s: object exists but is not a directory", self.path[:-1] )
-                        
+            _log.verify( os.path.isdir(self._path[:-1]), "Cannot use sub directory %s: object exists but is not a directory", self._path[:-1] )
+            # erase all content if requested
+            if eraseEverything:
+                self.eraseEverything(keepDirectory = True)
+                                
     # -- self description --
         
     def __str__(self):
-        return self.path if len(self.ext) == 0 else self.path + ";*" + self.ext
+        return self._path if len(self._ext) == 0 else self._path + ";*" + self._ext
     
     def __repr__(self):
-        return repr({'path':self.path, 'ext':self.ext})
+        return repr({'path':self._path, 'ext':self._ext, 'raiseOnError':self._raiseOnError})
                 
+    @property
+    def path(self):
+        _log.verify( not self._path is None, "Object cleared")
+        return self._path
+
     def fullKeyName(self, key):
         """ Returns fully qualified key name
             Note this function is not robustified against 'key' containing
             directory features
         """
-        if len(self.ext) > 0 and key[-len(self.ext):] != self.ext:
-            return self.path + key + self.ext
-        return self.path + key
+        if len(self._ext) > 0 and key[-len(self._ext):] != self._ext:
+            return self._path + key + self._ext
+        return self._path + key
 
     @staticmethod
     def tempDir():
@@ -248,18 +276,17 @@ class SubDir(object):
 
     # -- read --
     
-    def _read( self, reader, key, default, throwOnError ):
+    def _read( self, reader, key, default, raiseOnError ):
         """ Utility for read() and readLine() """
-
         # vector version
         if not isinstance(key,str):
             _log.verify( not getattr(key,"__iter__",None) is None, "'key' must be a string, or an interable object. Found type %s", type(key))
             l = len(key)
             if default is None or isinstance(default,str) or getattr(default,"__iter__",None) is None:
-                default = [ default ] ** l
+                default = [ default ] * l
             else:
                 _log.verify( len(default) == l, "'default' must have same lengths as 'key', found %ld and %ld", len(default), l )
-            return [ self._read(reader,k,d) for k, d in zip(key,default) ]
+            return [ self._read(reader=reader,key=k,default=d,raiseOnError=raiseOnError) for k, d in zip(key,default) ]
 
         # single key
         _log.verify(len(key) > 0, "'relFileOrDir' not specified" )
@@ -271,7 +298,7 @@ class SubDir(object):
         # does file exit?
         fullFileName = self.fullKeyName(key)
         if not os.path.exists(fullFileName):
-            if throwOnError:
+            if raiseOnError:
                 raise KeyError(key)
             return default
         _log.verify( os.path.isfile(fullFileName), "Cannot read %s: object exists, but is not a file (full path %s)", key, fullFileName )
@@ -285,11 +312,11 @@ class SubDir(object):
                 _log.warning("Cannot read %s; file deleted (full path %s)",key,fullFileName)
             except Exception:
                 _log.warning("Cannot read %s; attempt to delete file failed (full path %s)",key,fullFileName)
-        if throwOnError:
+        if raiseOnError:
             raise KeyError(key)
         return default
     
-    def read( self, key, default = None, throwOnError = False ):
+    def read( self, key, default = None, raiseOnError = False ):
         """ Read pickled data from 'fileName' or return 'default'
             -- Supports 'key' containing directories
             -- Supports 'key' being iterable.
@@ -301,17 +328,17 @@ class SubDir(object):
                   sd.read( keys, default=unitDefault )   
                   --> produces error as len(keys) != len(unitDefault)
                   
-                  sd.read( keys, default=[ unitDefault ]**len(keys) )
+                  sd.read( keys, default=[ unitDefault ] * len(keys) )
                   --> works
             """
         def reader( key, fullFileName, default ):
             with open(fullFileName,"rb") as f:
                 return pickle.load(f)
-        return self._read( reader=reader, key=key, default=default, throwOnError=throwOnError )
+        return self._read( reader=reader, key=key, default=default, raiseOnError=raiseOnError )
     
     get = read
 
-    def readString( self, key, default = None, throwOnError = False ):
+    def readString( self, key, default = None, raiseOnError = False ):
         """ Reads text from 'key' or returns 'default'. Removes trailing EOLs
             -- Supports 'key' containing directories#
             -- Supports 'key' being iterable. In this case any 'default' can be a list, too.
@@ -322,7 +349,7 @@ class SubDir(object):
                 if len(line) > 0 and line[-1] == '\n':
                     line = line[:-1]
                 return line
-        return self._read( reader=reader, key=key, default=default, throwOnError=throwOnError )
+        return self._read( reader=reader, key=key, default=default, raiseOnError=raiseOnError )
         
     # -- write --
 
@@ -333,9 +360,9 @@ class SubDir(object):
             _log.verify( not getattr(key,"__iter__",None) is None, "'key' must be a string or an interable object. Found type %s", type(key))
             l = len(key)
             if obj is None or isinstance(obj,str) or getattr(obj,"__iter__",None) is None:
-                obj = [ obj ] ** l
+                obj = [ obj ] * l
             else:
-                _log.verify( len(obj) == l, "'obj' must have same lengths as 'key', found %ld and %ld", len(obj), l )
+               _log.verify( len(obj) == l, "'obj' must have same lengths as 'key', found %ld and %ld", len(obj), l )
             for (k,o) in zip(key,obj):
                 self._write( writer, k, o )
             return
@@ -380,14 +407,14 @@ class SubDir(object):
     
     def keys(self):
         """ Returns the files in this subdirectory which have the correct extension """
-        ext_l = len(self.ext)
+        ext_l = len(self._ext)
         keys = []
-        with os.scandir(self.path) as it:
+        with os.scandir(self._path) as it:
             for entry in it:
                 if not entry.is_file():
                     continue
                 if ext_l > 0:
-                    if len(entry.name) <= ext_l or entry.name[-ext_l:] != self.ext:
+                    if len(entry.name) <= ext_l or entry.name[-ext_l:] != self._ext:
                         continue
                     keys.append( entry.name[:-ext_l] )
                 else:
@@ -397,7 +424,7 @@ class SubDir(object):
     def subDirs(self):
         """ Returns the files in this subdirectory which have the correct extension """
         subdirs = []
-        with os.scandir(self.path[:-1]) as it:
+        with os.scandir(self._path[:-1]) as it:
             for entry in it:
                 if not entry.is_dir():
                     continue
@@ -406,7 +433,7 @@ class SubDir(object):
     
     # -- delete --
     
-    def delete( self, key, throwOnError = False ):
+    def delete( self, key, raiseOnError = False ):
         """ Deletes 'key' silently. 'key' might be a list """
         # vector version
         if not isinstance(key,str):
@@ -420,43 +447,45 @@ class SubDir(object):
         _log.verify(len(key2) > 0, "'key' %s indicates a directory, not a file", key)
         fullFileName = self.fullKeyName(key)
         if not os.path.exists(fullFileName):
-            if throwOnError:
+            if raiseOnError:
                 raise KeyError(key)
         else:
             os.remove(fullFileName)
         
-    def deleteAllKeys( self, throwOnError = False ):
+    def deleteAllKeys( self, raiseOnError = False ):
         """ Deletes all valid keys in this sub directory """
-        self.delete( self.keys(), throwOnError=throwOnError )
+        self.delete( self.keys(), raiseOnError=raiseOnError )
             
-    def deleteAllContent( self, deleteSelf = False, throwOnError = False ):
+    def deleteAllContent( self, deleteSelf = False, raiseOnError = False ):
         """ Deletes all valid keys and subdirectories in this sub directory """
         # delete sub directories       
         subdirs = self.subDirs();
         for subdir in subdirs:
-            SubDir(root=self,subdir=subdir).deleteAllContent( deleteSelf=True, throwOnError=throwOnError )
+            SubDir(root=self,subdir=subdir).deleteAllContent( deleteSelf=True, raiseOnError=raiseOnError )
         # delete keys
-        self.deleteAllKeys( throwOnError=throwOnError )
+        self.deleteAllKeys( raiseOnError=raiseOnError )
         # delete myself    
         if not deleteSelf:
             return
-        rest = list( os.scandir(self.path[:-1]) )
+        rest = list( os.scandir(self._path[:-1]) )
         txt = str(rest)
         txt = txt if len(txt) < 50 else (txt[:47] + '...')
-        _log.verify( len(rest) == 0, "Cannot 'deleteSelf' %s: directory not empty, found %ld object(s): %s", self.path,len(rest), txt)
-        os.rmdir(self.path[:-1])   ## does not work ????
-        self.path = None
+        _log.verify( len(rest) == 0, "Cannot 'deleteSelf' %s: directory not empty, found %ld object(s): %s", self._path,len(rest), txt)
+        os.rmdir(self._path[:-1])   ## does not work ????
+        self._path = None
             
     def eraseEverything( self, keepDirectory = True ):
         """ Deletes the entire sub directory will all contents
             WARNING: deletes ALL files, not just those with the present extension.
             Will keep the subdir itself by default.
-            If not, it will invalidate 'self.path'
+            If not, it will invalidate 'self._path'
         """
-        shutil.rmtree(self.path[:-1], ignore_errors=True)
-        if not keepDirectory:
-            os.rmdir(self.path[:-1])   ## does not work ????
-            self.path = None
+        shutil.rmtree(self._path[:-1], ignore_errors=True)
+        if not keepDirectory and os.path.exists(self._path[:-1]):
+            os.rmdir(self._path[:-1])
+            self._path = None
+        elif keepDirectory and not os.path.exists(self._path[:-1]):
+            os.makedirs(self._path[:-1])
 
     # -- file ops --
     
@@ -488,34 +517,24 @@ class SubDir(object):
     
     # -- dict-like interface --
 
-    def __call__(self, key = None, default = None, subdir = None ):
-        """ Read the value of 'key' with default 'default', or return a sub directory
-                v  = dirlike("key", 1)                   returns value of 'key' or 1 if not found
-                dl = dirlike(subdir="subdir")            returns a new dirlike object with subdirectory 'subdir'
-                dl = dirlike("subdir/")                  returns a new dirlike object with subdirectory 'subdir'
-                v  = dirlike("key", 1, subdir="subdir")  returns the value value of 'key' in 'subdir' if found, else 1
-                v  = dirlike("subdir/key", 1)            returns the value value of 'key' in 'subdir' if found, else 1
+    def __call__(self, keyOrSub, default = RETURN_SUB_DIRECTORY ):
+        """ The function either returns the value of a key 'keyOrSub' with specified default,
+            or returns a sub directory 'keyOrSub' if default is left at its default RETURN_SUB_DIRECTORY
+            Member access:                                
+                sd  = Root("!/test")
+                x   = sd('x', None)                      reads 'x' with default value None           
+                x   = sd('sd/x', default=1)              reads 'x' from sub directory 'sd' with default value 1
+            Create sub directory:
+                sd2 = sd("subdir")                       creates and returns handle to subdirectory 'subdir'
+                sd2 = sd("subdir1/subdir2")              creates and returns handle to subdirectory 'subdir1/subdir2'
         """
-        # SubDir(subdir=x)
-        if key is None:
-            _log.verify(default is None, "Cannot specify 'default' if 'key' is None")
-            _log.verify(not subdir is None, "Must specify 'sub' if 'key' is None")
-            return SubDir(root=self,subdir=subdir)
-        # SubDir(key=k,subdir=x)
-        if not subdir is None:
-            return SubDir(root=self,subdir=subdir)(key=key,default=default)
-        # SubDir(key="..../")
-        # works only for single key, not lists
-        if isinstance(key,str):
-            sub, key = os.path.split(key)
-            if len(key) == 0:
-                return SubDir(self,sub)
-        # read
-        return self.read( key=key, default=default, throwOnError=False )
+        if default == SubDir.RETURN_SUB_DIRECTORY:
+            return SubDir(root=self,subdir=keyOrSub)                    
+        return self.read( key=keyOrSub, default=default, raiseOnError=False )
 
     def __getitem__( self, key ):
         """ Reads 'key' and throws a KeyError if not present """
-        return self.read( key=key, default=None, throwOnError=True )
+        return self.read( key=key, default=None, raiseOnError=self._raiseOnError )
 
     def __setitem__( self, key, value):
         """ assigns a value, including functions which will becomes methods, e.g. the first argument must be 'self' """
@@ -523,7 +542,7 @@ class SubDir(object):
         
     def __delitem__(self,key):
         """ like dict """
-        self.delete(key, throwOnError=True )
+        self.delete(key, raiseOnError=self._raiseOnError )
 
     def __len__(self):
         """ like dict """
@@ -539,20 +558,20 @@ class SubDir(object):
 
     # -- object like interface --
 
+    def __getattr__(self, key):
+        """ Allow using mmber notation to get data """
+        return self.read( key=key, default=None, raiseOnError=self._raiseOnError )
+        
     def __setattr__(self, key, value):
         """ Allow using member notation to write data """
-        if key == 'path' or key == 'ext' or key == '__class__':
+        if key[0] == '_':
             self.__dict__[key] = value
         else:   
             self.write(key,value)
 
-    def __getattr__(self, key):
-        """ Allow using mmber notation to get data """
-        return self.read( key=key, default=None, throwOnError=True )
-        
     def __delattr__(self, key):
         """ Allow using mmber notation to get data """
-        return self.delete( key=key, throwOnError=True )
+        return self.delete( key=key, raiseOnError=self._raiseOnError )
         
     # -- automatic caching --
     
@@ -631,11 +650,21 @@ class SubDir(object):
     
         return wrapper
 
-def Root(root, ext=None):
+def Root( root, ext=None, raiseOnError = None, eraseEverything = False ):
     """ Creates a root SubDir; equivalent to SubDir(root,ext=ext)
-        See SubDir() documentation for usage
+        See SubDir() documentation for usage.
+        
+        root            - path. May start with
+                              .: for current directory
+                              !: for system temp directory
+                              ~: for user home directory
+        ext             - file extension for pickle files
+        raiseOnError    - whether to raise an KeyError when an unknown key is read or deleted.
+                          If False, then reading an unknown key returns None. Deletion is silent.
+                          Default is SubDir.DEFAULT_RAISE_ON_ERROR (False)
+        eraseEverything - Remove all content from the newly created subdir.
     """
-    return SubDir(root=root,subdir=None,ext=ext)
+    return SubDir( root=root,subdir=None,ext=ext,raiseOnError=raiseOnError,eraseEverything=eraseEverything )
 
 """
 Default root directories
