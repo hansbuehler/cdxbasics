@@ -355,9 +355,9 @@ class CDXBasicsCacheTest(unittest.TestCase):
         y = 2
         a = self.f(x,y)
         self.assertFalse( self.f.cached )
-        self.assertEqual( self.f.cacheArgKey, "da0cebdccaf3e9c0efd964e0d8453b62" )
+        key1 = str(self.f.cacheArgKey)
         a = self.f(x*2,y*2)
-        self.assertNotEqual( self.f.cacheArgKey, "da0cebdccaf3e9c0efd964e0d8453b62" )
+        self.assertNotEqual( self.f.cacheArgKey, key1 )
 
         a = self.f(x,y)
         self.assertTrue( self.f.cached )
@@ -370,7 +370,7 @@ class CDXBasicsCacheTest(unittest.TestCase):
         
         a = CDXBasicsCacheTest.g(x,y)
         self.assertFalse( self.g.cached )
-        self.assertEqual( self.g.cacheArgKey, "6a0e30f2e8c690a679340a9b44ef474b" )
+        self.assertNotEqual( self.g.cacheArgKey, key1 )
         
         CDXBasicsCacheTest.cacheRoot.eraseEverything()
         
