@@ -23,6 +23,13 @@ class Logger(object):
             raise _log.Exceptn("Some error")
         and it will keep a log of that exception.
     """
+    
+    CRITICAL = logging.CRITICAL
+    ERROR = logging.ERROR
+    WARNING = logging.WARNING
+    INFO = logging.INFO
+    DEBUG = logging.DEBUG
+    NOTSET = logging.NOTSET
 
     def __init__(self,topic):
         assert topic !="", "Logger cannot be empty"
@@ -37,6 +44,11 @@ class Logger(object):
     # Exception support
     # -----------------
 
+    class LogException(Exception):
+        """ Placeholder exception class we use to identify our own exceptions """
+        def __init__(self,text):
+            Exception.__init__(self,text)
+            
     def Exceptn(self, text, *args, **kwargs ):
         """ returns an exception object with 'text' % kwargs and stores an 'error' message
                 If an exception is present, it will be printed, too.
@@ -44,25 +56,19 @@ class Logger(object):
                 
             Usage:
                 raise _log.Exceptn("Something happened")
-        """
-        
-        class _LogException(Exception):
-            # dummy class to avoid re-casting
-            def __init__(self,text):
-                Exception.__init__(self,text)
-        
+        """        
         text = _fmt(text,args,kwargs)
         (typ, val, trc) = sys.exc_info()
         
         # are we already throwing our own exception?
-        if typ is _LogException:
+        if typ is Logger.LogException:
             return val               # --> already logged --> keep raising the exception but don't do anything
         
         # new exception?
         if typ is None:
             assert val is None and trc is None, "*** Internal error"
             self.error( text )
-            return _LogException("*** Exception: " + text)
+            return Logger.LogException("*** LogException: " + text)
 
         # another exception is being thrown.
         # we re-cast this as one of our own.
@@ -80,7 +86,7 @@ class Logger(object):
         self.error( text )
 
         # return an exception with the corresponding text
-        return _LogException("*** Exception: " + text)
+        return Logger.LogException("*** LogException: " + text)
     
     # logging() replacemets
     # ---------------------
