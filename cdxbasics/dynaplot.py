@@ -59,7 +59,7 @@ class DeferredCall(object):
         f = getattr(owner, self.function, None)
         _log.verify( not f is None, "Member function %s not found in object of type %s", self.function, owner.__class__.__name__ )
         r = f(*self.kargs, **self.kwargs)
-        self.result_hook._return.append( r[0] if isinstance(r, list) and len(r) == 1 else r )
+        self.result_hook._return.append( r )
         
 class DynamicAx(object):
     """ 
@@ -121,6 +121,9 @@ class DynamicFig(object):
         render():
             Use instead of plt.show()
             
+        next_row()
+            Skip to next row, if not already in the first column.
+            
     The object will also defer all other function calls to the figure
     object; most useful for: suptitle, supxlabel, supylabel
     https://matplotlib.org/stable/gallery/subplots_axes_and_figures/figure_title.html
@@ -163,6 +166,10 @@ class DynamicFig(object):
         self.this_col  = 0
         self.max_col   = 0
         self.caught    = []
+        
+    def __del__(self): # NOQA
+        """ Ensure the figure is closed """
+        self.close()        
 
     def add_subplot(self, new_row : bool = False) -> DynamicAx:
         """
@@ -174,8 +181,8 @@ class DynamicFig(object):
         ----------
             new_row : bool, optional
                 Whether to force a new row. Default is False
-        """            
-        _log.verify( self.fig is None, "Cannot call add_subplot() after show() was called")
+        """
+        _log.verify( self.fig is None and not self.hdisplay is None, "Cannot call add_subplot() after render() was called")        
         if (self.this_col >= self.col_nums) or ( new_row and not self.this_col == 0 ):
             self.this_col = 0
             self.this_row = self.this_row + 1
@@ -188,12 +195,21 @@ class DynamicFig(object):
     
     add_plot = add_subplot
     
+    def next_row(self):
+        """ Skip to next row """
+        _log.verify( self.fig is None and  not self.hdisplay is None, "Cannot call next_row() after render() was called")        
+        if self.this_col == 0:
+            return
+        self.this_col = 0
+        self.this_row = self.this_row + 1
+            
     def render(self):
         """
         Plot all axes.
         Once called, no further plots can be added, but the plots can
         be updated in place
         """
+        _log.verify( not self.hdisplay is None, "Cannot call render() after close() was called")        
         if self.this_row == 0 and self.this_col == 0:
             return
         if self.fig is None:
@@ -210,11 +226,21 @@ class DynamicFig(object):
                 catch.execute( self.fig )
             self.caught = []
             # close.
-            # This removes a second shaddow draw in Jupyter
-            plt.close(self.fig)  
+            # This removes a second shaddow draw in Jupyter            
         self.hdisplay.update(self.fig)  
+        
+    def close(self):
+        """
+        Close down the figure
+        Call this to remove the resiudal print in jupyter at the end of your animation
+        """
+        if not self.hdisplay is None:
+            self.render()            
+            plt.close(self.fig)  
+        self.hdisplay = None
 
     def __getattr__(self, key): # NOQA
+        _log.verify( not self.hdisplay is None, "Figure was closed.")        
         if not self.fig is None:
             return getattr(self.fig, key)
         d = DeferredCall(key)
@@ -277,7 +303,35 @@ def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kw
     """   
     return DynamicFig( row_size=row_size, col_size=col_size, col_nums=col_nums ) 
 
-def color(i : int, which : str ="css4"):
+# ----------------------------------------------------------------------------------
+# color management
+# ----------------------------------------------------------------------------------
+
+def color_css4(i : int):
+    """ Returns the i'th css4 color """
+    names = list(mcolors.CSS4_COLORS)
+    name  = names[i % len(names)]
+    return mcolors.CSS4_COLORS[name] 
+
+def color_base(i : int):
+    """ Returns the i'th base color """
+    names = list(mcolors.BASE_COLORS)
+    name  = names[i % len(names)]
+    return mcolors.BASE_COLORS[name] 
+
+def color_tableau(i : int):
+    """ Returns the i'th tableau color """
+    names = list(mcolors.TABLEAU_COLORS)
+    name  = names[i % len(names)]
+    return mcolors.TABLEAU_COLORS[name] 
+
+def color_xkcd(i : int):
+    """ Returns the i'th xkcd color """
+    names = list(mcolors.XKCD_COLORS)
+    name  = names[i % len(names)]
+    return mcolors.XKCD_COLORS[name] 
+
+def color(i : int, table : str ="css4"):
     """
     Returns a color with a given index to allow consistent colouring
     Use case is using the same colors by nominal index, e.g.
@@ -293,24 +347,74 @@ def color(i : int, which : str ="css4"):
     ----------
         i : int
             Integer number. Colors will be rotated
+        table : str, default "css4""
+            Which color table from matplotlib.colors to use: css4, base, tableau, xkcd
 
     Returns
     -------
         Color
     """
-    if which == "css4":
-        colors = mcolors.CSS4_COLORS
-    elif which == "base":
-        colors = mcolors.BASE_COLORS
-    elif which == "tableau":
-        colors = mcolors.TABLEAU_COLORS
-    else:
-        _log.verify( which == "xkcd", "Invalid color code '%s'. Must be 'css4' (the default), 'base', 'tableau', or 'xkcd'", which)
-        colors = mcolors.XKCD_COLORS
-    
-    names = list(colors)
-    name  = names[i % len(names)]
-    return colors[name] 
+    if table == "css4":
+        return color_css4(i)
+    if table == "base":
+        return color_base(i)
+    if table == "tableau":
+        return color_tableau(i)
+    _log.verify( table == "xkcd", "Invalid color code '%s'. Must be 'css4' (the default), 'base', 'tableau', or 'xkcd'", table)
+    return color_xkcd(i)
 
+
+def colors(table : str = "css4"):
+    """
+    Returns a generator for the colors of the specified table
     
+        fig   = figure()
+        ax    = fig.add_subplot()
+        for label, color in zip( lables, colors() ):
+            ax.plot( x, y1[i], "-", color=color )
+            ax.plot( x, y2[i], ":", color=color )
+        fig.render()
     
+        fig   = figure()
+        ax    = fig.add_subplot()
+        color = colors()
+        for label in labels:
+            color_ = next(color) 
+            ax.plot( x, y1[i], "-", color=color_ )
+            ax.plot( x, y2[i], ":", color=color_ )
+        fig.render()
+
+    Parameters
+    ----------
+        table : str, default "css4""
+            Which color table from matplotlib.colors to use: css4, base, tableau, xkcd
+
+    Returns
+    -------
+        Generator for colors. Use next() or iterate.
+    """
+    num = 0
+    while True:
+        yield color(num,table)
+        num = num + 1
+    
+def colors_css4():
+    """ Iterator for css4 matplotlib colors """
+    return colors("css4")
+
+def colors_base():
+    """ Iterator for base matplotlib colors """
+    return colors("base")
+
+def colors_tableau():
+    """ Iterator for tableau matplotlib colors """
+    return colors("tableau")
+
+def colors_xkcd():
+    """ Iterator for xkcd matplotlib colors """
+    return colors("xkcd")
+
+
+
+
+

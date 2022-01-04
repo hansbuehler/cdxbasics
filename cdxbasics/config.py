@@ -96,6 +96,7 @@ class Config(OrderedDict):
         self._recorder       = SortedDict()
         self._recorder._name = self._name
         self.update(kwargs)
+        self._known_vars     = list(self.__dict__)
         
     @property
     def config_name(self) -> str:
@@ -117,7 +118,10 @@ class Config(OrderedDict):
         """
         inputs = set(self)
         rest   = inputs - self._read
-        _log.verify( len(rest) == 0, "Error closing config '%s': the following config arguments were not read: %s", self._name, list(rest))
+        if len(rest) > 0:
+            _log.verify( False, "Error closing config '%s': the following config arguments were not read: %s\nRecord of this object:\n%s", \
+                                        self._name, list(rest), \
+                                        self.usage_report(filter_path=self._name ) )
         
         if include_sub_children:
             for config in self._children:
@@ -188,7 +192,7 @@ class Config(OrderedDict):
         config.update(self)
         config._read             = set( self._read )
         config._name             = self._name
-        config._children         = { c.detach(mark_self_done=False) for c in self._children }
+        config._children         = { _: self._children[_].detach(mark_self_done=mark_self_done) for _ in self._children }
         config._children         = OrderedDict( config._children )
         if not new_recorder:
             config._recorder     = self._recorder
@@ -233,13 +237,20 @@ class Config(OrderedDict):
                     child = child.copy()
                     set_recorder(child, self._recorder)
                     self._children[sub]= child
-            OrderedDict.update( self, other )
+            for key in other:
+                self[key] = OrderedDict.get(other,key)
         OrderedDict.update( self, kwargs )
     
     # Read
     # -----
         
-    def __call__(self, key : str, default = no_default, cast : object = None, help : str = None, help_default : str = None, help_cast : str = None ):
+    def __call__(self, key          : str,
+                       default      = no_default, 
+                       cast         : object = None, 
+                       help         : str = None, 
+                       help_default : str = None, 
+                       help_cast    : str = None, 
+                       mark_read    : bool = True ):
         """
         Reads 'key' from the config. If not found, return 'default' if specified.
     
@@ -264,10 +275,12 @@ class Config(OrderedDict):
             help_cast : str, optional
                 If provided, specifies a description of the cast type.
                 Use this for complex cast types which are hard to read.
+            mark_read : bool, optional
+                If true, marks the respective element as read.
         Returns
         -------
             Value.
-        """                
+        """       
         if not key in self:
             if default == no_default:
                 raise KeyError(key, "Error in config '%s': key '%s' not found " % (self._name, key))
@@ -279,8 +292,10 @@ class Config(OrderedDict):
                 value = cast( value )
             except Exception as e:
                 _log.verify( False, "Error in config '%s': value '%s' for key '%s' cannot be cast to type '%s': %s", self._name, value, key, cast.__name__, str(e))
+
         # mark key as read, and record call
-        self._read.add(key)
+        if mark_read:
+            self._read.add(key)
         
         # record
         record_key    = self._name + "['" + key + "']"
@@ -290,23 +305,31 @@ class Config(OrderedDict):
         help_default  = str(default) if default != no_default and len(help_default) == 0 else help_default
         help_cast     = str(help_cast) if not help_cast is None else ""
         help_cast     = str(cast.__name__) if not cast is None else help_cast
+        just_read     = help == "" and help_cast == "" and help_default == "" # was there any information?
         record        = SortedDict( value=value, 
+                                    just_read=just_read,
                                     help=help,
                                     help_default=help_default,
                                     help_cast=help_cast )
         if default != no_default:
             record['default'] = default
-            
+                
         exst_value    = self._recorder.get(record_key, None)
-        _log.verify( exst_value is None or exst_value == record, "Config %s was used twice with different default/help values. Found %s and %s, respectively", record_key, exst_value, record )
-        if exst_value is None:
+
+        if not exst_value is None:
+            if not just_read:
+                if exst_value['just_read']:
+                    self._recorder[record_key] = record
+                else:
+                    _log.verify( exst_value == record, "Config %s was used twice with different default/help values. Found %s and %s, respectively", record_key, exst_value, record )
+        else:
             self._recorder[record_key] = record
-        
+    
         # done
         return value
         
     def __getitem__(self, key : str):
-        """ Returns self(key) """
+        """ Returns self(key)  """
         return self(key)
     def get(self, key : str):
         """ Returns self(key) """
@@ -314,6 +337,16 @@ class Config(OrderedDict):
     def get_default(self, key : str, default):
         """ Returns self(key,default) """
         return self(key,default)
+    
+    # Write
+    # -----
+    
+    def __setattr__(self, key, value):
+        """ Assign value like self[key] = value """
+        if key[0] == "_" or key in self.__dict__:
+            OrderedDict.__setattr__(self, key, value )
+        else:
+            self[key] = value
    
     # Recorder
     # --------
@@ -326,7 +359,8 @@ class Config(OrderedDict):
     def usage_report(self,    with_values  : bool = True,
                               with_help    : bool = True,
                               with_defaults: bool = True,
-                              with_types:    bool = False) -> str:
+                              with_types   : bool = False,
+                              filter_path  : str  = None ) -> str:
         """
         Generate a human readable config report of the top leverl recorder
     
@@ -345,19 +379,30 @@ class Config(OrderedDict):
             with_types: bool, optional
                 Whether to print types
                 
+            filter_path : str, optional
+                If provided, will match all children names vs this string.
+                Most useful with filter_path = self._name
+                
         Returns
         -------
             str
                 Report.
         """
-        report = ""
+        with_values   = bool(with_values)
+        with_help     = bool(with_help)
+        with_defaults = bool(with_defaults)
+        with_types    = bool(with_types)
+        l             = len(filter_path) if not filter_path is None else 0
+        rep_here      = ""
+        reported      = ""
+
         for key in self._recorder:
             record       =  self._recorder[key]
             value        =  record['value']
             help         =  record['help']
             help_default =  record['help_default']
             help_cast    =  record['help_cast']
-            report       += key + " = " + str(value) if with_values else key
+            report       =  key + " = " + str(value) if with_values else key
             if help_cast or with_defaults or with_help:
                 report += " # "
                 if with_types:
@@ -365,11 +410,16 @@ class Config(OrderedDict):
                 if with_help:
                     report += help
                     if with_defaults:
-                        report += "; default " + help_default
+                        report += "; default: " + help_default
                 elif with_defaults:
-                    report += " Default " + help_default
-            report += "\n"
-        return report
+                    report += " Default: " + help_default
+                    
+            if l > 0 and key[:l] == filter_path: 
+                rep_here += report + "\n"
+            else:
+                reported += report + "\n"
+
+        return rep_here + "\n" + reported if len(rep_here) > 0 else reported
 
     def usage_reproducer(self):
         """

@@ -20,7 +20,7 @@ class PrettyDict(dict):
     
     def __getattr__(self, key): 
         """ Equyivalent to self[key] """
-        return self[key]
+        return self[key] if not key[:2] == "__" else dict.__getattr__(self, key)
     def __setattr__(self, key, value):
         """ Equivalent to self[key] = value """
         self[key] = value
@@ -37,7 +37,7 @@ class PrettyOrderedDict(OrderedDict):
 
     def __getattr__(self, key):
         """ Equyivalent to self[key] """
-        return self[key]
+        return self[key] if not key[:2] == "__" else OrderedDict.__getattr__(self, key)
     def __setattr__(self, key, value):
         """ Equivalent to self[key] = value """
         self[key] = value
@@ -54,7 +54,7 @@ class PrettySortedDict(SortedDict):
 
     def __getattr__(self, key):
         """ Equyivalent to self[key] """
-        return self[key]
+        return self[key] if not key[:2] == "__" else SortedDict.__getattr__(self, key)
     def __setattr__(self, key, value):
         """ Equivalent to self[key] = value """
         self[key] = value
