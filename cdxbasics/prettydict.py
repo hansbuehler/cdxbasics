@@ -6,8 +6,6 @@ Hans Buehler 2021
 
 from collections import OrderedDict
 from sortedcontainers import SortedDict
-from .logger import Logger
-_log = Logger(__file__)
 
 class PrettyDict(dict):
     """
@@ -24,6 +22,9 @@ class PrettyDict(dict):
     def __setattr__(self, key, value):
         """ Equivalent to self[key] = value """
         self[key] = value
+    def __call__(self, key, default):
+        """ Equivalent of self.get(key,default) """
+        return self.get(key,default)
         
 class PrettyOrderedDict(OrderedDict):
     """
@@ -41,6 +42,9 @@ class PrettyOrderedDict(OrderedDict):
     def __setattr__(self, key, value):
         """ Equivalent to self[key] = value """
         self[key] = value
+    def __call__(self, key, default):
+        """ Equivalent of self.get(key,default) """
+        return self.get(key,default)
         
 class PrettySortedDict(SortedDict):
     """
@@ -58,6 +62,9 @@ class PrettySortedDict(SortedDict):
     def __setattr__(self, key, value):
         """ Equivalent to self[key] = value """
         self[key] = value
+    def __call__(self, key, default):
+        """ Equivalent of self.get(key,default) """
+        return self.get(key,default)
         
 
         

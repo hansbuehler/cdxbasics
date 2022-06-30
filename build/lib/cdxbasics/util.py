@@ -8,6 +8,8 @@ import types as types
 from functools import wraps
 import hashlib as hashlib
 
+from .prettydict import PrettyDict
+
 # support for numpy and pandas is optional for this module
 # At the moment both are listed as dependencies in setup.py to ensure
 # they are tested in github
@@ -124,7 +126,7 @@ def fmt(text,*args,**kwargs):
     return _fmt(text,args,kwargs)
 
 def prnt(text,*args,**kwargs):
-    """ Prints a fmt() string """
+    """ Prints a fmt() string. """
     print(_fmt(text,args,kwargs))
 def write(text,*args,**kwargs):
     """ Prints a fmt() string without EOL """
@@ -284,9 +286,13 @@ def bind( F, **kwargs ):
 # generic class
 # =============================================================================
 
-class Generic(object):
+Generic = PrettyDict
+
+class __old_Generic(object):
     """
     An object which can be used as a generic store.
+    *** Depreciated. Use cdxbascis.prettydict.PrettyDict ***
+    
     Constructions by keyword:        
         g = Generic(a=1, b=2, c=3)
                     
@@ -435,6 +441,7 @@ class Generic(object):
         for o in vargs:
             merge_object_dict(o)
         merge_object_dict(kwargs)
+
 
 
 

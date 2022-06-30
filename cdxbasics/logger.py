@@ -12,16 +12,55 @@ _prnt = prnt
 _write = write
 
 class Logger(object):
-    """ Simple utility object to decorate loggers, plus:
-            - infor, warning, () also accept named argument formatting ie "The error is %(message)self" instead of positional %
-            - added Exceptn function which logs an error before returning an exception.
-              It also make sure an exception is only tracked once.
-        The point of this class is to be able to write
-            import base.logger as logger
-            _log = logger.getLogger("me")
-            ...
-            raise _log.Exceptn("Some error")
-        and it will keep a log of that exception.
+    """
+    Simple utility object to decorate loggers, plus:
+        - infor, warning, () also accept named argument formatting ie "The error is %(message)self" instead of positional %
+        - added Exceptn function which logs an error before returning an exception.
+          It also make sure an exception is only tracked once.
+    The point of this class is to be able to write
+        import base.logger as logger
+        _log = logger.getLogger(__file__)
+        ...
+        _log.verify( some_condition_we_want_met, "Error: cannot find %s", message)
+    and it will keep a log of that exception.
+    
+    Exceptions independent of logging level
+    
+        verify( cond, text, *args, **kwargs )
+            If cond is not met, raise an exception with util.fmt( text, *args, **kwargs )
+        
+        throw_if(cond, text, *args, **kwargs )
+            If cond is met, raise an exception with util.fmt( text, *args, **kwargs )
+
+        throw( text, *args, **kwargs )
+            Raise an exception with fmt( text, *args, **kwargs )
+        
+    Unconditional logging
+    
+        debug( text, *args, **kwargs )
+        info( text, *args, **kwargs )
+        warning( text, *args, **kwargs )
+        error( text, *args, **kwargs )
+        debug( text, *args, **kwargs )
+        
+    Conditional logging functions, verify version
+    
+        verify_debug( cond, text, *args, **kwargs )
+        verify_info( cond, text, *args, **kwargs )
+        verify_warning( cond, text, *args, **kwargs )
+
+        verify( cond, text, *args, **kwargs )
+    
+    Conditional logging functions, if version
+    
+        debug_if( text, *args, **kwargs )
+        info_if( text, *args, **kwargs )
+        warning_if( text, *args, **kwargs )
+        
+        throw_if( text, *args, **kwargs )
+
+        prnt_if( text, *args, **kwargs )      # with EOL
+        write_if( text, *args, **kwargs )     # without EOL
     """
     
     CRITICAL = logging.CRITICAL
@@ -46,16 +85,18 @@ class Logger(object):
 
     class LogException(Exception):
         """ Placeholder exception class we use to identify our own exceptions """
+        
         def __init__(self,text):
             Exception.__init__(self,text)
             
     def Exceptn(self, text, *args, **kwargs ):
-        """ returns an exception object with 'text' % kwargs and stores an 'error' message
-                If an exception is present, it will be printed, too.
-                If the base logger logs 'debug' information, the call stack will be printed as well
-                
-            Usage:
-                raise _log.Exceptn("Something happened")
+        """
+        Returns an exception object with 'text' % kwargs and stores an 'error' message
+            If an exception is present, it will be printed, too.
+            If the base logger logs 'debug' information, the call stack will be printed as well
+            
+        Usage:
+            raise _log.Exceptn("Something happened")
         """        
         text = _fmt(text,args,kwargs)
         (typ, val, trc) = sys.exc_info()
@@ -92,55 +133,63 @@ class Logger(object):
     # ---------------------
     
     def debug(self, text, *args, **kwargs ):
-        """ reports debug information with new style formatting """
+        """ Reports debug information with new style formatting """
         if self.logger.getEffectiveLevel() <= logging.DEBUG and len(text) > 0:
             self.logger.debug(_fmt(text,args,kwargs))
 
     def info(self, text, *args, **kwargs ):
-        """ reports information with new style formatting """
+        """ Reports information with new style formatting """
         if self.logger.getEffectiveLevel() <= logging.INFO and len(text) > 0:
             self.logger.info(_fmt(text,args,kwargs))
 
     def warning(self, text, *args, **kwargs ):
-        """ reports a warning with new style formatting """
+        """ Reports a warning with new style formatting """
         if self.logger.getEffectiveLevel() <= logging.WARNING and len(text) > 0:
             self.logger.warning(_fmt(text,args,kwargs))
     warn = warning
     
     def error(self, text, *args, **kwargs ):
-        """ reports an error with new style formatting """
+        """ Reports an error with new style formatting """
         if self.logger.getEffectiveLevel() <= logging.ERROR and len(text) > 0:
             self.logger.error(_fmt(text,args,kwargs))
 
     def critical(self, text, *args, **kwargs ):
-        """ reports a critial occcurance with new style formatting """
+        """ Reports a critial occcurance with new style formatting """
         if self.logger.getEffectiveLevel() <= logging.CRITICAL and len(text) > 0:
             self.logger.critical(_fmt(text,args,kwargs))
+            
+    def throw( self, text, *args, **kwargs ):     
+        """ Raise an exception """
+        raise self.Exceptn(text,*args,**kwargs)
+
 
     @staticmethod
     def prnt( text, *args, **kwargs ):
-        """ simple print """
+        """ Simple print, with EOL """
         _prnt(_fmt(text,args,kwargs))
         
     @staticmethod
     def write(text, *args, **kwargs ):
+        """ Simple print, without EOL """
         _write(_fmt(text,args,kwargs))
     
     # run time utilities with validity check
     # --------------------------------------
     
     def verify(self, cond, text, *args, **kwargs ):
-        """ verifies 'cond'. Throws an exception if 'cond' is not met.
-            Usage:
-                _log.verify( i>0, "i must be positive, found %d", i)
+        """
+        Verifies 'cond'. Raises an exception if 'cond' is not met with the specified text.
+        Usage:
+            _log.verify( i>0, "i must be positive, found %d", i)
         """
         if not cond:
-            raise self.Exceptn(text,*args,**kwargs)
-        
+            self.throw(text,*args,**kwargs)
+                    
     def verify_warning(self, cond, text, *args, **kwargs ):
-        """ verifies 'cond'. If true, writes a warning and then continues
-            Usage
-                _log.verify_warning( i>0, "i must be positive, found %d", i)
+        """
+        Verifies 'cond'. If true, writes a warning and then continues
+        Usage
+            _log.verify_warning( i>0, "i must be positive, found %d", i)
         """
         if not cond:
             self.warning(text, *args, **kwargs )
@@ -148,25 +197,24 @@ class Logger(object):
     verify_warn = verify_warning
             
     def verify_info(self, cond, text, *args, **kwargs ):
-        """ verifies 'cond'. If true, writes information and then continues """
+        """ Verifies 'cond'. If true, writes log information and then continues  """
         if not cond:
             self.info(text, *args, **kwargs )
 
     def verify_debug(self, cond, text, *args, **kwargs ):
-        """ verifies 'cond'. If true, writes debug and then continues
-        """
+        """ Verifies 'cond'. If true, writes log debug and then continues """
         if not cond:
             self.debug(text, *args, **kwargs )
 
     # if-action
     # ---------
     
-    def raise_if(self, cond, text, *args, **kwargs ):
-        """ Raises an exception if 'cond' is true.
-            This is the reverse of verify() """
+    def throw_if(self, cond, text, *args, **kwargs ):
+        """ Raises an exception if 'cond' is true. This is the reverse of verify() """
         if cond:
-            raise self.Exceptn(text,*args,**kwargs)
-        
+            raise self.Exceptn(text,*args,**kwargs)            
+    raise_if = throw_if
+
     def warning_if(self, cond, text, *args, **kwargs ):
         """ If 'cond' is true, writes a warning. Opposite condition than verify_warning """
         if cond:
@@ -185,7 +233,7 @@ class Logger(object):
 
     @staticmethod
     def prnt_if(cond, text, *args, **kwargs ):
-        """ If 'cond' is True, prnt() text """
+        """ If 'cond' is True, prnt() text. Python 2.7 """
         if cond:
             Logger.prnt(text,*args,**kwargs)
 
@@ -212,14 +260,15 @@ class Logger(object):
 # Defines logging at stderr and file level.
 # ====================================================================================================
 
-GLOBAL_LOG_DATA = "cdx.base.logger"
+GLOBAL_LOG_DATA = "cdxbasics.logger"
 
 rootLog = logging.getLogger()           # root level logger
 logFileName = None
 
 def setupAppLogging( force = False, appName = None, levelPrint = logging.ERROR, levelFile = logging.WARNING):
-    """ application wide logging control - basically sets a log file path
-        This function will only called once.
+    """
+    Application wide logging control - basically sets a log file path
+    This function will only called once.
     """
     global rootLog
 

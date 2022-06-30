@@ -2,11 +2,15 @@
 """
 dctkwargs
 Utility function for handling **kwargs robustly
+Depreciated; use Config()
 Hans Buehler 2018
 """
 
+from .config import Config
 from .logger import Logger
 _log = Logger(__file__)
+
+dctkwargs = Config()
 
 class _dctkwargs(object):
     
@@ -98,12 +102,17 @@ class _dctkwargs(object):
         self.check_on_exit = False
         return len(self.kwargs.keys()) == len(self.requested)
     
+    done = isDone   # align notation with 'config'
+        
     def makeDone(self):
         """ Ignore any keywords which have not been processed """
         self.check_on_exit = False
             
-def dctkwargs(kwargs):
+def __old_dctkwargs(kwargs):
     """ Utility object to handle **kwargs more efficiently.
+    
+        *** Depreciated. Use cdxbasics.config.Config ***
+    
         In particular, upon destruction when the function is left, the object
         will throw an exception of any keywords have not been used
 
