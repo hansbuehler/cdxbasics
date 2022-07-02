@@ -9,6 +9,7 @@ import cdxbasics.util as util
 import cdxbasics.kwargs as mdl_kwargs
 import cdxbasics.subdir as mdl_subdir
 import cdxbasics.logger as mdl_logger
+from cdxbasics.prettydict import PrettyDict
 
 Root = mdl_subdir.Root
 SubDir = mdl_subdir.SubDir
@@ -55,24 +56,28 @@ class CDXBasicsTest(unittest.TestCase):
             f2(b=2,d=4)   # d does not exist
 
     def test_Generic(self):
+        # PrettyDict is now PrettyDict
+        self.assertEqual( Generic, PrettyDict )
         
-        g1 = Generic(a=1)
+    def test_PrettyDict(self):
+        
+        g1 = PrettyDict(a=1)
         g1.b = 2
         g1['c'] = 3
         self.assertEqual(g1.a, 1)
         self.assertEqual(g1.b, 2)
         self.assertEqual(g1.c, 3)
         
-        with self.assertRaises(AttributeError):
+        with self.assertRaises(KeyError):
             _ = g1.d
 
         g1.e = 4
         g1.f = 5
         del g1['e']
-        del g1.f
-        with self.assertRaises(AttributeError):
+        del g1['f']
+        with self.assertRaises(KeyError):
             _ = g1.e
-        with self.assertRaises(AttributeError):
+        with self.assertRaises(KeyError):
             _ = g1.f
         
         self.assertEqual(g1.get('c',4),3)
@@ -81,54 +86,34 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual(g1('c',4),3)
         self.assertEqual(g1('d',4),4)
         
-        g1 = Generic(g1)
+        g1 = PrettyDict(g1)
         self.assertEqual(g1.a, 1)
         self.assertEqual(g1.b, 2)
         self.assertEqual(g1.c, 3)
         
-        g1 += { 'd':4 }
-        g1 += Generic(e=5)
+        g1.update({ 'd':4 })
         self.assertEqual(g1.d, 4)
+        g1.update(PrettyDict(e=5))
         self.assertEqual(g1.e, 5)
         
-        class O(object):
-            def __init__(self):
-                self.x = -1
-        
-        o = O()
-        g1.update(o)
-        self.assertEqual(g1.x, -1)
-        del g1['x']
-        g1.update(o)
-        self.assertEqual(g1.x, -1)        
-        g1.update(o,x=0)
-        self.assertEqual(g1.x, 0)
+        g1.update({ 'd':4 },d=3)
+        self.assertEqual(g1.d, 3)
         
         # functions        
         def F(self,x):
             self.x = x
         
-        g = util.Generic()
+        g = util.PrettyDict()
         g.F = F
         g.F(2)
         self.assertEqual(g.x,2)
         
-        g2 = util.Generic()
+        g2 = util.PrettyDict()
         g2.F = g.F
         g2.F(3)
         self.assertEqual(g2.x,3) # new value only for this object is 3
         self.assertEqual(g.x,2)  # old value remains 2
 
-        g2 = util.Generic(g)
-        g2.F(3)
-        self.assertEqual(g2.x,3) # new value only for this object is 3
-        self.assertEqual(g.x,2)  # old value remains 2
-
-        g2 = util.Generic()
-        g2.update(g)
-        g2.F(3)
-        self.assertEqual(g2.x,3) # new value only for this object is 3
-        self.assertEqual(g.x,2)  # old value remains 2
         
         with self.assertRaises(TypeError):
             def G():
@@ -189,7 +174,7 @@ class CDXBasicsTest(unittest.TestCase):
             def __init__(self):
                 self.x = [ 1,2,3. ]
                 self.y = { 'a':1, 'b':2 }
-                self.z = util.Generic(c=3,d=4)
+                self.z = util.PrettyDict(c=3,d=4)
                 self.r = set([65,6234,1231,123123,12312]) 
                 
                 def ff():
@@ -231,9 +216,9 @@ class CDXBasicsTest(unittest.TestCase):
         p = util.plain(o)
         p = str(p).replace(' ','').replace('\n','')
         if (not np is None) and (not pd is None):
-            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':['c','d'],'r':[65,1231,123123,12312,6234],'a':array([1,2,3]),'b':array([[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]]]),'c':None}"
+            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234],'a':array([1,2,3]),'b':array([[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]]]),'c':None}"
         else:
-            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':['c','d'],'r':[65,1231,123123,12312,6234]}"
+            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234]}"
         self.assertEqual(p,tst)
 
     def test_subdir(self):
