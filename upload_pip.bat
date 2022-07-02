@@ -6,4 +6,6 @@ del /Q dist\*.*
 python setup.py sdist bdist_wheel
 python -m twine upload dist/*
 del /Q dist\*.*
+
+echo "Upgrading cdxbasics locally"
 pip install --upgrade cdxbasics
