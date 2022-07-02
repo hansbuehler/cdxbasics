@@ -157,7 +157,7 @@ class DynamicFig(object):
         self.row_size   = int(row_size)
         self.col_size   = int(col_size)
         self.col_nums   = int(col_nums)
-        self.tight      = fig_kwargs.get( "tight", False )
+        self.tight      = fig_kwargs.get( "tight", True )
         self.tight_para = None
         self.fig_kwargs = { _ : fig_kwargs[_] for _ in fig_kwargs if not _ == "tight" }
         if self.tight:
