@@ -144,12 +144,12 @@ class DynamicFig(object):
                 Size for a column for matplot luib. Default is 4
             col_nums : int, optional
                 How many columns. Default is 5   
-            tight : bool, optional 
-                Short cut for tight_layout
-                https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.figure.html#
             fig_kwargs :
-                kwargs for matplotlib figure.          
-                It is recommended not to use figsize.
+                kwargs for matplotlib figure plus
+                tight : bool, optional (False)
+                    Short cut for tight_layout
+                    https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.figure.html#
+                It is recommended not to use 'figsize'
         """                
         self.hdisplay   = display.display("", display_id=True)
         self.axes       = []
@@ -157,9 +157,10 @@ class DynamicFig(object):
         self.row_size   = int(row_size)
         self.col_size   = int(col_size)
         self.col_nums   = int(col_nums)
-        tight           = fig_kwargs.get( "tight", False )
+        self.tight      = fig_kwargs.get( "tight", False )
+        self.tight_para = None
         self.fig_kwargs = { _ : fig_kwargs[_] for _ in fig_kwargs if not _ == "tight" }
-        if tight:
+        if self.tight:
             self.fig_kwargs['tight_layout'] = True            
         _log.verify( self.row_size > 0 and self.col_size > 0 and self.col_nums > 0, "Invalid input.")
         self.this_row  = 0
@@ -217,6 +218,9 @@ class DynamicFig(object):
             if not 'figsize' in self.fig_kwargs:
                 self.fig_kwargs['figsize'] = ( self.col_size*(self.max_col+1), self.row_size*(self.this_row+1))
             self.fig  = plt.figure( **self.fig_kwargs )
+            if self.tight:
+                self.fig.tight_layout()
+                self.fig.set_tight_layout(True)
             rows      = self.this_row+1
             cols      = self.max_col+1
             for ax in self.axes:
@@ -231,7 +235,7 @@ class DynamicFig(object):
         
     def close(self):
         """
-        Close down the figure
+        Close down the figure. Does not clear the figure.
         Call this to remove the resiudal print in jupyter at the end of your animation
         """
         if not self.hdisplay is None:
@@ -239,14 +243,19 @@ class DynamicFig(object):
             plt.close(self.fig)  
         self.hdisplay = None
 
-    def __getattr__(self, key): # NOQA
+    def __getattr__(self, key): 
+        """
+        This features allows delaying a call to figure to when it is constructed.
+        E.g. if you call self.tight_layout() before render() then tight_layout() will called after render().        
+        This will not work with functions which return anything
+        """
         _log.verify( not self.hdisplay is None, "Figure was closed.")        
         if not self.fig is None:
             return getattr(self.fig, key)
         d = DeferredCall(key)
         self.caught.append(d)
         return d
-
+        
 def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kwargs ) -> DynamicFig:
     """
     Generates a dynamic figure using matplot lib.
@@ -290,18 +299,19 @@ def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kw
             Size for a column for matplot luib. Default is 4
         col_nums : int, optional
             How many columns. Default is 5
-        tight : bool, optional
-            SHort cut for tight_layout
         fig_kwargs :
-            kwargs for matplotlib figure.          
-            It is recommended not to use figsize.
+            kwargs for matplotlib figure, plus       
+            tight : bool, optional (False)
+                Short cut for tight_layout
+                https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.figure.html#
+            It is recommended not to use 'figsize'
             
     Returns
     -------
         DynamicFig
             A figure wrapper; see above.
     """   
-    return DynamicFig( row_size=row_size, col_size=col_size, col_nums=col_nums ) 
+    return DynamicFig( row_size=row_size, col_size=col_size, col_nums=col_nums, **fig_kwargs ) 
 
 # ----------------------------------------------------------------------------------
 # color management
