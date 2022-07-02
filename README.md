@@ -13,13 +13,13 @@ number of subplots when putting together a figure.
 
     # some data
     import numpy as np
-    x = np.linspace(-5,5,21)<br>
+    x = np.linspace(-5,5,21)
     y = np.ramdom.normal(size=(21,5))
 
     # create figure
     from cdxbasics.dynaplot import figure, colors_css4
-    fig = figure()                  # equivalent to matplotlib.figure<br>
-    ax  = fig.add_subplot()         # no need to specify row,col,num<br>
+    fig = figure()                  # equivalent to matplotlib.figure
+    ax  = fig.add_subplot()         # no need to specify row,col,num
     l   = ax.plot( x, y[:,0] )[0] 
     ax.render()                     # construct figure & draw graph
     
@@ -32,7 +32,7 @@ number of subplots when putting together a figure.
 There are a number of other functions to aid plotting
 <ul>
 <li><tt>figure()</tt>:<br>
-    Function to replace <tt>matplotlib.figure</tt> which will defer creation of the figure until the first call of <tt>redraw()</tt>. This way we do not have to specify row, col, num when adding subplots.
+    Function to replace <tt>matplotlib.figure</tt> which will defer creation of the figure until the first call of <tt>redraw()</tt>. This way we do not have to specify row, col, num when adding subplots. The figure takes a number of arguments, the most important being a kwargs <b>tight</b> which is True by default.
 
 <li><tt>color_css4, color_base, color_tableau, color_xkcd</tt>:<br>
     Each function returns the <tt>i</tt>th element of the respective matplotlib color
@@ -210,16 +210,12 @@ We run the usual risk of somebody mispronouncing the parameter name which we wou
             b = kwargs("b", 20)
             kwargs.done()
 
-
-
-
-
-
+If now a user calls <tt>f</tt> with <tt>config(difficlt_name=5)</tt> an error will be raised.
 
 
 <h2>logger</h2>
 
-Tools for defensive programming a'la the C++ VERIFY macro. Aim is to provide one line validation of inputs to functions with intelligible error messages:
+Tools for defensive programming a'la the C++ ASSERT/VERIFY macros. Aim is to provide one line validation of inputs to functions with intelligible error messages:
 
     from cdxbasics.logger import Logger
     _log = Logger(__file__)
