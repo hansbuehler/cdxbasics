@@ -1,7 +1,7 @@
 """
 config
 Utility object for ML project configuration
-Hans Buehler 2021
+Hans Buehler 2022
 """
 
 from collections import OrderedDict

@@ -2,7 +2,7 @@
 """
 dynafig
 Dynamic matplotlib in jupyer notebooks
-Hans Buehler 2021
+Hans Buehler 2022
 """
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors

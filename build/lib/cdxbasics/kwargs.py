@@ -10,7 +10,9 @@ from .config import Config
 from .logger import Logger
 _log = Logger(__file__)
 
-dctkwargs = Config()
+dctkwargs = Config
+
+# ==================== OLD CODE =======================
 
 class _dctkwargs(object):
     

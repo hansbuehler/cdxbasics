@@ -1,6 +1,6 @@
 """
 Basic utilities for Python, in particular the Generic() class
-Hans Buehler 2016-2020
+Hans Buehler 2022
 """
 
 import datetime as datetime
