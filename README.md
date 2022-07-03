@@ -8,6 +8,8 @@ Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit 
 
 See the jupyter notebook <tt>DynaPlot.ipynb</tt> for some applications.
 
+<img src=media/dynaplot.gif />
+
 The other functionality is that it avoids having to know row, column, and total
 number of subplots when putting together a figure.
 

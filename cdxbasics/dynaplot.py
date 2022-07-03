@@ -27,9 +27,13 @@ class DeferredCall(object):
             _log.verify( len(self._return) == 1, "Deferred function '%s' has not yet been called for key '%s'", self._function, key )
             return getattr(self._return[0], key)
         
-        def __call__(self): # NOQA
+        def __getitem__(self, key): # NOQA
+            _log.verify( len(self._return) == 1, "Deferred function '%s' has not yet been called for key '%s'", self._function, key )
+            return self._return[0][key]
+        
+        def __call__(self, *kargs, **kwargs): # NOQA
             _log.verify( len(self._return) == 1, "Deferred function '%s' has not yet been called", self._function )
-            return self._return[0]            
+            return self._return[0](*karga, **kwargs)            
     
     def __init__(self, function : str, reduce_single_list : bool = True ):
         """ Initilize with the name 'function' of the function """
