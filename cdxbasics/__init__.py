@@ -4,7 +4,7 @@ Created on June 2022
 @author: hansb
 """
 
-__version__ = "0.1.02"
+__version__ = "0.1.3"
 
 from .util import *
 from .logger import Logger
