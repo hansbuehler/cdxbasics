@@ -23,13 +23,15 @@ number of subplots when putting together a figure.
     fig = figure()                  # equivalent to matplotlib.figure
     ax  = fig.add_subplot()         # no need to specify row,col,num
     l   = ax.plot( x, y[:,0] )[0] 
-    ax.render()                     # construct figure & draw graph
+    fig.render()                     # construct figure & draw graph
     
     # animate
     import time
     for i in range(1,5):
-        l.set_ydata( y[:,i] )       # update data
+        l[0].set_ydata( y[:,i] )       # update data
         time.sleep(1) 
+        
+    fig.close()                   # clear figure to avoid duplication
 
 There are a number of other functions to aid plotting
 <ul>
