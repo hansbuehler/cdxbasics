@@ -33,7 +33,7 @@ class DeferredCall(object):
         
         def __call__(self, *kargs, **kwargs): # NOQA
             _log.verify( len(self._return) == 1, "Deferred function '%s' has not yet been called", self._function )
-            return self._return[0](*karga, **kwargs)            
+            return self._return[0](*kargs, **kwargs)            
     
     def __init__(self, function : str, reduce_single_list : bool = True ):
         """ Initilize with the name 'function' of the function """
