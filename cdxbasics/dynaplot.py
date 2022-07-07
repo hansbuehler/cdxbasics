@@ -155,7 +155,7 @@ class DynamicFig(object):
                     https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.figure.html#
                 It is recommended not to use 'figsize'
         """                
-        self.hdisplay   = display.display("", display_id=True)
+        self.hdisplay   = display.display(display_id=True)
         self.axes       = []
         self.fig        = None
         self.row_size   = int(row_size)
@@ -249,7 +249,7 @@ class DynamicFig(object):
 
     def __getattr__(self, key): 
         """
-        This features allows delaying a call to figure to when it is constructed.
+        Allows delaying a call to figure to when it is constructed.
         E.g. if you call self.tight_layout() before render() then tight_layout() will called after render().        
         This will not work with functions which return anything
         """
