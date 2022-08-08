@@ -14,6 +14,7 @@ The other functionality is that it avoids having to know row, column, and total
 number of subplots when putting together a figure.
 
     # some data
+    %matplotlib notebook
     import numpy as np
     x = np.linspace(-5,5,21)
     y = np.ramdom.normal(size=(21,5))
@@ -28,10 +29,15 @@ number of subplots when putting together a figure.
     # animate
     import time
     for i in range(1,5):
-        l[0].set_ydata( y[:,i] )       # update data
         time.sleep(1) 
+        l[0].set_ydata( y[:,i] )       # update data
+        fig.render()
         
     fig.close()                   # clear figure to avoid duplication
+
+Some users reported that this does not work in some versions of Jupyter.
+In this case, please try <tt>fig.render( "canvas" )</tt>. I appreciate if you let me know whether this resolved
+the problem.
 
 There are a number of other functions to aid plotting
 <ul>
