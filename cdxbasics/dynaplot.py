@@ -208,11 +208,20 @@ class DynamicFig(object):
         self.this_col = 0
         self.this_row = self.this_row + 1
             
-    def render(self):
+    def render(self, experimental_mode = "hdisplay"):
         """
         Plot all axes.
         Once called, no further plots can be added, but the plots can
         be updated in place
+        
+        Parameters
+        ----------
+            experimental_mode : str, optional
+                How to render an updated graph.
+                The default, hdisplay has worked on JupyterHub but some users
+                reported that this is not working for Jupyter.
+                For
+        
         """
         _log.verify( not self.hdisplay is None, "Cannot call render() after close() was called")        
         if self.this_row == 0 and self.this_col == 0:
@@ -234,8 +243,12 @@ class DynamicFig(object):
                 catch.execute( self.fig )
             self.caught = []
             # close.
-            # This removes a second shaddow draw in Jupyter            
-        self.hdisplay.update(self.fig)  
+            # This removes a second shaddow draw in Jupyter       
+        if experimental_mode == "hdisplay":
+            self.hdisplay.update(self.fig)  
+        else:
+            _log.verify( experimental_mode == "canvas", "'experimental_mode' must be 'hdisplay' or 'canvas'")
+            self.fig.canvas.draw()
         
     def close(self):
         """
@@ -427,7 +440,6 @@ def colors_tableau():
 def colors_xkcd():
     """ Iterator for xkcd matplotlib colors """
     return colors("xkcd")
-
 
 
 
