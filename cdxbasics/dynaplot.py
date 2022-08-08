@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 dynafig
 Dynamic matplotlib in jupyer notebooks
@@ -220,8 +219,7 @@ class DynamicFig(object):
                 How to render an updated graph.
                 The default, hdisplay has worked on JupyterHub but some users
                 reported that this is not working for Jupyter.
-                For
-        
+                Use 'canvas' in this case.
         """
         _log.verify( not self.hdisplay is None, "Cannot call render() after close() was called")        
         if self.this_row == 0 and self.this_col == 0:
@@ -250,13 +248,22 @@ class DynamicFig(object):
             _log.verify( experimental_mode == "canvas", "'experimental_mode' must be 'hdisplay' or 'canvas'")
             self.fig.canvas.draw()
         
-    def close(self):
+    def close(self, experimental_mode = "hdisplay"):
         """
         Close down the figure. Does not clear the figure.
         Call this to remove the resiudal print in jupyter at the end of your animation
+
+        Parameters
+        ----------
+            experimental_mode : str, optional
+                Passed on to render()
+                How to render an updated graph.
+                The default, hdisplay has worked on JupyterHub but some users
+                reported that this is not working for Jupyter.
+                Use 'canvas' in this case.
         """
         if not self.hdisplay is None:
-            self.render()            
+            self.render(experimental_mode)            
             plt.close(self.fig)  
         self.hdisplay = None
 
