@@ -143,7 +143,7 @@ class Enum(_Cast):
     def __call__( self, value ):# NOQA
         """ cast 'value' to the proper type
             Raises a KeyError if the value was not found in our enum """
-        value = self.cast( value )
+        return self.cast( value )
 
     def test(self, value):
         """ Test whether 'value' satisfies the condition """
@@ -152,11 +152,11 @@ class Enum(_Cast):
     @property
     def err_str(self):
         """ Nice error string """        
-        s = "must be one of '" + str(self.enum[0]) + "'"
+        s = "must be one of: '" + str(self.enum[0]) + "'"
         for i in range(1,len(self.enum)-1):
-            s += "'" + str(self.enum[i]) + "', "
+            s += ", '" + str(self.enum[i])
         if len(self.enum) > 1:
-            s += "or '" + str(self.enum[-1]) + "'"
+            s += " or '" + str(self.enum[-1]) + "'"
         return s
         
     @property
@@ -368,10 +368,11 @@ class Config(OrderedDict):
         """
         Returns either the value for 'key', if it exists, or creates on-the-fly a child config
         with the name 'key' and retruns it
-        """        
-        _log.verify( key.find('.') == -1 and key.find(" ") == -1, "Error in config '%s': name of a config must be a valid class member name. Found %s", self._name, key )
+        """
+        _log.verify( key.find('.') == -1 , "Error in config '%s': key name cannot contain '.'. Found %s", self._name, key )
         if key in self._children:
             return self._children[key]
+        _log.verify( key.find(" ") == -1, "Error in config '%s': sub-config names cannot contain spaces. Found %s", self._name, key )
         config = Config()
         config._name              = self._name + "." + key
         config._recorder          = self._recorder
@@ -497,6 +498,9 @@ class Config(OrderedDict):
             config("key")                      - returns the value for 'key' or if not found raises an exception
             config("key", 1)                   - returns the value for 'key' or if not found returns 1
             config("key", 1, int)              - if 'key' is not found, return 1. If it is found cast the result with int().
+            config("key", 1, int, "A number"   - also stores an optional help text.
+                                                 Call usage_report() after the config has been read to a get a full 
+                                                 summary of all data requested from this config.
     
         Parameters
         ----------
@@ -526,6 +530,7 @@ class Config(OrderedDict):
         -------
             Value.
         """       
+        _log.verify( key.find('.') == -1 , "Error in config '%s': key name cannot contain '.'. Found %s", self._name, key )
         
         # determine raw value
         if not key in self:
@@ -567,6 +572,8 @@ class Config(OrderedDict):
         
         if not help_cast is None:
             help_cast     = str(help_cast)
+        elif cast is None:
+            help_cast     = ""
         elif isinstance( cast, _Cast ):
             help_cast     = cast.help_cast
         else:
@@ -850,3 +857,10 @@ def test_as_kwargs():
     g( **config )
     config.done()
     print( "g\n", config.usage_report() )
+    
+    
+        
+    
+        
+    
+    

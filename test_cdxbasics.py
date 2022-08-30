@@ -5,12 +5,12 @@ Created on Tue Apr 14 21:24:52 2020
 """
 
 import unittest
-import cdxbasics.util as util
-import cdxbasics.config as config 
-import cdxbasics.kwargs as mdl_kwargs
-import cdxbasics.subdir as mdl_subdir
-import cdxbasics.logger as mdl_logger
-from cdxbasics.prettydict import PrettyDict
+import packages.cdxbasics.cdxbasics.util as util
+import packages.cdxbasics.cdxbasics.config as config 
+import packages.cdxbasics.cdxbasics.kwargs as mdl_kwargs
+import packages.cdxbasics.cdxbasics.subdir as mdl_subdir
+import packages.cdxbasics.cdxbasics.logger as mdl_logger
+from packages.cdxbasics.cdxbasics.prettydict import PrettyDict
 
 Root = mdl_subdir.Root
 SubDir = mdl_subdir.SubDir
@@ -43,22 +43,10 @@ class CDXBasicsTest(unittest.TestCase):
             c = kwargs.get('c',3)  # with default
             return (a,b,c)
     
-        def f2(**kwargs):
-            kwargs = dctkwargs(kwargs)
-            a = kwargs('a',1)      # with default
-            b = kwargs['b']        # no default; must exist
-            c = kwargs['c',3]      # with default
-            if not kwargs.isDone():
-                raise AttributeError('Unknown: %s', kwargs)
-            return (a,b,c)
-
         self.assertEqual((-1,-2,-3), f1(a=-1,b=-2,c=-3))
         self.assertEqual((+1,-2,+3), f1(b=-2))
         with self.assertRaises(KeyError):
             f1() # missing b
-
-        with self.assertRaises(KeyError):
-            f2(b=2,d=4)   # d does not exist
 
     def test_Generic(self):
         # PrettyDict is now PrettyDict
@@ -398,10 +386,8 @@ class CDXCConfigTest(unittest.TestCase):
         
         self.assertEqual(1., config("x", 0., float, "x"))
         self.assertEqual("a", config("a", None, str, "a"))
-        self.assertEqual(2, config("sub.x", 0, int, "x"))
         self.assertEqual(2, config.sub("x", 0, int, "x"))
-        self.assertEqual(2, config.sub.x )
-        self.assertTrue( isinstance( config.sub2, Config ) )
+        self.assertTrue( isinstance( config.sub, Config ) )
         config.done()
         
         # test detach
@@ -414,14 +400,8 @@ class CDXCConfigTest(unittest.TestCase):
         config.sub.x = 1
         sub = config.sub.detach()
         config.done() # ok
-        with self.assertRaises(Exception):
-            config.done() # 'sub.x' not read
         _ = sub("x", 1)
         config.done() # fine now
-        
-        
-        
-        
 
         # test set        
         config = Config(t="a", q="q")
