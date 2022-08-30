@@ -5,12 +5,12 @@ Created on Tue Apr 14 21:24:52 2020
 """
 
 import unittest
-import packages.cdxbasics.cdxbasics.util as util
-import packages.cdxbasics.cdxbasics.config as config 
-import packages.cdxbasics.cdxbasics.kwargs as mdl_kwargs
-import packages.cdxbasics.cdxbasics.subdir as mdl_subdir
-import packages.cdxbasics.cdxbasics.logger as mdl_logger
-from packages.cdxbasics.cdxbasics.prettydict import PrettyDict
+import cdxbasics.util as util
+import cdxbasics.config as config 
+import cdxbasics.kwargs as mdl_kwargs
+import cdxbasics.subdir as mdl_subdir
+import cdxbasics.logger as mdl_logger
+from cdxbasics.prettydict import PrettyDict
 
 Root = mdl_subdir.Root
 SubDir = mdl_subdir.SubDir
