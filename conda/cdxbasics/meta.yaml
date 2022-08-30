@@ -1,0 +1,47 @@
+{% set name = "cdxbasics" %}
+{% set version = "0.1.43" %}
+
+package:
+  name: "{{ name|lower }}"
+  version: "{{ version }}"
+
+source:
+  url: "https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz"
+  sha256: 7ccd25ea746428d33d992d29e3bcc3d5176828b397e41f07ec5fcd1095c12a73
+
+build:
+  number: 0
+  script: "{{ PYTHON }} -m pip install . -vv"
+  noarch: python 
+
+requirements:
+  host:
+    - matplotlib
+    - numpy
+    - pandas
+    - pip
+    - python
+    - sortedcontainers
+  run:
+    - matplotlib
+    - numpy
+    - pandas
+    - python
+    - sortedcontainers
+
+test:
+  imports:
+    - cdxbasics
+
+about:
+  home: "https://github.com/hansbuehler/cdxbasics"
+  license: MIT
+  license_family: MIT
+  license_file: 
+  summary: "Basic Python tools"
+  doc_url: 
+  dev_url: 
+
+extra:
+  recipe-maintainers:
+    - hansbuehler

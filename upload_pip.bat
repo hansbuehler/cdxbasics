@@ -9,3 +9,7 @@ del /Q dist\*.*
 
 echo "Upgrading cdxbasics locally"
 pip install --upgrade cdxbasics
+
+echo "****"
+echo "Now follow instructions on conda_instructions.txt"
+echo "****"
