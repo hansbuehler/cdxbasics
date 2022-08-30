@@ -5,6 +5,7 @@ Hans Buehler 2022
 """
 
 from collections import OrderedDict
+from collections.abc import Mapping
 from sortedcontainers import SortedDict
 from .util import uniqueHash
 from .logger import Logger
@@ -15,6 +16,161 @@ class _ID(object):
 
 no_default = _ID()    # creates a unique object which can be used to detect if a default value was provided
 
+# New in version 0.1.45
+# Support for conditional types, e.g. we can write
+# 
+#  x = config(x, 0.1, Float >= 0., "An 'x' which cannot be negative")
+    
+class _Cast(object):
+    
+    def __call__( self, value ):# NOQA
+        """ cast 'value' to the proper type """
+        raise NotImplementedError("Internal error")
+
+    def test(self, value):
+        """ Test whether 'value' satisfies the condition """
+        raise NotImplementedError("Internal error")
+
+    @property
+    def err_str(self):
+        """ Nice error string """
+        raise NotImplementedError("Internal error")
+        
+    @property
+    def help_cast(self):
+        """ Returns readable string """
+        raise NotImplementedError("Internal error")
+    
+# ================================
+# Flaot and Int 'cast' types
+# ================================
+
+class _Condition(_Cast):
+    """ Represents a simple operator condition such as 'Float >= 0.' """
+    
+    def __init__(self, cast, op, other):# NOQA
+        self.cast = cast
+        self.op = op
+        self.other = other
+
+    def __call__( self, value ):# NOQA
+        """ self.cast's 'value' """
+        return self.cast(value)
+
+    def test(self, value):
+        """ Test whether 'value' satisfies the condition """
+        assert isinstance( value, self.cast ), "Internal error: 'value' should be of type %s but found type %s" % (self.cast.__name__, type(value).__name__ )
+        if self.op == "ge":
+            return value >= self.other
+        if self.op == "gt":
+            return value > self.other
+        if self.op == "le":
+            return value <= self.other
+        if self.op == "lt":
+            return value < self.other
+        raise RuntimeError("Internal error: unknown operator %s" % str(self.op))
+
+    @property
+    def err_str(self):
+        """ Nice error string """
+        zero = self.cast(0)
+        if self.op == "ge":
+            return ("must not be lower than %s" % self.other) if self.other != zero else ("must not be negative")
+        if self.op == "gt":
+            return ("must be bigger than %s" % self.other) if self.other != zero else ("must be positive")
+        if self.op == "le":
+            return ("must not exceed %s" % self.other) if self.other != zero else ("must not be positive")
+        if self.op == "lt":
+            return ("must be lower than %s" % self.other) if self.other != zero else ("must be negative")
+        raise RuntimeError("Internal error: unknown operator %s" % str(self.op))
+        
+    @property
+    def help_cast(self):
+        """ Returns readable string """
+        if self.op == "ge":
+            return str(self.cast.__name__) + " >= " + str(self.other)
+        if self.op == "gt":
+            return str(self.cast.__name__) + " > " + str(self.other)
+        if self.op == "le":
+            return str(self.cast.__name__) + " <= " + str(self.other)
+        if self.op == "lt":
+            return str(self.cast.__name__) + " < " + str(self.other)
+        raise RuntimeError("Internal error: unknown operator %s" % str(self.op))
+             
+class _CastCond(object): # NOQA
+    """ Generates _Condition's
+        See the two members Float and Int
+    """
+    
+    def __init__(self, cast):# NOQA
+        self.cast = cast
+    def __ge__(self, other):# NOQA
+        return _Condition( self.cast, 'ge', self.cast(other) )
+    def __gt__(self, other):# NOQA
+        return _Condition( self.cast, 'gt', self.cast(other) )
+    def __le__(self, other):# NOQA
+        return _Condition( self.cast, 'le', self.cast(other) )
+    def __lt__(self, other):# NOQA
+        return _Condition( self.cast, 'lt', self.cast(other) )    
+    
+Float = _CastCond(float)
+Int = _CastCond(int)
+
+# ================================
+# Enum type for list 'cast's
+# ================================
+        
+class Enum(_Cast):
+    """ Utility class to support enumerator types.
+        No need to use this classs directly. It will be automatically instantiated if a list is passed as type, e.g.
+        
+            code = config("code", "Python", ['C++', 'Python'], "Which language do we love")
+            
+        """
+        
+    def __init__(self, enum, config_name, key ):
+    
+        self.enum = list(enum)
+        _log.verify( len(self.enum) > 0, "Error in config '%s': 'cast' for key '%s' is an empty list or tuple. Lists are used for enumerator types", config_name, key )
+        self.cast = type( self.enum[0] )
+        for i in range(1,len(self.enum)):
+            try:
+                self.enum[i] = self.cast( self.enum[i] )
+            except:
+                _log.throw( "Error in config '%s': 'key '%s' members of the enumerated list are not of consistent type. Found %s for the first element which does match the type %s of the %ldth element",\
+                        config_name, key, self.cast.__name__, i, type(self.enum[i]).__name__)    
+        
+    def __call__( self, value ):# NOQA
+        """ cast 'value' to the proper type
+            Raises a KeyError if the value was not found in our enum """
+        value = self.cast( value )
+
+    def test(self, value):
+        """ Test whether 'value' satisfies the condition """
+        return value in self.enum
+
+    @property
+    def err_str(self):
+        """ Nice error string """        
+        s = "must be one of '" + str(self.enum[0]) + "'"
+        for i in range(1,len(self.enum)-1):
+            s += "'" + str(self.enum[i]) + "', "
+        if len(self.enum) > 1:
+            s += "or '" + str(self.enum[-1]) + "'"
+        return s
+        
+    @property
+    def help_cast(self):
+        """ Returns readable string """
+        help_cast     = "[ "
+        for i in range(len(self.enum)):
+            help_cast += ( ", " + self.enum[i] ) if i > 0 else self.enum[i]
+        help_cast += " ]"
+        return help_cast
+ 
+# ================================
+# Main Config
+# ================================
 
 class Config(OrderedDict):
     """
@@ -313,10 +469,15 @@ class Config(OrderedDict):
                     child = child.copy()
                     set_recorder(child, self._recorder)
                     self._children[sub]= child
-            # copy elements from other.
-            # we do not mark elements from another config as 'used' 
-            for key in other:
-                self[key] = OrderedDict.get(other,key)
+                # copy elements from other.
+                # we do not mark elements from another config as 'used' 
+                for key in other:
+                    self[key] = OrderedDict.get(other,key)
+            else:
+                _log.verify( isinstance(other, Mapping), "Cannot update config with an object of type '%s'. Expected 'Mapping' type.", type(other).__name__ )
+                for key in other:
+                    self[key] = other[key]
+                
         OrderedDict.update( self, kwargs )
     
     # Read
@@ -327,7 +488,7 @@ class Config(OrderedDict):
                        cast         : object = None, 
                        help         : str = None, 
                        help_default : str = None, 
-                       help_cast    : str = None, 
+                       help_cast    : str = None,
                        mark_read    : bool = True,
                        record       : bool = True ):
         """
@@ -346,6 +507,8 @@ class Config(OrderedDict):
             cast : object, optional
                 If not None, will attempt to cast the value provided with the provided value.
                 E.g. if cast = int, then it will run int(x)
+                This function now also allows passing a list or tupel, in which case it is assumed that 
+                the 'key' must be from this list.
             help : str, optional
                 If provied adds a help text when self documentation is used.
             help_default : str, optional
@@ -363,18 +526,30 @@ class Config(OrderedDict):
         -------
             Value.
         """       
+        
+        # determine raw value
         if not key in self:
             if default == no_default:
                 raise KeyError(key, "Error in config '%s': key '%s' not found " % (self._name, key))
             value = default
         else:
             value = OrderedDict.get(self,key)
+
+        # enum support
+        cast = Enum( cast, self._name, key ) if isinstance( cast, (list,tuple) ) else cast
+                        
+        # convert value to 'cast'
+        # validate value is in enum if applicable
         if not value is None and not cast is None:
             try:
                 value = cast( value )
             except Exception as e:
-                _log.verify( False, "Error in config '%s': value '%s' for key '%s' cannot be cast to type '%s': %s", self._name, value, key, cast.__name__, str(e))
-
+                cast_name = cast.__name__ if not isinstance( cast, _CastCond ) else _CastCond.cast.__name__
+                _log.throw( "Error in config '%s': value '%s' for key '%s' cannot be cast to type '%s': %s", self._name, value, key, cast.__name__, str(e))
+                
+            if isinstance( cast, _Cast ) and not cast.test(value):
+                _log.throw( "Error in config '%s': value '%s' for key '%s' %s", self._name, value, key, cast.err_str )
+                    
         # mark key as read, and record call
         if mark_read:
             self._read.add(key)
@@ -389,8 +564,14 @@ class Config(OrderedDict):
         help          = help[:-1] if help[-1:] == "." else help
         help_default  = str(help_default) if not help_default is None else ""
         help_default  = str(default) if default != no_default and len(help_default) == 0 else help_default
-        help_cast     = str(help_cast) if not help_cast is None else ""
-        help_cast     = str(cast.__name__) if not cast is None else help_cast
+        
+        if not help_cast is None:
+            help_cast     = str(help_cast)
+        elif isinstance( cast, _Cast ):
+            help_cast     = cast.help_cast
+        else:
+            help_cast     = str(cast.__name__)
+            
         just_read     = help == "" and help_cast == "" and help_default == "" # was there any information?
         record        = SortedDict( value=value, 
                                     just_read=just_read,
@@ -669,10 +850,3 @@ def test_as_kwargs():
     g( **config )
     config.done()
     print( "g\n", config.usage_report() )
-    
-    
-        
-    
-        
-    
-    

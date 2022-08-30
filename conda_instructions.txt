@@ -1,0 +1,9 @@
+change version in conda/cdxbasics/meta.yaml
+cd conda
+anaconda login 
+conda build .
+
+
+
+From
+https://docs.conda.io/projects/conda-build/en/latest/user-guide/tutorials/build-pkgs-skeleton.html

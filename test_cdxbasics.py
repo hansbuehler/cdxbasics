@@ -6,6 +6,7 @@ Created on Tue Apr 14 21:24:52 2020
 
 import unittest
 import cdxbasics.util as util
+import cdxbasics.config as config 
 import cdxbasics.kwargs as mdl_kwargs
 import cdxbasics.subdir as mdl_subdir
 import cdxbasics.logger as mdl_logger
@@ -18,6 +19,10 @@ LogException = Logger.LogException
 dctkwargs = mdl_kwargs.dctkwargs
 Generic = util.Generic
 fmt = util.fmt
+
+Config = config.Config
+Float = config.Float
+Int = config.Int
 
 mdl_subdir._log.setLevel(Logger.CRITICAL)   # no logging in testing
 
@@ -358,6 +363,73 @@ class CDXBasicsCacheTest(unittest.TestCase):
         self.assertNotEqual( self.g.cacheArgKey, key1 )
         
         CDXBasicsCacheTest.cacheRoot.eraseEverything()
+        
+# testing config
+
+class CDXCConfigTest(unittest.TestCase):
+
+    def test_config(self):
+        
+        config = Config(x=0., z=-1.)
+        x = config("x", 10., float, "test x")
+        self.assertEqual( x, 0. )
+        y = config("y", 10., float, "test y")
+        self.assertEqual( y, 10. )
+        
+        with self.assertRaises(config._log.LogException):
+            # 'z' was not read
+            config.done()
+
+        # calling twice with different values  
+        config = Config(x=0.)
+        x = config("x", 1., float, "test x")
+        x = config("x", 1., float, "test x")   # ok: same parameters
+        with self.assertRaises(config._log.LogException):
+            x = config("x", 1., Float<0.5, "test x") # not ok: Float condition
+        with self.assertRaises(config._log.LogException):
+            x = config("x", 2., float, "test x") # not ok: different default
+        config.done()
+        
+        # test sub configs
+        config = Config()
+        config.x = 1
+        config.a = "a"
+        config.sub.x = 2.
+        
+        self.assertEqual(1., config("x", 0., float, "x"))
+        self.assertEqual("a", config("a", None, str, "a"))
+        self.assertEqual(2, config("sub.x", 0, int, "x"))
+        self.assertEqual(2, config.sub("x", 0, int, "x"))
+        self.assertEqual(2, config.sub.x )
+        self.assertTrue( isinstance( config.sub2, Config ) )
+        config.done()
+        
+        # test detach
+        config = Config()
+        config.sub.x = 1
+        with self.assertRaises(config._log.LogException):
+            config.done() # 'sub.x' not read
+            
+        config = Config()
+        config.sub.x = 1
+        sub = config.sub.detach()
+        config.done() # ok
+        with self.assertRaises(config._log.LogException):
+            config.done() # 'sub.x' not read
+        _ = sub("x", 1)
+        config.done() # fine now
+        
+        
+        
+        
+
+        # test set        
+        config = Config(t="a", q="q")
+        _ = config("t", "b", ['a', 'b', 'c'] )
+        self.assertEqual(_, 'a')
+        with self.assertRaises(config._log.LogException):
+            _ = config("q", "b", ['a', 'b', 'c'] )   # exception: not in set
+
         
         
 if __name__ == '__main__':
