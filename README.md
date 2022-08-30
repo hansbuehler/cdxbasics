@@ -101,7 +101,7 @@ Create sub configurations with member notation
         
             config.network.depth         = 10
             config.network.activation    = 'relu'
-            config.network.widht         = 100   # (intentional typo)
+            config.network.width         = 100   # (intentional typo)
 
 This is equivalent to 
 
@@ -139,8 +139,15 @@ Accessing via the child node
 
             network  = config.network 
             self.depth = network('depth', 10000, int, "Depth for the network") 
-            self.width = network('width', 100, int, "Width for the network")
+            
+We can impose simple restrictions
 
+            self.width = network('width', 100, Int>3, "Width for the network")
+
+Or enforce being a member of a list
+
+            self.ntype = network('ntype', 'fastforward', ['fastforward','recurrent','lstm'], "Type of network")
+            
 Do not forget to call <tt>done()</tt> once done with this config. 
 
             config.done()    # checks that we have read all keywords.
