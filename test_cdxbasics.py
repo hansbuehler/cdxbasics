@@ -376,7 +376,7 @@ class CDXCConfigTest(unittest.TestCase):
         y = config("y", 10., float, "test y")
         self.assertEqual( y, 10. )
         
-        with self.assertRaises(config._log.LogException):
+        with self.assertRaises(Exception):
             # 'z' was not read
             config.done()
 
@@ -384,9 +384,9 @@ class CDXCConfigTest(unittest.TestCase):
         config = Config(x=0.)
         x = config("x", 1., float, "test x")
         x = config("x", 1., float, "test x")   # ok: same parameters
-        with self.assertRaises(config._log.LogException):
+        with self.assertRaises(Exception):
             x = config("x", 1., Float<0.5, "test x") # not ok: Float condition
-        with self.assertRaises(config._log.LogException):
+        with self.assertRaises(Exception):
             x = config("x", 2., float, "test x") # not ok: different default
         config.done()
         
@@ -407,14 +407,14 @@ class CDXCConfigTest(unittest.TestCase):
         # test detach
         config = Config()
         config.sub.x = 1
-        with self.assertRaises(config._log.LogException):
+        with self.assertRaises(Exception):
             config.done() # 'sub.x' not read
             
         config = Config()
         config.sub.x = 1
         sub = config.sub.detach()
         config.done() # ok
-        with self.assertRaises(config._log.LogException):
+        with self.assertRaises(Exception):
             config.done() # 'sub.x' not read
         _ = sub("x", 1)
         config.done() # fine now
@@ -427,7 +427,7 @@ class CDXCConfigTest(unittest.TestCase):
         config = Config(t="a", q="q")
         _ = config("t", "b", ['a', 'b', 'c'] )
         self.assertEqual(_, 'a')
-        with self.assertRaises(config._log.LogException):
+        with self.assertRaises(Exception):
             _ = config("q", "b", ['a', 'b', 'c'] )   # exception: not in set
 
         
