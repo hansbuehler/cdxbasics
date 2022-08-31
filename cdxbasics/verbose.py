@@ -25,7 +25,7 @@ class Context(object):
     
     """
         
-    def __init__(self, *,  parent=None, verbose : int=-1,level : int=None, default_sub : int=None, indent : int=None, fmt_level : str="%02ld: " ):
+    def __init__(self, *,  parent=None, verbose="default", level : int=None, default_sub : int=None, indent : int=None, fmt_level : str="%02ld: " ):
         """
         Create a Context object
         
@@ -34,10 +34,11 @@ class Context(object):
             parent : Context
                 If not zero, specifies a parent context. All other parameters are then relative to this                
             verbose : int
-                Plotting level. Defaults to -1 (quiet) or, if parent is specified, to parent's verbose level.
-                Set to
-                    "all"       : print everything
-                    -1, "quiet" : print nothing
+                Plotting level. 
+                    A non-negative number : set that level
+                    "all", None           : print everything
+                    -1, "quiet"           : print nothing
+                    "default"             : same as parent if provided, otherwise "quiet"
             level : int
                 Level of the current context. Defaults to 1.
                 Actual level if parent.level + level of parent is specified
@@ -53,6 +54,8 @@ class Context(object):
                 verbose = -1
             elif verbose == "all":
                 verbose = None
+            elif verbose == "default":
+                verbose = parent.verbose if not parent is None else -1
             else:
                 verbose = int(verbose)
         else:
@@ -76,15 +79,16 @@ class Context(object):
             self.fmt_level  = fmt_level
         else:
             self.verbose     = parent.verbose if verbose is None else verbose
-            self.level       = parent.level + (1 if level is None else int(level))
+            self.level       = parent.level + (1 if level is None else level)
             self.default_sub = parent.default_sub if default_sub is None else default_sub
-            self.indent      = parent.indent if indent is None else int(indent)
+            self.indent      = parent.indent if indent is None else indent
             self.fmt_level   = fmt_level
 
     def write( self, message : str, *args, **kwargs ):
         """
-        Report message with the formattting arguments at curent context level.
+        Report message at level 0 with the formattting arguments at curent context level.
         The message will be formatted as util.fmt( message, *args, **kwargs )
+        It will be displayed in all cases except if the context is 'quiet'.
         """
         self.report( level=0, message=message, *args, **kwargs )
         
@@ -164,9 +168,14 @@ class Context(object):
         """ Return a Context at the same level as 'self' with full verbosity """
         return self.sub(sub_level=0, verbose=None) if not self.verbose is None else self
     @property
-    def as_qiet(self):
+    def as_quiet(self):
         """ Return a Context at the same level as 'self' with zero verbosity """
         return self.sub(sub_level=0, verbose=-1) if (self.verbose is None or self.verbose >= 0) else self
+    
+    @property
+    def is_quiet(self):
+        """ Whether the current context is quiet """
+        return not self.verbose is None and self.verbose < 0
 
     def shall_report(self, sub_level):
         """ Returns whether to print at 'sub_level' """
