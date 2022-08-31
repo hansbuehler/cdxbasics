@@ -8,7 +8,7 @@ Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit 
 
 See the jupyter notebook <tt>DynaPlot.ipynb</tt> for some applications.
 
-<img src=media/dynaplot.gif />
+<img src=https://github.com/hansbuehler/cdxbasics/raw/master/media/dynaplot.gif />
 
 The other functionality is that it avoids having to know row, column, and total
 number of subplots when putting together a figure.
@@ -74,6 +74,30 @@ There are three versions:
     <li><tt>PrettySortedDict</tt>:<br>
         Pretty version of sorted dictionary.
 </ul>
+
+<h4>Functions</h4>
+
+The classes also allow assigning bona fide member functions by a simple semantic of the form:
+
+    def mult_b( self, x ):
+        return self.b * x
+    pdct = mult_a 
+
+Calling <tt>pdct.mult_a(3)</tt> with above config will return <tt>6</tt>. This functionality only works when using the member synthax for assigning values
+to a pretty dictionary; if the standard <tt>[]</tt> operator is used then functions will be assigned to the dictionary usual.
+
+The reason for this is as follows: consider
+
+    def mult( a, b ):
+        return a*b
+    pdct.mult = mult
+    mult(3,4) --> produces am error as three arguments as are passed if we count 'self'
+ 
+ In this case, use:
+ 
+    pdct['mult'] = mult
+    mult(3,4) --> 12
+ 
 
 <h2>config</h2>
 
@@ -174,7 +198,7 @@ use without triggering <tt>done()</tt>  errors for its parent.
             self.config_training = config.training.detach()
             config.done()
 
-<tt>Detach()</tt> will mark he original child as 'done'. Therefore, we will need to call <tt>done()</tt> again, when we finished processing the detached child:
+<tt>detach()</tt> will mark he original child as 'done'. Therefore, we will need to call <tt>done()</tt> again, when we finished processing the detached child:
 
         def training(self)
             epochs     = self.config_training("epochs", 100, int, "Epochs for training")
@@ -229,6 +253,13 @@ We run the usual risk of somebody mispronouncing the parameter name which we wou
 
 If now a user calls <tt>f</tt> with <tt>config(difficlt_name=5)</tt> an error will be raised.
 
+Another pattern is to allow both <tt>config</tt> and <tt>kwargs</tt>:
+
+        def f( config=Config(), **kwargs):
+            kwargs = config.detach.update(kwargs)
+            a = kwargs("difficult_name", 10)
+            b = kwargs("b", 20)
+            kwargs.done()
 
 <h2>logger</h2>
 
