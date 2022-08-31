@@ -10,11 +10,22 @@ import types as types
 
 class PrettyDict(dict):
     """
-    Dictionary which allows accessing its members
-    with member notation, e.g.        
+    Dictionary which allows accessing its members with member notation, e.g.        
         pdct = PrettyDict()
         pdct.x = 1
         x = pdct.x
+        
+    Functions will be made members, i.e the following works as expected
+        def mult_x(self, a):
+            return self.x * a
+        pdct.mult_x = mult_x
+        pdct.mult_x(2) --> 2
+        
+    To assign a static member use []:
+        def mult(a,b):
+            return a*b
+        pdct['mult'] = mult
+        pdct.mult(1,3) --> 3        
     """
     
     def __getattr__(self, key): 
@@ -38,12 +49,22 @@ class PrettyDict(dict):
         
 class PrettyOrderedDict(OrderedDict):
     """
-    Ordwred dictionary which allows accessing its members
-    with member notation, e.g.
-    
+    Ordered dictionary which allows accessing its members with member notation, e.g.        
         pdct = PrettyDict()
         pdct.x = 1
         x = pdct.x
+        
+    Functions will be made members, i.e the following works as expected
+        def mult_x(self, a):
+            return self.x * a
+        pdct.mult_x = mult_x
+        pdct.mult_x(2) --> 2
+        
+    To assign a static member use []:
+        def mult(a,b):
+            return a*b
+        pdct['mult'] = mult
+        pdct.mult(1,3) --> 3        
     """
 
     def __getattr__(self, key):
@@ -66,12 +87,22 @@ class PrettyOrderedDict(OrderedDict):
         
 class PrettySortedDict(SortedDict):
     """
-    Sorted dictionary which allows accessing its members
-    with member notation, e.g.
-    
+    Sorted dictionary which allows accessing its members with member notation, e.g.        
         pdct = PrettyDict()
         pdct.x = 1
         x = pdct.x
+        
+    Functions will be made members, i.e the following works as expected
+        def mult_x(self, a):
+            return self.x * a
+        pdct.mult_x = mult_x
+        pdct.mult_x(2) --> 2
+        
+    To assign a static member use []:
+        def mult(a,b):
+            return a*b
+        pdct['mult'] = mult
+        pdct.mult(1,3) --> 3        
     """
 
     def __getattr__(self, key):
