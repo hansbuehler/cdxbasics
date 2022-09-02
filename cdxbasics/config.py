@@ -381,10 +381,7 @@ class Config(OrderedDict):
 
     def detach(self,  mark_self_done : bool = True, new_recorder = False ):
         """
-        Creates a copy of the current config, and marks the current config
-        as "done" unless 'mark_self_done' is used.
-        The copy will have the same shared recorder as 'self' unless new_recorder is True.
-        
+        Creates a copy of the current config, and marks the current config as "done" unless 'mark_self_done' is used.        
         The use case for this function is storing sub config's for later processing
         Example:
             
@@ -409,32 +406,54 @@ class Config(OrderedDict):
                 
                 f_read_x( config )
     
+        By default, the copy will have the same shared recorder as 'self' which means that usage detection
+        is shared between the copied and the original config.
+        This is to catch mistakes of the following type:
+        
+            config = Config()
+            config.sub.a = 1
+            
+            _ = config.sub("a", 2)   # read 'a' with default value 2
+            
+            def f(sub_config):
+                _ = sub_config("a",3) # read 'a' with default value 3
+            f(config.sub)        
+            
+        Use new_recorder = True to create a new, clean recorder.
+        This is the default when copy() is used.
+        
         Parameters
         ----------
             mark_self_done : bool, optional 
                 If True mark the current object as 'read'. 
                 This way we can store a sub config for later processing
                 with triggering a warning with self.done()
-            new_recorder : bool, optional
-                If True create new recorder for returned object.
+            new_recorder : optional
+                False: use recorder of 'self'. That means any usage inconsistencies are detected between the new and old config.
+                True: create new recorder
+                <recorder> if a recorder is specified, use it.
         """
         config = Config()
         config.update(self)
         config._read             = set( self._read )
         config._name             = self._name
-        config._children         = { _: self._children[_].detach(mark_self_done=mark_self_done) for _ in self._children }
-        config._children         = OrderedDict( config._children )
-        if not new_recorder:
+        if isinstance( new_recorder, SortedDict ):
+            config._recorder     = new_recorder
+        elif new_recorder:
+            new_recorder         = config._recorder
+        else:
             config._recorder     = self._recorder
+        
+        config._children         = { _: self._children[_].detach(mark_self_done=mark_self_done, new_recorder=new_recorder) for _ in self._children }
+        config._children         = OrderedDict( config._children )
+
         if mark_self_done:
             self.mark_done()
         return config
         
     def copy( self ):
         """ 
-        Return a copy of 'self without marking 'self' read.
-        The copy has a new recorder object.
-    
+        Return a copy of 'self' with no recorded usage, i.e. the config can be used from scratch.
         This call is equivalent to detach(mark_self_done=False, new_recorder=True)
         """
         return self.detach( mark_self_done=False, new_recorder=True )
