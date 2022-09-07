@@ -1,1 +1,0 @@
-https://conda-forge.org/docs/maintainer/adding_pkgs.html

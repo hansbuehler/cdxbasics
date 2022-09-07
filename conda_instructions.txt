@@ -1,6 +1,6 @@
 change version in conda/cdxbasics/meta.yaml
 cd conda
-anaconda login 
+anaconda login  (we may already have a token)
 conda build .
 
 

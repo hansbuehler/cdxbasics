@@ -1,5 +1,5 @@
 {% set name = "cdxbasics" %}
-{% set version = "0.1.43" %}
+{% set version = "0.1.47" %}
 
 package:
   name: "{{ name|lower }}"
