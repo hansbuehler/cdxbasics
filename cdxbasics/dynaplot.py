@@ -9,6 +9,7 @@ from IPython import display
 from .logger import Logger
 _log = Logger("Log")
 
+
 class DeferredCall(object):
     """
     Utility class which allows deferring a function call on an object
@@ -68,7 +69,6 @@ class DynamicAx(object):
     """ 
     Wrapper around an matplotlib axis returned
     by DynamicFig, which is returned by figure().
-
     All calls to the returned axis are delegated to
     matplotlib with the amendmend that if any such function
     returs a list with one member, it will just return
@@ -86,19 +86,20 @@ class DynamicAx(object):
         fig.render() # --> change graph
     """
     
-    def __init__(self, row : int, col : int ):
+    def __init__(self, row : int, col : int, kwargs : dict):
         """ Creates internal object which defers the creation of various graphics to a later point """        
         self.row    = row
         self.col    = col
         self.plots  = {}
         self.caught = []
+        self.kwargs = kwargs
         self.ax     = None
     
     def initialize( self, fig, rows : int, cols : int):
         """ Creates the plot by calling all 'caught' functions calls in sequece """        
         assert self.ax is None, "Internal error; function called twice?"
         num     = 1 + self.col + self.row*cols
-        self.ax = fig.add_subplot( rows, cols, num )        
+        self.ax = fig.add_subplot( rows, cols, num, **self.kwargs )        
         for catch in self.caught:
             catch.execute( self.ax )
         self.caught = []
@@ -175,7 +176,7 @@ class DynamicFig(object):
         """ Ensure the figure is closed """
         self.close()        
 
-    def add_subplot(self, new_row : bool = False) -> DynamicAx:
+    def add_subplot(self, new_row : bool = False, **kwargs) -> DynamicAx:
         """
         Add a subplot.
         This function will return a wrapper which defers the creation of the actual sub plot
@@ -185,6 +186,7 @@ class DynamicFig(object):
         ----------
             new_row : bool, optional
                 Whether to force a new row. Default is False
+            kwargs : other arguments to be passed to matplotlib's add_subplot, for example projection='3d'
         """
         _log.verify( self.fig is None and not self.hdisplay is None, "Cannot call add_subplot() after render() was called")        
         if (self.this_col >= self.col_nums) or ( new_row and not self.this_col == 0 ):
@@ -192,7 +194,7 @@ class DynamicFig(object):
             self.this_row = self.this_row + 1
         if self.max_col < self.this_col:
             self.max_col = self.this_col
-        ax = DynamicAx( self.this_row, self.this_col )        
+        ax = DynamicAx( self.this_row, self.this_col, dict(kwargs) )        
         self.axes.append(ax)
         self.this_col += 1
         return ax
@@ -252,7 +254,6 @@ class DynamicFig(object):
         """
         Close down the figure. Does not clear the figure.
         Call this to remove the resiudal print in jupyter at the end of your animation
-
         Parameters
         ----------
             experimental_mode : str, optional
@@ -310,11 +311,9 @@ def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kw
             Call repeatedly if the underlying graphs are modified
             as per example above.
             No further add_subplots() are recommended
-
         The object will also defer all other function calls to the figure
         object; most useful for: suptitle, supxlabel, supylabel
         https://matplotlib.org/stable/gallery/subplots_axes_and_figures/figure_title.html
-
     Paraneters 
     ----------
         row_size : int, optional
@@ -383,7 +382,6 @@ def color(i : int, table : str ="css4"):
             Integer number. Colors will be rotated
         table : str, default "css4""
             Which color table from matplotlib.colors to use: css4, base, tableau, xkcd
-
     Returns
     -------
         Color
@@ -417,12 +415,10 @@ def colors(table : str = "css4"):
             ax.plot( x, y1[i], "-", color=color_ )
             ax.plot( x, y2[i], ":", color=color_ )
         fig.render()
-
     Parameters
     ----------
         table : str, default "css4""
             Which color table from matplotlib.colors to use: css4, base, tableau, xkcd
-
     Returns
     -------
         Generator for colors. Use next() or iterate.
@@ -447,7 +443,4 @@ def colors_tableau():
 def colors_xkcd():
     """ Iterator for xkcd matplotlib colors """
     return colors("xkcd")
-
-
-
 
