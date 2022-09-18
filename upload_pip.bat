@@ -1,3 +1,4 @@
+@echo off
 REM https://packaging.python.org/tutorials/packaging-projects/
 REM Must be called from Anaconda
 
@@ -10,6 +11,9 @@ del /Q dist\*.*
 echo "Upgrading cdxbasics locally"
 pip install --upgrade cdxbasics
 
-echo "****"
-echo "Now follow instructions on conda_instructions.txt"
-echo "****"
+echo "====================================================================================="
+echo "Now attempting conda upload. If this does not work, try 'anaconda login' first"
+echo "====================================================================================="
+
+cd conda
+conda build .
