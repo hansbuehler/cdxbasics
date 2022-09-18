@@ -48,7 +48,8 @@ when calling <tt>add_subplot</tt>.
 
     # create figure
     from cdxbasics.dynaplot import figure, colors_css4
-    fig = figure()                  # equivalent to matplotlib.figure
+    fig = figure(col_size=4, row_size=4, col_num=3) 
+                                    # equivalent to matplotlib.figure
     ax  = fig.add_subplot()         # no need to specify row,col,num
     ax.plot( x, y )
     ax  = fig.add_subplot()         # no need to specify row,col,num
