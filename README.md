@@ -12,7 +12,7 @@ the problem.
 
 <h4>Animation</h4>
 
-See the jupyter notebook <tt>notebooks/DynamicPlot.ipynb</tt> for some applications.
+See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb) for some applications. 
 
 <img src=https://github.com/hansbuehler/cdxbasics/raw/master/media/dynaplot.gif />
 <img src=https://github.com/hansbuehler/cdxbasics/raw/master/media/dynaplot3D.gif />
