@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="cdxbasics", 
-    version="0.1.48",     # remember to edit __init__ and conda/meta.yaml
+    version="0.1.494",    # found in cdxbasics/__init__.py
     author="Hans Buehler",
     author_email="github@buehler.london",
     description="Basic Python tools",
