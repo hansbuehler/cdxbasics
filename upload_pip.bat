@@ -7,32 +7,37 @@ echo ===========================================================================
 
 REM https://packaging.python.org/tutorials/packaging-projects/
 cd C:\Users\hansb\iCloudDrive\Python3\packages\cdxbasics
-del /Q dist\*.*
+if exist dist rmdir /Q /S dist
+mkdir dist
 python setup.py sdist bdist_wheel
-python -m twine upload dist/*
-del /Q dist\*.*
+python -m twine upload dist
+rmdir /Q /S dist
 
 echo =====================================================================================
 echo Conda install: uninstall; build; install
 echo =====================================================================================
 
 REM https://docs.conda.io/projects/conda-build/en/latest/user-guide/tutorials/build-pkgs-skeleton.html#troubleshooting
-rmdir /Q /S conda
+if exist conda rmdir /Q /S conda
 mkdir conda
 cp conda_exists.py conda/
+cp conda_modify_yaml.py conda/
 cd conda
 python -m conda_exists.py
 if not %ERRORLEVEL% == 0 goto NOTFOUND
-	echo Removing existing conda package
+	echo Removing existing conda package from installation. That may take a while
 	call conda uninstall -y cdxbasics
 	goto FOUND
 :NOTFOUND
 	echo No existing cdxbasics installation found
 :FOUND
-echo Generating new conda package
+echo Generating new conda skeleton package
 call conda skeleton pypi cdxbasics
+echo Making package platform independent
+python -m conda_exists.py cdxbasics/meta.yaml
+echo Building package. That may take a while
 call conda build cdxbasics
-echo Purging build
+echo Cleaning up
 call conda build purge
 cd ..
 rmdir /Q /S conda
@@ -43,10 +48,11 @@ echo ===========================================================================
 echo GIT upload
 echo =====================================================================================
 
+echo "GIT upload"
 python git_message.py >.tmp.txt
 set /p MESSAGE=< .tmp.txt
 del /q .tmp.txt
-echo "Python test showed %MESSAGE%"
+REM echo "Python test showed %MESSAGE%"
 git commit -a -m "%MESSAGE%"
 git push
 
