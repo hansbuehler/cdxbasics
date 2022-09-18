@@ -6,6 +6,7 @@ expects the yaml class in conda/cdxbasics/meta.yaml
 import sys
 
 file = sys.argv[1]
+print("Reading %s" % file)
 with open( file, "rt") as f:
     output = ""
     for line in f:
@@ -26,9 +27,12 @@ with open( file, "rt") as f:
         output += line + "\n"
     f.close()
     
-with open( file + "__", 'wt' ) as f:
+print("Writing %s" % file)
+with open( file, 'wt' ) as f:
+    print(output)
     f.write(output)
     f.close()
+    print("%s written" % file)
     
 exit(0)
     

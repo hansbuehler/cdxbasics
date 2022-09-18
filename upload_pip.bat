@@ -10,7 +10,7 @@ cd C:\Users\hansb\iCloudDrive\Python3\packages\cdxbasics
 if exist dist rmdir /Q /S dist
 mkdir dist
 python setup.py sdist bdist_wheel
-python -m twine upload dist
+python -m twine upload dist/*
 rmdir /Q /S dist
 
 echo =====================================================================================
@@ -34,7 +34,7 @@ if not %ERRORLEVEL% == 0 goto NOTFOUND
 echo Generating new conda skeleton package
 call conda skeleton pypi cdxbasics
 echo Making package platform independent
-python -m conda_exists.py cdxbasics/meta.yaml
+python -m conda_modify_yaml.py cdxbasics/meta.yaml
 echo Building package. That may take a while
 call conda build cdxbasics
 echo Cleaning up
@@ -48,11 +48,11 @@ echo ===========================================================================
 echo GIT upload
 echo =====================================================================================
 
-echo "GIT upload"
+echo GIT upload
 python git_message.py >.tmp.txt
 set /p MESSAGE=< .tmp.txt
 del /q .tmp.txt
-REM echo "Python test showed %MESSAGE%"
+REM echo Python test showed %MESSAGE%
 git commit -a -m "%MESSAGE%"
 git push
 
