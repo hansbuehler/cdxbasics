@@ -6,11 +6,11 @@ echo PIP build
 echo =====================================================================================
 
 REM https://packaging.python.org/tutorials/packaging-projects/
-REM cd C:\Users\hansb\iCloudDrive\Python3\packages\cdxbasics
-REM del /Q dist\*.*
-REM python setup.py sdist bdist_wheel
-REM python -m twine upload dist/*
-REM del /Q dist\*.*
+cd C:\Users\hansb\iCloudDrive\Python3\packages\cdxbasics
+del /Q dist\*.*
+python setup.py sdist bdist_wheel
+python -m twine upload dist/*
+del /Q dist\*.*
 
 echo =====================================================================================
 echo Conda install: uninstall; build; install
