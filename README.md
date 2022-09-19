@@ -79,8 +79,8 @@ There are a number of other functions to aid plotting
             <li><tt>add_subplot</tt> to add a new plot. No arguments needed.
             <li><tt>next_row()</tt> to skip to the next row.
             <li><tt>render()</tt> to draw the figure. When called the first time will create all the underlying matplotlib objects. Subsequent calls
-                will re-draw the canvas if the figure was modified. [see examples](https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb).
-            <li><tt>close()</tt> to close the figure. If not called, Jupyter creates a copy of the graph when the current cell is finished running.
+                will re-draw the canvas if the figure was modified. See examples [here](https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb).
+            <li><tt>close()</tt> to close the figure. If not called, Jupyter creates an unseemly second copy of the graph when the current cell is finished running.
     </ul>
 
 <li><tt>color_css4, color_base, color_tableau, color_xkcd</tt>:<br>
