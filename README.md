@@ -24,7 +24,7 @@ See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbu
     y = np.ramdom.normal(size=(21,5))
 
     # create figure
-    from cdxbasics.dynaplot import figure, colors_css4
+    from cdxbasics.dynaplot import figure
     fig = figure()                  # equivalent to matplotlib.figure
     ax  = fig.add_subplot()         # no need to specify row,col,num
     l   = ax.plot( x, y[:,0] )[0] 
@@ -47,7 +47,7 @@ The package lets you create sub plots without having to know their number in adv
 when calling <tt>add_subplot</tt>.
 
     # create figure
-    from cdxbasics.dynaplot import figure, colors_css4
+    from cdxbasics.dynaplot import figure
     fig = figure(col_size=4, row_size=4, col_num=3) 
                                     # equivalent to matplotlib.figure
     ax  = fig.add_subplot()         # no need to specify row,col,num
@@ -74,13 +74,33 @@ There are a number of other functions to aid plotting
     <br>    
     Instead of <tt>figsize</tt> specify <tt>row_size</tt>, <tt>col_size</tt> and <tt>col_nums</tt>  to dynamically generate an appropriate figure size.
     <br>
-    The main functions of the returned object are <tt>add_subplot</tt> (add a new plot) and <tt>next_row()</tt> which skips to the next row.
+    Key member functions are:
+    <ul>
+            <li><tt>add_subplot</tt> to add a new plot. No arguments needed.
+            <li><tt>next_row()</tt> to skip to the next row.
+            <li><tt>render()</tt> to draw the figure. When called the first time will create all the underlying matplotlib objects. Subsequent calls
+                will re-draw the canvas if the figure was modified. [see examples](https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb).
+            <li><tt>close()</tt> to close the figure. If not called, Jupyter creates a copy of the graph when the current cell is finished running.
+    </ul>
 
 <li><tt>color_css4, color_base, color_tableau, color_xkcd</tt>:<br>
     Each function returns the <tt>i</tt>th element of the respective matplotlib color
-    table, looping if the number of colors is less. The purpose for
-    easy maintenance of consistent coloring across subplots.
-
+    table. The purpose is to simplify using consistent colors accross different plots.
+    <br>
+    Example:
+    
+        fig = dynaplot.figure()
+        ax = fig.add_subplot()
+        # draw 10 lines in the first sub plot, and add a legend
+        for i in range(10):
+            ax.plot( x, y[i], color=color_css4(i), label=labels[i] )
+        ax.legend()
+        # draw 10 lines in the second sub plot. No legend needed as colors are shared with first plot
+        ax = fig.add_subplot()
+        for i in range(10):
+            ax.plot( x, z[i], color=color_css4(i) )
+        fig.render()
+    
 <li><tt>colors_css4, colors_base, colors_tableau, colors_xkcd</tt>:<br>
     Generator versions of the <tt>color_</tt> functions.
 
