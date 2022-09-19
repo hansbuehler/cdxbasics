@@ -4,17 +4,21 @@ Collection of basic tools for Python development.<br>
 
 <h2>dynaplot</h2>
 
-Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit is making it easy to develop visualizatio with <tt>matplotlib</tt> which dynamically update, for example during training with machine learing kits such as <tt>tensorflow</tt>.
+Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit is making it easy to develop visualizatio with <tt>matplotlib</tt> which dynamically update, for example during training with machine learing kits such as <tt>tensorflow</tt>. This has been tested with Anaconda's JupyterHub and <tt>%matplotlib inline</tt>. 
 
-See the jupyter notebook <tt>DynaPlot.ipynb</tt> for some applications.
+Some users reported that the package does not work in some versions of Jupyter.
+In this case, please try <tt>fig.render( "canvas" )</tt>. I appreciate if you let me know whether this resolved
+the problem.
+
+<h4>Animation</h4>
+
+See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb) for some applications. 
 
 <img src=https://github.com/hansbuehler/cdxbasics/raw/master/media/dynaplot.gif />
+<img src=https://github.com/hansbuehler/cdxbasics/raw/master/media/dynaplot3D.gif />
 
-The other functionality is that it avoids having to know row, column, and total
-number of subplots when putting together a figure.
-
-    # some data
-    %matplotlib notebook
+    # example
+    %matplotlib inline
     import numpy as np
     x = np.linspace(-5,5,21)
     y = np.ramdom.normal(size=(21,5))
@@ -35,14 +39,42 @@ number of subplots when putting together a figure.
         
     fig.close()                   # clear figure to avoid duplication
 
-Some users reported that this does not work in some versions of Jupyter.
-In this case, please try <tt>fig.render( "canvas" )</tt>. I appreciate if you let me know whether this resolved
-the problem.
+See example notebook for how to use the package for lines, confidence intervals, and 3D graphs.
+
+<h4>Simpler sub_plot</h4>
+
+The package lets you create sub plots without having to know their number in advance: you do not need to specify <tt>rol, col, num</tt>
+when calling <tt>add_subplot</tt>.
+
+    # create figure
+    from cdxbasics.dynaplot import figure, colors_css4
+    fig = figure(col_size=4, row_size=4, col_num=3) 
+                                    # equivalent to matplotlib.figure
+    ax  = fig.add_subplot()         # no need to specify row,col,num
+    ax.plot( x, y )
+    ax  = fig.add_subplot()         # no need to specify row,col,num
+    ax.plot( x, y )
+    ...
+    fig.next_row()                  # another row
+    ax  = fig.add_subplot()         # no need to specify row,col,num
+    ax.plot( x, y )
+    ...
+    
+    fig.render()                    # draws the plots
+   
+<h4>Other features</h4>
+
+
 
 There are a number of other functions to aid plotting
 <ul>
 <li><tt>figure()</tt>:<br>
-    Function to replace <tt>matplotlib.figure</tt> which will defer creation of the figure until the first call of <tt>redraw()</tt>. This way we do not have to specify row, col, num when adding subplots. The figure takes a number of arguments, the most important being a kwargs <b>tight</b> which is True by default.
+    Function to replace <tt>matplotlib.figure</tt> which will defer creation of the figure until the first call of <tt>render()</tt>.
+    This way we do not have to specify row, col, num when adding subplots. 
+    <br>    
+    Instead of <tt>figsize</tt> specify <tt>row_size</tt>, <tt>col_size</tt> and <tt>col_nums</tt>  to dynamically generate an appropriate figure size.
+    <br>
+    The main functions of the returned object are <tt>add_subplot</tt> (add a new plot) and <tt>next_row()</tt> which skips to the next row.
 
 <li><tt>color_css4, color_base, color_tableau, color_xkcd</tt>:<br>
     Each function returns the <tt>i</tt>th element of the respective matplotlib color
