@@ -200,10 +200,14 @@ We can impose simple restrictions
 
             self.width = network('width', 100, Int>3, "Width for the network")
 
-Or enforce being a member of a list
+Restrictions on both sides of a scalar:
+
+            self.percentage = network('percentage', 0.5, ( Float >= 0. ) & ( Float <= 1.), "A percentage")
+
+Enforce being a member of a list
 
             self.ntype = network('ntype', 'fastforward', ['fastforward','recurrent','lstm'], "Type of network")
-            
+
 Do not forget to call <tt>done()</tt> once done with this config. 
 
             config.done()    # checks that we have read all keywords.
