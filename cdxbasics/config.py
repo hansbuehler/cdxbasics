@@ -7,8 +7,8 @@ Hans Buehler 2022
 from collections import OrderedDict
 from collections.abc import Mapping
 from sortedcontainers import SortedDict
-from .util import uniqueHash
-from .logger import Logger
+from cdxbasics.util import uniqueHash
+from cdxbasics.logger import Logger
 _log = Logger(__file__)
 
 class _ID(object):
@@ -49,53 +49,95 @@ class _Condition(_Cast):
     """ Represents a simple operator condition such as 'Float >= 0.' """
     
     def __init__(self, cast, op, other):# NOQA
-        self.cast = cast
-        self.op = op
-        self.other = other
+        self.cast    = cast
+        self.op      = op    
+        self.other   = other
+        self.l_and   = None
 
-    def __call__( self, value ):# NOQA
-        """ self.cast's 'value' """
+    def __call__( self, value ):
+        """ Casts 'value' to the underlying data type """
         return self.cast(value)
+
+    def __and__(self, cond):# NOQA
+        """
+        Combines to conditions with logical AND .
+        Requires the left hand 'self' to be a > or >=; the right hand must be < or <=
+        This means you can write
+        
+            x = config("x", 0.5, Float >= 0. && Float < 1., "Variable x")
+        
+        """
+        if not self.l_and is None:
+            raise NotImplementedError("Cannot combine more than two conditions")
+        if not self.op[0] == 'g':
+            raise NotImplementedError("The left hand condition when using '&' must be > or >=. Found %s" % self._prop_str)
+        if not cond.op[0] == 'l':
+            raise NotImplementedError("The right hand condition when using '&' must be < or <=. Found %s" % cond._prop_str)
+        if self.cast != cond.cast:
+            raise NotImplementedError("Cannot '&' conditions for types %s and %s" % (self.cast.__name__, cond.cast.__name__))
+        op_new = _Condition(self.cast, self.op, self.other)
+        op_new.l_and = cond
+        return op_new
 
     def test(self, value):
         """ Test whether 'value' satisfies the condition """
         assert isinstance( value, self.cast ), "Internal error: 'value' should be of type %s but found type %s" % (self.cast.__name__, type(value).__name__ )
         if self.op == "ge":
-            return value >= self.other
-        if self.op == "gt":
-            return value > self.other
-        if self.op == "le":
-            return value <= self.other
-        if self.op == "lt":
-            return value < self.other
-        raise RuntimeError("Internal error: unknown operator %s" % str(self.op))
+            ok = value >= self.other
+        elif self.op == "gt":
+            ok = value > self.other
+        elif self.op == "le":
+            ok = value <= self.other
+        elif self.op == "lt":
+            ok = value < self.other
+        else:
+            raise RuntimeError("Internal error: unknown operator %s" % str(self.op))            
+        if not ok:
+            return False
+        return ok if self.l_and is None else self.l_and.test(value)
+        
+    @property
+    def _prop_str(self):
+        """ Returns the underlying operator for this conditon. Does NOT take into account any '&' operator """
+        if self.op == "ge":
+            return ">="
+        elif self.op == "gt":
+            return ">"
+        elif self.op == "le":
+            return "<="
+        elif self.op == "lt":
+            return "<"
+        raise RuntimeError("Internal error: unknown operator %s" % str(self.op))            
 
     @property
     def err_str(self):
         """ Nice error string """
         zero = self.cast(0)
-        if self.op == "ge":
-            return ("must not be lower than %s" % self.other) if self.other != zero else ("must not be negative")
-        if self.op == "gt":
-            return ("must be bigger than %s" % self.other) if self.other != zero else ("must be positive")
-        if self.op == "le":
-            return ("must not exceed %s" % self.other) if self.other != zero else ("must not be positive")
-        if self.op == "lt":
-            return ("must be lower than %s" % self.other) if self.other != zero else ("must be negative")
-        raise RuntimeError("Internal error: unknown operator %s" % str(self.op))
+        def mk_txt(cond):
+            if cond.op == "ge":
+                s = ("not be lower than %s" % cond.other) if cond.other != zero else ("not be negative")
+            elif cond.op == "gt":
+                s = ("be bigger than %s" % cond.other) if cond.other != zero else ("be positive")
+            elif cond.op == "le":
+                s = ("not exceed %s" % cond.other) if cond.other != zero else ("not be positive")
+            elif cond.op == "lt":
+                s = ("be lower than %s" % cond.other) if cond.other != zero else ("be negative")
+            else:
+                raise RuntimeError("Internal error: unknown operator %s" % str(cond.op))
+            return s
         
+        s    = "must " + mk_txt(self)
+        if not self.l_and is None:
+            s += " and " + mk_txt(self.l_and)
+        return s
+
     @property
     def help_cast(self):
         """ Returns readable string """
-        if self.op == "ge":
-            return str(self.cast.__name__) + " >= " + str(self.other)
-        if self.op == "gt":
-            return str(self.cast.__name__) + " > " + str(self.other)
-        if self.op == "le":
-            return str(self.cast.__name__) + " <= " + str(self.other)
-        if self.op == "lt":
-            return str(self.cast.__name__) + " < " + str(self.other)
-        raise RuntimeError("Internal error: unknown operator %s" % str(self.op))
+        s = str(self.cast.__name__) + self._prop_str + str(self.other)
+        if not self.l_and is None:
+            s += " and " + self.l_and.help_cast
+        return s
              
 class _CastCond(object): # NOQA
     """ Generates _Condition's
@@ -120,7 +162,7 @@ Int = _CastCond(int)
 # Enum type for list 'cast's
 # ================================
         
-class Enum(_Cast):
+class Enum(_Cast):# NOQA
     """ Utility class to support enumerator types.
         No need to use this classs directly. It will be automatically instantiated if a list is passed as type, e.g.
         
@@ -765,9 +807,10 @@ class Config(OrderedDict):
         return report
         
     def unique_id(self):
-        """ Returns an MDH5 hash key for this object, based on 'input_report()'
-            ** WARNING **
-            This function ignores any config keys or children with leading '_'.
+        """
+        Returns an MDH5 hash key for this object, based on 'input_report()'
+        ** WARNING **
+        This function ignores any config keys or children with leading '_'.
         """
         inputs = []      
         for key in self:

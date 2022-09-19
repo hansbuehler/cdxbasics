@@ -410,7 +410,30 @@ class CDXCConfigTest(unittest.TestCase):
         with self.assertRaises(Exception):
             _ = config("q", "b", ['a', 'b', 'c'] )   # exception: not in set
 
+        # combined conditons
+        config = Config(x=1., y=1.)
         
+        x = config("x", 1., ( Float>=0.) & (Float<=1.), "test x")
+        with self.assertRaises(Exception):
+            # test that violated condition is caught
+            y = config("y", 1., ( Float>=0.) & (Float<1.), "test y")
+        
+        config = Config(x=1., y=1.)
+        with self.assertRaises(NotImplementedError):
+            # left hand must be > or >=
+            y = config("y", 1., ( Float<=0.) & (Float<1.), "test x")
+        config = Config(x=1., y=1.)
+        with self.assertRaises(NotImplementedError):
+            # right hand must be < or <=
+            y = config("y", 1., ( Float>=0.) & (Float>1.), "test x")        
+
+        # test int
+        config = Config(x=1)
+        x = config("x", 0, ( Int>=0 ) & ( Int<=1), "int test")
+        config = Config(x=1)
+        with self.assertRaises(NotImplementedError):
+            # cannot mix types
+            x = config("x", 1., ( Float>=0.) & (Int<=1), "test x")        
         
 if __name__ == '__main__':
     unittest.main()
