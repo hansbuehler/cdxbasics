@@ -253,7 +253,9 @@ Prints:
 
         config.network['activation'] = relu # (str) Activation function for the network; default: relu
         config.network['depth'] = 10 # (int) Depth for the network; default: 10000
-        config.network['width'] = 100 # (int) Width for the network; default: 100
+        config.network['width'] = 100 # (int>3) Width for the network; default: 100
+        config.network['percentage'] = 0.5 # (float>=0. and float<=1.) Width for the network; default: 0.5
+        config.network['ntype'] = 'fastforward' # (['fastforward','recurrent','lstm']) Type of network; default 'fastforward'
         config.training['batch_size'] = None # () Batch size. Use None for default of 32; default: None
         config.training['epochs'] = 100 # (int) Epochs for training; default: 100
         config['features'] = ['time', 'spot'] # (list) Features for the agent; default: []
