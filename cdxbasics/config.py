@@ -58,7 +58,7 @@ class _Condition(_Cast):
         """ Casts 'value' to the underlying data type """
         return self.cast(value)
 
-    def __and__(self, cond):# NOQA
+    def __and__(self, cond):
         """
         Combines to conditions with logical AND .
         Requires the left hand 'self' to be a > or >=; the right hand must be < or <=
@@ -79,7 +79,7 @@ class _Condition(_Cast):
         op_new.l_and = cond
         return op_new
 
-    def test(self, value):
+    def test(self, value) -> bool:
         """ Test whether 'value' satisfies the condition """
         assert isinstance( value, self.cast ), "Internal error: 'value' should be of type %s but found type %s" % (self.cast.__name__, type(value).__name__ )
         if self.op == "ge":
@@ -97,7 +97,7 @@ class _Condition(_Cast):
         return ok if self.l_and is None else self.l_and.test(value)
         
     @property
-    def _prop_str(self):
+    def _prop_str(self) -> str:
         """ Returns the underlying operator for this conditon. Does NOT take into account any '&' operator """
         if self.op == "ge":
             return ">="
@@ -110,7 +110,7 @@ class _Condition(_Cast):
         raise RuntimeError("Internal error: unknown operator %s" % str(self.op))            
 
     @property
-    def err_str(self):
+    def err_str(self) -> str:
         """ Nice error string """
         zero = self.cast(0)
         def mk_txt(cond):
@@ -132,7 +132,7 @@ class _Condition(_Cast):
         return s
 
     @property
-    def help_cast(self):
+    def help_cast(self) -> str:
         """ Returns readable string """
         s = str(self.cast.__name__) + self._prop_str + str(self.other)
         if not self.l_and is None:
@@ -146,13 +146,13 @@ class _CastCond(object): # NOQA
     
     def __init__(self, cast):# NOQA
         self.cast = cast
-    def __ge__(self, other):# NOQA
+    def __ge__(self, other) -> bool:# NOQA
         return _Condition( self.cast, 'ge', self.cast(other) )
-    def __gt__(self, other):# NOQA
+    def __gt__(self, other) -> bool:# NOQA
         return _Condition( self.cast, 'gt', self.cast(other) )
-    def __le__(self, other):# NOQA
+    def __le__(self, other) -> bool:# NOQA
         return _Condition( self.cast, 'le', self.cast(other) )
-    def __lt__(self, other):# NOQA
+    def __lt__(self, other) -> bool:# NOQA
         return _Condition( self.cast, 'lt', self.cast(other) )    
     
 Float = _CastCond(float)
@@ -170,7 +170,7 @@ class Enum(_Cast):# NOQA
             
         """
         
-    def __init__(self, enum, config_name, key ):
+    def __init__(self, enum : list, config_name : str, key : str ):
     
         self.enum = list(enum)
         _log.verify( len(self.enum) > 0, "Error in config '%s': 'cast' for key '%s' is an empty list or tuple. Lists are used for enumerator types", config_name, key )
@@ -187,12 +187,12 @@ class Enum(_Cast):# NOQA
             Raises a KeyError if the value was not found in our enum """
         return self.cast( value )
 
-    def test(self, value):
+    def test(self, value) -> bool:
         """ Test whether 'value' satisfies the condition """
         return value in self.enum
 
     @property
-    def err_str(self):
+    def err_str(self) -> str:
         """ Nice error string """        
         s = "must be one of: '" + str(self.enum[0]) + "'"
         for i in range(1,len(self.enum)-1):
@@ -202,7 +202,7 @@ class Enum(_Cast):# NOQA
         return s
         
     @property
-    def help_cast(self):
+    def help_cast(self) -> str:
         """ Returns readable string """
         help_cast     = "[ "
         for i in range(len(self.enum)):
@@ -309,7 +309,7 @@ class Config(OrderedDict):
         
     """
         
-    def __init__(self, *args, config_name = "config", **kwargs):
+    def __init__(self, *args, config_name : str = "config", **kwargs):
         """
         See help(Config) for a description of this class.
         
@@ -772,7 +772,7 @@ class Config(OrderedDict):
 
         return rep_here + "# \n" + reported if len(rep_here) > 0 else reported
 
-    def usage_reproducer(self):
+    def usage_reproducer(self) -> str:
         """
         Returns an expression which will reproduce the current
         configuration tree as long as each 'value' handles
@@ -785,7 +785,7 @@ class Config(OrderedDict):
             report       += key + " = " + repr(value) + "\n"
         return report
         
-    def input_report(self):
+    def input_report(self) -> str:
         """
         Returns a report of all inputs in a readable format, as long as all values
         are as such.
@@ -806,7 +806,7 @@ class Config(OrderedDict):
             report += i + "\n"        
         return report
         
-    def unique_id(self):
+    def unique_id(self) -> str:
         """
         Returns an MDH5 hash key for this object, based on 'input_report()'
         ** WARNING **

@@ -28,10 +28,10 @@ class PrettyDict(dict):
         pdct.mult(1,3) --> 3        
     """
     
-    def __getattr__(self, key): 
+    def __getattr__(self, key : str): 
         """ Equyivalent to self[key] """
         return self[key] if not key[:2] == "__" else dict.__getattr__(self, key)
-    def __setattr__(self, key, value):
+    def __setattr__(self, key : str, value):
         """ Equivalent to self[key] = value """
         if isinstance(value,types.FunctionType):
             # bind function to this object
@@ -40,7 +40,7 @@ class PrettyDict(dict):
             # re-point the method to the current instance
             value = types.MethodType(value.__func__,self)
         self[key] = value
-    def __call__(self, key, *default):
+    def __call__(self, key : str, *default):
         """ Equivalent of self.get(key,default) """
         if len(default) > 1:
             raise NotImplementedError("Cannot pass more than one default parameter.")
@@ -67,10 +67,10 @@ class PrettyOrderedDict(OrderedDict):
         pdct.mult(1,3) --> 3        
     """
 
-    def __getattr__(self, key):
+    def __getattr__(self, key : str):
         """ Equyivalent to self[key] """
         return self[key] if not key[:2] == "__" else OrderedDict.__getattr__(self, key)
-    def __setattr__(self, key, value):
+    def __setattr__(self, key : str, value):
         """ Equivalent to self[key] = value """
         if isinstance(value,types.FunctionType):
             # bind function to this object
@@ -79,7 +79,7 @@ class PrettyOrderedDict(OrderedDict):
             # re-point the method to the current instance
             value = types.MethodType(value.__func__,self)
         self[key] = value
-    def __call__(self, key, *default):
+    def __call__(self, key : str, *default):
         """ Equivalent of self.get(key,default) """
         if len(default) > 1:
             raise NotImplementedError("Cannot pass more than one default parameter.")
@@ -105,10 +105,10 @@ class PrettySortedDict(SortedDict):
         pdct.mult(1,3) --> 3        
     """
 
-    def __getattr__(self, key):
+    def __getattr__(self, key : str):
         """ Equyivalent to self[key] """
         return self[key] if not key[:2] == "__" else SortedDict.__getattr__(self, key)
-    def __setattr__(self, key, value):
+    def __setattr__(self, key : str, value):
         """ Equivalent to self[key] = value """
         if isinstance(value,types.FunctionType):
             # bind function to this object
@@ -117,7 +117,7 @@ class PrettySortedDict(SortedDict):
             # re-point the method to the current instance
             value = types.MethodType(value.__func__,self)
         self[key] = value
-    def __call__(self, key, *default):
+    def __call__(self, key : str, *default):
         """ Equivalent of self.get(key,default) """
         if len(default) > 1:
             raise NotImplementedError("Cannot pass more than one default parameter.")

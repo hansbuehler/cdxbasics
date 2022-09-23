@@ -70,7 +70,7 @@ class Logger(object):
     DEBUG = logging.DEBUG
     NOTSET = logging.NOTSET
 
-    def __init__(self,topic):
+    def __init__(self,topic : str):
         assert topic !="", "Logger cannot be empty"
         setupAppLogging()   # ensure system is ready
         i = topic.rfind('/')
@@ -86,10 +86,10 @@ class Logger(object):
     class LogException(Exception):
         """ Placeholder exception class we use to identify our own exceptions """
         
-        def __init__(self,text):
+        def __init__(self,text : str):
             Exception.__init__(self,text)
             
-    def Exceptn(self, text, *args, **kwargs ):
+    def Exceptn(self, text : str, *args, **kwargs ):
         """
         Returns an exception object with 'text' % kwargs and stores an 'error' message
             If an exception is present, it will be printed, too.

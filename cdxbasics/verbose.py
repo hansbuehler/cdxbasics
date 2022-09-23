@@ -25,7 +25,7 @@ class Context(object):
     
     """
         
-    def __init__(self, *,  parent=None, verbose="default", level : int=None, default_sub : int=None, indent : int=None, fmt_level : str="%02ld: " ):
+    def __init__(self, *,  parent : Context=None, verbose="default", level : int=None, default_sub : int=None, indent : int=None, fmt_level : str="%02ld: " ):
         """
         Create a Context object
         
@@ -94,7 +94,7 @@ class Context(object):
         
     def report( self, level : int, message : str, *args, **kwargs ):
         """
-        Report message with the formattting arguments at curent context level plus 'level'
+        Print message with the formattting arguments at curent context level plus 'level'
         The message will be formatted as util.fmt( message, *args, **kwargs )
         Will print empty lines.
         
@@ -109,7 +109,7 @@ class Context(object):
         if not message is None:
             print(message)
         
-    def fmt( self, level : int, message : str, *args, **kwargs ):
+    def fmt( self, level : int, message : str, *args, **kwargs ) -> str:
         """
         Formats message with the formattting arguments at curent context level plus 'level'
         The message will be formatted as util.fmt( message, *args, **kwargs ) and then indented appropriately.
@@ -136,7 +136,7 @@ class Context(object):
         text      = str_level + text
         return text
         
-    def sub( self, sub_level : int = None, message : str = None, *args, **kwargs ):
+    def sub( self, sub_level : int = None, message : str = None, *args, **kwargs ) -> Context:
         """
         Create a sub context at level 'sub_level'. The latter defaults to self.default_sub
         
@@ -164,26 +164,26 @@ class Context(object):
     __call__ = sub        
 
     @property
-    def as_verbose(self):
+    def as_verbose(self) -> Context:
         """ Return a Context at the same level as 'self' with full verbosity """
         return self.sub(sub_level=0, verbose=None) if not self.verbose is None else self
     @property
-    def as_quiet(self):
+    def as_quiet(self) -> Context:
         """ Return a Context at the same level as 'self' with zero verbosity """
         return self.sub(sub_level=0, verbose=-1) if (self.verbose is None or self.verbose >= 0) else self
     
     @property
-    def is_quiet(self):
+    def is_quiet(self) -> bool:
         """ Whether the current context is quiet """
         return not self.verbose is None and self.verbose < 0
 
-    def shall_report(self, sub_level):
+    def shall_report(self, sub_level) -> bool:
         """ Returns whether to print at 'sub_level' """
         sub_level  = int(sub_level)
         _log.verify( sub_level >= 0, "'sub_level' cannot be negative. Found %ld", sub_level)
         return self.verbose is None or self.verbose >= self.level + sub_level
     
-    def str_indent(self, sub_level=0):
+    def str_indent(self, sub_level=0) -> str:
         """ Returns the string identation for a given sublevel, or the context """
         sub_level  = int(sub_level)
         _log.verify( sub_level >= 0, "'sub_level' cannot be negative. Found %ld", sub_level)
@@ -191,7 +191,7 @@ class Context(object):
         s2 = self.fmt_level if self.fmt_level.find("%") == -1 else self.fmt_level % (self.level + sub_level)
         return s2+s1
 
-    
+# Recommended default parameter 'quiet' for functions accepting a context parameter
 quiet = Context(verbose="quiet")
 Context.quiet = quiet
     
