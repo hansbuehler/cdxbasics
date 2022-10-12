@@ -64,7 +64,7 @@ class _Condition(_Cast):
         Requires the left hand 'self' to be a > or >=; the right hand must be < or <=
         This means you can write
         
-            x = config("x", 0.5, Float >= 0. && Float < 1., "Variable x")
+            x = config("x", 0.5, (Float >= 0.) & (Float < 1.), "Variable x")
         
         """
         if not self.l_and is None:
