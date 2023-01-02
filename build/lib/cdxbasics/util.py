@@ -1,5 +1,5 @@
 """
-Basic utilities for Python, in particular the Generic() class
+Basic utilities for Python
 Hans Buehler 2022
 """
 
@@ -13,7 +13,6 @@ from .prettydict import PrettyDict
 # support for numpy and pandas is optional for this module
 # At the moment both are listed as dependencies in setup.py to ensure
 # they are tested in github
-# April'20
 np = None
 pd = None
 
@@ -28,7 +27,6 @@ except:
 
 # =============================================================================
 # basic indentification short cuts
-# Hans Buehler, Jan 2013
 # =============================================================================
 
 __types_functions = None
@@ -78,7 +76,7 @@ def types_functions():
         __types_functions = tuple(__types_functions)
     return __types_functions
 
-def isFunction(f):
+def isFunction(f) -> bool:
     """ Checks whether 'f' is a function in an extended sense. Check 'types_functions' for what is tested against"""
     return isinstance(f,types_functions())
 
@@ -86,7 +84,7 @@ def isAtomic( o ):
     """ Returns true if 'o' is a string, int, float, date or bool """
     if type(o) in [str,int,bool,float,datetime.date]:
         return True
-    if not np is None and isinstance(o,(np.float,np.int)):
+    if not np is None and isinstance(o,(np.float_,np.int_)):
         return True
     return False
 
@@ -94,16 +92,15 @@ def isFloat( o ):
     """ Checks whether a type is a float """
     if type(o) is float:
         return True
-    if not np is None and isinstance(o,np.float):
+    if not np is None and isinstance(o,np.float_):
         return True
     return False
 
 # =============================================================================
 # string formatting
-# Hans Buehler, Jan 2013
 # =============================================================================
 
-def _fmt( text, args = None, kwargs = None ):
+def _fmt( text : str, args = None, kwargs = None ) -> str:
     """ Utility function. See fmt() """
     if text.find('%') == -1:
         return text
@@ -114,7 +111,7 @@ def _fmt( text, args = None, kwargs = None ):
         return text % kwargs
     return text
 
-def fmt(text,*args,**kwargs):
+def fmt(text : str,*args,**kwargs) -> str:
     """
     String formatting made easy
         text - pattern
@@ -125,11 +122,11 @@ def fmt(text,*args,**kwargs):
     """
     return _fmt(text,args,kwargs)
 
-def prnt(text,*args,**kwargs):
+def prnt(text : str,*args,**kwargs) -> str:
     """ Prints a fmt() string. """
     print(_fmt(text,args,kwargs))
-def write(text,*args,**kwargs):
-    """ Prints a fmt() string without EOL """
+def write(text : str,*args,**kwargs) -> str:
+    """ Prints a fmt() string without EOL, e.g. uses print(fmt(..),end='') """
     print(_fmt(text,args,kwargs),end='')
 
 # =============================================================================
@@ -179,7 +176,7 @@ def plain( inn, sorted = False ):
     # nothing we can do
     raise TypeError(fmt("Cannot handle type %s", type(inn)))
 
-def uniqueHash(*args, **kwargs):
+def uniqueHash(*args, **kwargs) -> str:
     """ 
     Generates a hash key for any collection of python objects.
     Typical use is for key'ing data vs a unique configuation.
@@ -249,13 +246,13 @@ def uniqueHash(*args, **kwargs):
 # Numerical equality
 # =============================================================================
 
-def f_eq_zero(x,prec,ref=1.):
+def f_eq_zero(x : float, prec : float ,ref : float = 1.) -> bool:
     """ Checks whether x is zero with precision prec*(ref+1.) """
     return abs(x) <= prec * (abs(ref) + 1.)
-def f_leq_zero(x,prec,ref=1.):
+def f_leq_zero(x : float, prec : float,ref : float=1.) -> bool:
     """ Checks whether x is smaller than zero with precision prec*(ref+1.) """
     return x <= prec * (abs(ref) + 1.)
-def f_geq_zero(x,prec,ref=1.):
+def f_geq_zero(x : float, prec : float ,ref : float =1.) -> bool:
     """ Checks whether x is greater than zero with precision prec*(ref+1.) """
     return x >= - prec * (abs(ref) + 1.)
 
