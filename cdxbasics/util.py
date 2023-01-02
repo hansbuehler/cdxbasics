@@ -84,7 +84,7 @@ def isAtomic( o ):
     """ Returns true if 'o' is a string, int, float, date or bool """
     if type(o) in [str,int,bool,float,datetime.date]:
         return True
-    if not np is None and isinstance(o,(np.float,np.int)):
+    if not np is None and isinstance(o,(np.float_,np.int_)):
         return True
     return False
 
@@ -92,7 +92,7 @@ def isFloat( o ):
     """ Checks whether a type is a float """
     if type(o) is float:
         return True
-    if not np is None and isinstance(o,np.float):
+    if not np is None and isinstance(o,np.float_):
         return True
     return False
 
