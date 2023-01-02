@@ -246,13 +246,13 @@ def uniqueHash(*args, **kwargs) -> str:
 # Numerical equality
 # =============================================================================
 
-def f_eq_zero(x : float,prec : flost ,ref : float = 1.) -> bool:
+def f_eq_zero(x : float, prec : float ,ref : float = 1.) -> bool:
     """ Checks whether x is zero with precision prec*(ref+1.) """
     return abs(x) <= prec * (abs(ref) + 1.)
-def f_leq_zero(x : float,prec : float,ref : float=1.) -> bool:
+def f_leq_zero(x : float, prec : float,ref : float=1.) -> bool:
     """ Checks whether x is smaller than zero with precision prec*(ref+1.) """
     return x <= prec * (abs(ref) + 1.)
-def f_geq_zero(x : float,prec : float ,ref : float =1.) -> bool:
+def f_geq_zero(x : float, prec : float ,ref : float =1.) -> bool:
     """ Checks whether x is greater than zero with precision prec*(ref+1.) """
     return x >= - prec * (abs(ref) + 1.)
 
