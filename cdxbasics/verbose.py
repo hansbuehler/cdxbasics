@@ -164,11 +164,11 @@ class Context(object):
     __call__ = sub        
 
     @property
-    def as_verbose(self) -> Context:
+    def as_verbose(self):
         """ Return a Context at the same level as 'self' with full verbosity """
         return self.sub(sub_level=0, verbose=None) if not self.verbose is None else self
     @property
-    def as_quiet(self) -> Context:
+    def as_quiet(self):
         """ Return a Context at the same level as 'self' with zero verbosity """
         return self.sub(sub_level=0, verbose=-1) if (self.verbose is None or self.verbose >= 0) else self
     
