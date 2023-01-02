@@ -136,7 +136,7 @@ class Context(object):
         text      = str_level + text
         return text
         
-    def sub( self, sub_level : int = None, message : str = None, *args, **kwargs ) -> Context:
+    def sub( self, sub_level : int = None, message : str = None, *args, **kwargs ):
         """
         Create a sub context at level 'sub_level'. The latter defaults to self.default_sub
         
