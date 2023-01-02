@@ -4,7 +4,7 @@ Collection of basic tools for Python development.<br>
 
 <h2>dynaplot</h2>
 
-Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit is making it easy to develop visualizatio with <tt>matplotlib</tt> which dynamically update, for example during training with machine learing kits such as <tt>tensorflow</tt>. This has been tested with Anaconda's JupyterHub and <tt>%matplotlib inline</tt>. 
+Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit is making it easy to develop visualization with <tt>matplotlib</tt> which dynamically updates, for example during training with machine learing kits such as <tt>tensorflow</tt>. This has been tested with Anaconda's JupyterHub and <tt>%matplotlib inline</tt>. 
 
 Some users reported that the package does not work in some versions of Jupyter.
 In this case, please try <tt>fig.render( "canvas" )</tt>. I appreciate if you let me know whether this resolved
@@ -135,8 +135,8 @@ The classes also allow assigning bona fide member functions by a simple semantic
         return self.b * x
     pdct = mult_a 
 
-Calling <tt>pdct.mult_a(3)</tt> with above config will return <tt>6</tt>. This functionality only works when using the member synthax for assigning values
-to a pretty dictionary; if the standard <tt>[]</tt> operator is used then functions will be assigned to the dictionary usual.
+Calling <tt>pdct.mult_a(3)</tt> with above config will return <tt>6</tt> as expected. This only works when using the member synthax for assigning values
+to a pretty dictionary; if the standard <tt>[]</tt> operator is used then functions will be assigned to the dictionary as usual, hence they are static members of the object.
 
 The reason for this is as follows: consider
 
@@ -148,7 +148,7 @@ The reason for this is as follows: consider
  In this case, use:
  
     pdct['mult'] = mult
-    mult(3,4) --> 12
+    pdct.mult(3,4) --> 12
  
 
 <h2>config</h2>
@@ -309,7 +309,7 @@ We run the usual risk of somebody mispronouncing the parameter name which we wou
             b = kwargs("b", 20)
             kwargs.done()
 
-If now a user calls <tt>f</tt> with <tt>config(difficlt_name=5)</tt> an error will be raised.
+If now a user calls <tt>f</tt> with a misspelled <tt>config(difficlt_name=5)</tt> an error will be raised.
 
 Another pattern is to allow both <tt>config</tt> and <tt>kwargs</tt>:
 
