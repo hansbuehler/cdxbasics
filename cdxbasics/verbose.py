@@ -25,13 +25,13 @@ class Context(object):
     
     """
         
-    def __init__(self, *,  parent : Context=None, verbose="default", level : int=None, default_sub : int=None, indent : int=None, fmt_level : str="%02ld: " ):
+    def __init__(self, *,  parent =None, verbose="default", level : int=None, default_sub : int=None, indent : int=None, fmt_level : str="%02ld: " ):
         """
         Create a Context object
         
         Parameters
         ----------
-            parent : Context
+            parent 
                 If not zero, specifies a parent context. All other parameters are then relative to this                
             verbose : int
                 Plotting level. 
