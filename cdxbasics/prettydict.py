@@ -25,14 +25,25 @@ class PrettyDict(dict):
         def mult(a,b):
             return a*b
         pdct['mult'] = mult
-        pdct.mult(1,3) --> 3        
+        pdct.mult(1,3) --> 3
+        
+    IMPORTANT
+    Attributes starting with '__' are handled as standard attributes.
+    In other words, 
+        pdct = PrettyDict()
+        pdct.__x = 1
+        _ = pdct['__x']   <- throws an exception
+    This allows re-use of general operator handling.        
     """
     
     def __getattr__(self, key : str): 
         """ Equyivalent to self[key] """
-        return self[key] if not key[:2] == "__" else dict.__getattr__(self, key)
+        if key[:2] == "__": raise AttributeError(key) # you cannot treat private members as dictionary members
+        return self[key]
     def __setattr__(self, key : str, value):
         """ Equivalent to self[key] = value """
+        if key[:2] == "__":
+            return dict.__setattr__(self, key, value)
         if isinstance(value,types.FunctionType):
             # bind function to this object
             value = types.MethodType(value,self)
@@ -44,7 +55,6 @@ class PrettyDict(dict):
         """ Equivalent of self.get(key,default) """
         if len(default) > 1:
             raise NotImplementedError("Cannot pass more than one default parameter.")
-
         return self.get(key,default[0]) if len(default) == 1 else  self.get(key)
         
 class PrettyOrderedDict(OrderedDict):
@@ -65,13 +75,24 @@ class PrettyOrderedDict(OrderedDict):
             return a*b
         pdct['mult'] = mult
         pdct.mult(1,3) --> 3        
+
+    IMPORTANT
+    Attributes starting with '__' are handled as standard attributes.
+    In other words, 
+        pdct = PrettyOrderedDict()
+        pdct.__x = 1
+        _ = pdct['__x']   <- throws an exception
+    This allows re-use of general operator handling.        
     """
 
     def __getattr__(self, key : str):
         """ Equyivalent to self[key] """
-        return self[key] if not key[:2] == "__" else OrderedDict.__getattr__(self, key)
+        if key[:2] == "__": raise AttributeError(key) # you cannot treat private members as dictionary members
+        return self[key]
     def __setattr__(self, key : str, value):
         """ Equivalent to self[key] = value """
+        if key[:2] == "__":
+            return OrderedDict.__setattr__(self, key, value)
         if isinstance(value,types.FunctionType):
             # bind function to this object
             value = types.MethodType(value,self)
@@ -102,14 +123,27 @@ class PrettySortedDict(SortedDict):
         def mult(a,b):
             return a*b
         pdct['mult'] = mult
-        pdct.mult(1,3) --> 3        
+        pdct.mult(1,3) --> 3       
+        
+    IMPORTANT
+    Attributes starting with '_' (one underscore) are handled as standard attributes.
+    In other words, 
+        pdct = PrettyOrderedDict()
+        pdct._x = 1
+        _ = pdct['_x']   <- throws an exception
+    This allows re-use of general operator handling.   
+    The reason the sorted class disallow '_' (as opposed to the other two classes who merely disallow '__')     
+    is that SortedDict() uses protected members.
     """
 
     def __getattr__(self, key : str):
         """ Equyivalent to self[key] """
-        return self[key] if not key[:2] == "__" else SortedDict.__getattr__(self, key)
+        if key[:1] == "_": raise AttributeError(key) # you cannot treat protected or private members as dictionary members
+        return self[key]
     def __setattr__(self, key : str, value):
         """ Equivalent to self[key] = value """
+        if key[:1] == "_":
+            return SortedDict.__setattr__(self, key, value)
         if isinstance(value,types.FunctionType):
             # bind function to this object
             value = types.MethodType(value,self)

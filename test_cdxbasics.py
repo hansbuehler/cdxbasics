@@ -10,7 +10,7 @@ import cdxbasics.config as config
 import cdxbasics.kwargs as mdl_kwargs
 import cdxbasics.subdir as mdl_subdir
 import cdxbasics.logger as mdl_logger
-from cdxbasics.prettydict import PrettyDict
+from cdxbasics.prettydict import PrettyDict, PrettySortedDict, PrettyOrderedDict
 
 Root = mdl_subdir.Root
 SubDir = mdl_subdir.SubDir
@@ -107,13 +107,69 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual(g2.x,3) # new value only for this object is 3
         self.assertEqual(g.x,2)  # old value remains 2
 
-        
         with self.assertRaises(TypeError):
             def G():
                 return 1        
             g.G = G        
-            g.G()        
+            g.G()    
+            
+        # __ does not work        
+        g = PrettyDict()
+        g.__x = 1
+        g._y = 2
+        self.assertEqual(g.__x,1)    # works as usual 
+        self.assertEqual(g['_y'],2)  # protected works as for all python objects
+        with self.assertRaises(KeyError):
+            _ = g['__x']   # does not work: cannot use private members as dictionary elements
+        self.assertEqual( getattr(g, "__z", None), None )
+        with self.assertRaises(AttributeError):
+            getattr(g, "__z",)
+            
+            
+        # ordered dict
+        g1 = PrettyOrderedDict(a=1)
+        g1.b = 2
+        g1['c'] = 3
+        self.assertEqual(g1.a, 1)
+        self.assertEqual(g1.b, 2)
+        self.assertEqual(g1.c, 3)
         
+        with self.assertRaises(KeyError):
+            _ = g1.d
+
+        g = PrettyOrderedDict()
+        g.__x = 1
+        g._y = 2
+        self.assertEqual(g.__x,1)    # works as usual 
+        self.assertEqual(g['_y'],2)  # protected works as for all python objects
+        with self.assertRaises(KeyError):
+            _ = g['__x']   # does not work: cannot use private members as dictionary elements
+        self.assertEqual( getattr(g, "__z", None), None )
+        with self.assertRaises(AttributeError):
+            getattr(g, "__z",)
+
+        # sorted dict
+        g1 = PrettySortedDict(a=1)
+        g1.b = 2
+        g1['c'] = 3
+        self.assertEqual(g1.a, 1)
+        self.assertEqual(g1.b, 2)
+        self.assertEqual(g1.c, 3)
+        
+        with self.assertRaises(KeyError):
+            _ = g1.d
+
+        g = PrettySortedDict()
+        g.__x = 1
+        g._y = 2
+        self.assertEqual(g.__x,1)    # works as usual 
+        with self.assertRaises(KeyError):
+            _ = g['__x']   # does not work: cannot use private members as dictionary elements
+        with self.assertRaises(KeyError):
+            _ = g['_y']   # does not work: cannot use protected members as dictionary elements
+        with self.assertRaises(AttributeError):
+            _ = g.__z      # must throw attribute errors otherwise various class handling processes get confused
+    
     def test_basics(self):
         
         import datetime as datetime
@@ -331,22 +387,22 @@ class CDXBasicsCacheTest(unittest.TestCase):
         
         x = 1
         y = 2
-        a = self.f(x,y)
+        _ = self.f(x,y)
         self.assertFalse( self.f.cached )
         key1 = str(self.f.cacheArgKey)
-        a = self.f(x*2,y*2)
+        _ = self.f(x*2,y*2)
         self.assertNotEqual( self.f.cacheArgKey, key1 )
 
-        a = self.f(x,y)
+        _ = self.f(x,y)
         self.assertTrue( self.f.cached )
-        a = self.f(x,y,caching='no')
+        _ = self.f(x,y,caching='no')
         self.assertFalse( self.f.cached )
-        a = self.f(x,y)
+        _ = self.f(x,y)
         self.assertTrue( self.f.cached )
-        a = self.f(x,y,caching='clear')
+        _ = self.f(x,y,caching='clear')
         self.assertFalse( self.f.cached )
         
-        a = CDXBasicsCacheTest.g(x,y)
+        _ = CDXBasicsCacheTest.g(x,y)
         self.assertFalse( self.g.cached )
         self.assertNotEqual( self.g.cacheArgKey, key1 )
         
@@ -433,7 +489,40 @@ class CDXCConfigTest(unittest.TestCase):
         config = Config(x=1)
         with self.assertRaises(NotImplementedError):
             # cannot mix types
-            x = config("x", 1., ( Float>=0.) & (Int<=1), "test x")        
+            x = config("x", 1., ( Float>=0.) & (Int<=1), "test x")  
+        
+        # test conversion to dictionaries
+        
+        config = Config()
+        config.x = 1
+        config.y = 2
+        config.sub.x = 10
+        config.sub.y = 20
+        inp_dict = config.input_dict()
+ 
+        test = PrettyDict()
+        test.x = 1
+        test.y = 2
+        test.sub = PrettyDict()
+        test.sub.x = 10
+        test.sub.y = 20
+        
+        self.assertEqual( test, inp_dict) 
+
+        """            
+        test = PrettyDict()
+        test.x = config("x", 1)
+        test.y = config("y", 22)
+        test.z = config("z", 33)
+        test.sub = PrettyDict()
+        test.sub.x = config.sub("x", 10)
+        test.sub.y = config.sub("y", 222)
+        test.sub.z = config.sub("z", 333)
+        usd_dict = config.usage_dict()        
+        self.assertEqual( usd_dict, test )
+        """
+        
+ 
         
 if __name__ == '__main__':
     unittest.main()

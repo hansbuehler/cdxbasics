@@ -8,6 +8,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from sortedcontainers import SortedDict
 from cdxbasics.util import uniqueHash
+from cdxbasics.prettydict import PrettyDict as pdct
 from cdxbasics.logger import Logger
 _log = Logger(__file__)
 
@@ -324,7 +325,7 @@ class Config(OrderedDict):
                 Config(a=1, b=2)
         """
         OrderedDict.__init__(self)
-        self._read           = set()
+        self._done           = set()
         self._name           = config_name
         self._children       = OrderedDict()
         self._recorder       = SortedDict()
@@ -383,7 +384,7 @@ class Config(OrderedDict):
         
         """
         inputs = set(self)
-        rest   = inputs - self._read
+        rest   = inputs - self._done
         if len(rest) > 0:
             _log.verify( False, "Error closing config '%s': the following config arguments were not read: %s\nRecord of this object:\n%s", \
                                         self._name, list(rest), \
@@ -397,11 +398,11 @@ class Config(OrderedDict):
     
     def reset_done(self):
         """ Undo done """
-        self._read = set()
+        self._done = set()
     
     def mark_done(self, include_children : bool = True ):
         """ Mark all members as being read. Once called calling done() will no longer trigger an error """
-        self._read = set( self )
+        self._done = set( self )
         if include_children: 
             for c in self._childen:
                 c.mark_done(include_children=include_children)
@@ -424,7 +425,8 @@ class Config(OrderedDict):
     def detach(self,  mark_self_done : bool = True, new_recorder = False ):
         """
         Creates a copy of the current config, and marks the current config as "done" unless 'mark_self_done' is used.        
-        The use case for this function is storing sub config's for later processing
+        The use case for this function is storing sub config's for deferred processing.
+        
         Example:
             
             Creates
@@ -435,19 +437,21 @@ class Config(OrderedDict):
                 
             Using detach
             
-                def g_read_y( config ):
+                def g_done_y( config ):
                     y = config("y")
                     config.done()
                     
-                def f_read_x( config ):
+                def f_done_x( config ):
                     x = config("x")
                     child = config.child.detach()
                     config.done()   # <-- checks that all members of 'config'
                                     # except 'child' are done
-                    g_read_y( child )
+                    g_done_y( child )
                 
-                f_read_x( config )
+                f_done_x( config )
     
+        Consistency
+        -----------
         By default, the copy will have the same shared recorder as 'self' which means that usage detection
         is shared between the copied and the original config.
         This is to catch mistakes of the following type:
@@ -461,15 +465,16 @@ class Config(OrderedDict):
                 _ = sub_config("a",3) # read 'a' with default value 3
             f(config.sub)        
             
+        The below will fail with an error message as 'a' is read twice, but with different default values.
+                        
         Use new_recorder = True to create a new, clean recorder.
         This is the default when copy() is used.
         
         Parameters
         ----------
             mark_self_done : bool, optional 
-                If True mark the current object as 'read'. 
-                This way we can store a sub config for later processing
-                with triggering a warning with self.done()
+                If True mark 'self' as 'read'. 
+                This allows storing (a copy of) 'self' for deferred processing without triggering a warning when done() is called on a parent object.
             new_recorder : optional
                 False: use recorder of 'self'. That means any usage inconsistencies are detected between the new and old config.
                 True: create new recorder
@@ -477,7 +482,7 @@ class Config(OrderedDict):
         """
         config = Config()
         config.update(self)
-        config._read             = set( self._read )
+        config._done             = set( self._done )
         config._name             = self._name
         if isinstance( new_recorder, SortedDict ):
             config._recorder     = new_recorder
@@ -495,7 +500,20 @@ class Config(OrderedDict):
         
     def copy( self ):
         """ 
-        Return a copy of 'self' with no recorded usage, i.e. the config can be used from scratch.
+        Return a copy of 'self'.
+        Do not flag the original config as 'done' but create a new recorder.
+        That means that the copied config can be used independently of the 'self'.
+        
+        As an example, this allows using different default values for 
+        config members of the same name:
+            
+            base = Config()
+            base.a = 1
+            copy = base.copy()
+
+            _ = base("x", 1)
+            _ = copy("x", 2)
+        
         This call is equivalent to detach(mark_self_done=False, new_recorder=True)
         """
         return self.detach( mark_self_done=False, new_recorder=True )
@@ -551,7 +569,7 @@ class Config(OrderedDict):
                        help         : str = None, 
                        help_default : str = None, 
                        help_cast    : str = None,
-                       mark_read    : bool = True,
+                       mark_done    : bool = True,
                        record       : bool = True ):
         """
         Reads 'key' from the config. If not found, return 'default' if specified.
@@ -582,7 +600,7 @@ class Config(OrderedDict):
             help_cast : str, optional
                 If provided, specifies a description of the cast type.
                 Use this for complex cast types which are hard to read.
-            mark_read : bool, optional
+            mark_done : bool, optional
                 If true, marks the respective element as read.
             record : bool, optional
                 If true, records usage of the key. 
@@ -611,21 +629,21 @@ class Config(OrderedDict):
                 value = cast( value )
             except Exception as e:
                 cast_name = cast.__name__ if not isinstance( cast, _CastCond ) else _CastCond.cast.__name__
-                _log.throw( "Error in config '%s': value '%s' for key '%s' cannot be cast to type '%s': %s", self._name, value, key, cast.__name__, str(e))
+                _log.throw( "Error in config '%s': value '%s' for key '%s' cannot be cast to type '%s': %s", self._name, value, key, cast_name, str(e))
                 
             if isinstance( cast, _Cast ) and not cast.test(value):
                 _log.throw( "Error in config '%s': value '%s' for key '%s' %s", self._name, value, key, cast.err_str )
                     
         # mark key as read, and record call
-        if mark_read:
-            self._read.add(key)
+        if mark_done:
+            self._done.add(key)
         
         # avoid recording
         if not record:
             return value
 
         # record?
-        record_key    = self._name + "['" + key + "']"
+        record_key    = self._name + "['" + key + "']"    # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
         help          = str(help) if not help is None and len(help) > 0 else ""
         help          = help[:-1] if help[-1:] == "." else help
         help_default  = str(help_default) if not help_default is None else ""
@@ -640,9 +658,9 @@ class Config(OrderedDict):
         else:
             help_cast     = str(cast.__name__)
             
-        just_read     = help == "" and help_cast == "" and help_default == "" # was there any information?
+        just_done     = help == "" and help_cast == "" and help_default == "" # was there any information?
         record        = SortedDict( value=value, 
-                                    just_read=just_read,
+                                    just_done=just_done,
                                     help=help,
                                     help_default=help_default,
                                     help_cast=help_cast )
@@ -652,8 +670,8 @@ class Config(OrderedDict):
         exst_value    = self._recorder.get(record_key, None)
 
         if not exst_value is None:
-            if not just_read:
-                if exst_value['just_read']:
+            if not just_done:
+                if exst_value['just_done']:
                     self._recorder[record_key] = record
                 else:
                     _log.verify( exst_value == record, "Config %s was used twice with different default/help values. Found %s and %s, respectively", record_key, exst_value, record )
@@ -673,8 +691,8 @@ class Config(OrderedDict):
         """ Returns self(key,default) """
         return self(key,default)
     def get_raw(self, key : str, default = None ):
-        """ Returns self(key, default, mark_read=False, record=False ) """
-        return self(key, default, mark_read=False, record=False)
+        """ Returns self(key, default, mark_done=False, record=False ) """
+        return self(key, default, mark_done=False, record=False)
     
     # Write
     # -----
@@ -693,7 +711,7 @@ class Config(OrderedDict):
             self._children[key]      = value
         else:
             self[key] = value
-   
+
     # Recorder
     # --------
     
@@ -774,7 +792,7 @@ class Config(OrderedDict):
 
     def usage_reproducer(self) -> str:
         """
-        Returns an expression which will reproduce the current
+        Returns a string expression which will reproduce the current
         configuration tree as long as each 'value' handles
         repr() correctly.
         """
@@ -784,7 +802,7 @@ class Config(OrderedDict):
             value        =  record['value']
             report       += key + " = " + repr(value) + "\n"
         return report
-        
+    
     def input_report(self) -> str:
         """
         Returns a report of all inputs in a readable format, as long as all values
@@ -805,6 +823,15 @@ class Config(OrderedDict):
         for i in inputs:
             report += i + "\n"        
         return report
+        
+    def input_dict(self) -> dict:
+        """ Returns a (pretty) dictionary of all inputs into this config. """
+        inputs = pdct()  
+        for key in self:
+            inputs[key] = self.get_raw(key)
+        for c in self._children:
+            inputs[c] = self._children[c].input_dict()
+        return inputs
         
     def unique_id(self) -> str:
         """
