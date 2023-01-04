@@ -522,7 +522,27 @@ class CDXCConfigTest(unittest.TestCase):
         self.assertEqual( usd_dict, test )
         """
         
- 
+        # test recorded usage
+        
+        config = Config()
+        config.x = 1
+        config.sub.a = 1
+        config.det.o = 1
+        
+        _ = config("x", 11)
+        _ = config("y", 22)
+        _ = config.sub("a", 11)
+        _ = config.sub("b", 22)
+        det = config.det.detach() # shares the same recorder !
+        _ = det("o", 11)
+        _ = det("p", 22)
+        
+        self.assertEqual( config.get_recorded("x"), 1)
+        self.assertEqual( config.get_recorded("y"), 22)
+        self.assertEqual( config.sub.get_recorded("a"), 1)
+        self.assertEqual( config.sub.get_recorded("b"), 22)
+        self.assertEqual( config.det.get_recorded("o"), 1)
+        self.assertEqual( config.det.get_recorded("p"), 22)
         
 if __name__ == '__main__':
     unittest.main()

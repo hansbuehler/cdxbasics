@@ -224,7 +224,7 @@ class Config(OrderedDict):
         Set data as usual:
         
             config = Config()
-            config['features']  = [ 'ime', 'spot' ]
+            config['features']  = [ 'time', 'spot' ]
             config['weights']   = [ 1, 2, 3 ]
             
         Use member notation
@@ -603,7 +603,8 @@ class Config(OrderedDict):
             mark_done : bool, optional
                 If true, marks the respective element as read.
             record : bool, optional
-                If true, records usage of the key. 
+                If True, records usage of the key and validates that previous usage of the key is consistent with
+                the current usage, e.g. that the default values are consistent and that if help was provided it is the same.
                 
         Returns
         -------
@@ -621,6 +622,7 @@ class Config(OrderedDict):
 
         # enum support
         cast = Enum( cast, self._name, key ) if isinstance( cast, (list,tuple) ) else cast
+        _log.verify( not isinstance(cast, str), "Error in definition of config '%s': 'cast' must be a class. Found a string. Most likely this happened because a help string was defined, but no 'cast' class. In this case, use 'help=' to specify the help text.")
                         
         # convert value to 'cast'
         # validate value is in enum if applicable
@@ -648,6 +650,7 @@ class Config(OrderedDict):
         help          = help[:-1] if help[-1:] == "." else help
         help_default  = str(help_default) if not help_default is None else ""
         help_default  = str(default) if default != no_default and len(help_default) == 0 else help_default
+        _log.verify( default != no_default or help_default == "", "Config %s setup error for key %s: cannot specify 'help_default' if no default is given", self._name, key )
         
         if not help_cast is None:
             help_cast     = str(help_cast)
@@ -658,9 +661,9 @@ class Config(OrderedDict):
         else:
             help_cast     = str(cast.__name__)
             
-        just_done     = help == "" and help_cast == "" and help_default == "" # was there any information?
+        raw_use       = help == "" and help_cast == "" and help_default == "" # raw_use, e.g. simply get() or []. Including internal use
         record        = SortedDict( value=value, 
-                                    just_done=just_done,
+                                    raw_use=raw_use,
                                     help=help,
                                     help_default=help_default,
                                     help_cast=help_cast )
@@ -669,30 +672,75 @@ class Config(OrderedDict):
                 
         exst_value    = self._recorder.get(record_key, None)
 
-        if not exst_value is None:
-            if not just_done:
-                if exst_value['just_done']:
+        if exst_value is None:
+            # no previous use --> use this one.
+            self._recorder[record_key] = record
+        else:
+            if not raw_use:
+                if exst_value['raw_use']:
+                    # previous usesage was 'raw'. Record this as qualified use.
                     self._recorder[record_key] = record
                 else:
-                    _log.verify( exst_value == record, "Config %s was used twice with different default/help values. Found %s and %s, respectively", record_key, exst_value, record )
-        else:
-            self._recorder[record_key] = record
-
+                    # Both current and past were bona fide uses. Ensure that their usage is consistent.
+                    _log.verify( exst_value['default'] == default,  "Config %s was read twice for key %s (%s) with different default values %s and %s", self._name, key, record_key, exst_value['default'], default )
+                    _log.verify( exst_value['help_default'] == help_default, "Config %s was read twice for key %s (%s) with different 'help_default' values %s and %s", self._name, key, record_key, exst_value['help_default'], help_default )                    
+                    _log.verify( exst_value['help'] == help, "Config %s was read twice for key %s (%s) with different 'help' values %s and %s", self._name, key, record_key, exst_value['help'], help )
+                    _log.verify( exst_value['help_cast'] == help_cast, "Config %s was read twice for key %s (%s) with different 'help_cast' values %s and %s", self._name, key, record_key, exst_value['help_cast'], help_cast )
+                    """
+                    _log.verify( exst_value['help'] == "" or help == "" or exst_value['help'] == help, "Config %s was read twice for key %s (%s) with different 'help' values %s and %s", self._name, key, record_key, exst_value['help'], help )
+                    _log.verify( exst_value['help_cast'] == "" or help_cast == "" or exst_value['help_cast'] == help_cast, "Config %s was read twice for key %s (%s) with different 'help_cast' values %s and %s", self._name, key, record_key, exst_value['help'], help )
+                    _log.verify( default == no_default or exst_value.default == no_default or exst_value['default'] == default,  "Config %s was read twice for key %s (%s) with different default values %s and %s", self._name, key, record_key, exst_value['default'], default )
+                    _log.verify( exst_value['help_default'] == "" or help_default == "" or exst_value['help_default'] == help_default, "Config %s was read twice for key %s (%s) with different 'help_default' values %s and %s", self._name, key, record_key, exst_value['help_default'], help_default )                    
+                    
+                    if exst_value['help'] == "" and help != "":
+                        exst_value['help'] = help
+                    if exst_value['help_cast'] == "" and help_cast != "":
+                        exst_value['help_cast'] = help_cast
+                    if exst_value['help_default'] == "" and help_default != "":
+                        exst_value['help_default'] = help_default
+                    """ 
         # done
         return value
         
     def __getitem__(self, key : str):
-        """ Returns self(key)  """
+        """
+        Returns self(key)
+        """
         return self(key)
     def get(self, key : str, default = None ):
-        """ Returns self(key, default) """
+        """
+        Returns self(key, default)
+        Note that if a default is provided, then this function will fail if a previous call has provided help texts, or a different default.
+        If no default is provided, then this function operates silently and will not trigger an error if previous use provided additional, inconsistent information.
+        """
         return self(key, default)
     def get_default(self, key : str, default):
-        """ Returns self(key,default) """
+        """
+        Returns self(key,default)
+        Note that if a default is provided, then this function will fail if a previous call has provided help texts, or a different default.
+        If no default is provided, then this function operates silently and will not trigger an error if previous use provided additional, inconsistent information.
+        """
         return self(key,default)
     def get_raw(self, key : str, default = None ):
-        """ Returns self(key, default, mark_done=False, record=False ) """
+        """
+        Returns self(key, default, mark_done=False, record=False )
+        Reads the respectitve element without marking the element as read; and without recording access to the element.
+        """
         return self(key, default, mark_done=False, record=False)
+    def get_recorded(self, key : str ):
+        """
+        Returns the recorded used value of key, e.g. the value returned when the config was used:
+            If key is part of the input data, return that value
+            If key is not part of the input data, and a default was provided when the config was read, return the default.
+        This function:
+            Throws a KeyError if the key was never read successfully from the config (e.g. it is not used in the calling stack)
+        """
+        _log.verify( key.find('.') == -1 , "Error in config '%s': key name cannot contain '.'. Found %s", self._name, key )
+        record_key    = self._name + "['" + key + "']"    # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
+        record        = self._recorder.get(record_key, None)
+        if record is None:
+            raise KeyError(key)
+        return record['value']
     
     # Write
     # -----
