@@ -7,213 +7,15 @@ Hans Buehler 2022
 from collections import OrderedDict
 from collections.abc import Mapping
 from sortedcontainers import SortedDict
-from cdxbasics.util import uniqueHash
-from cdxbasics.prettydict import PrettyDict as pdct
-from cdxbasics.logger import Logger
+from .util import uniqueHash
+from .prettydict import PrettyDict as pdct
+from .logger import Logger
 _log = Logger(__file__)
 
 class _ID(object):
     pass
 
 no_default = _ID()    # creates a unique object which can be used to detect if a default value was provided
-
-# New in version 0.1.45
-# Support for conditional types, e.g. we can write
-# 
-#  x = config(x, 0.1, Float >= 0., "An 'x' which cannot be negative")
-    
-class _Cast(object):
-    
-    def __call__( self, value ):# NOQA
-        """ cast 'value' to the proper type """
-        raise NotImplementedError("Internal error")
-
-    def test(self, value):
-        """ Test whether 'value' satisfies the condition """
-        raise NotImplementedError("Internal error")
-
-    @property
-    def err_str(self):
-        """ Nice error string """
-        raise NotImplementedError("Internal error")
-        
-    @property
-    def help_cast(self):
-        """ Returns readable string """
-        raise NotImplementedError("Internal error")
-    
-# ================================
-# Flaot and Int 'cast' types
-# ================================
-
-class _Condition(_Cast):
-    """ Represents a simple operator condition such as 'Float >= 0.' """
-    
-    def __init__(self, cast, op, other):# NOQA
-        self.cast    = cast
-        self.op      = op    
-        self.other   = other
-        self.l_and   = None
-
-    def __call__( self, value ):
-        """ Casts 'value' to the underlying data type """
-        return self.cast(value)
-
-    def __and__(self, cond):
-        """
-        Combines to conditions with logical AND .
-        Requires the left hand 'self' to be a > or >=; the right hand must be < or <=
-        This means you can write
-        
-            x = config("x", 0.5, (Float >= 0.) & (Float < 1.), "Variable x")
-        
-        """
-        if not self.l_and is None:
-            raise NotImplementedError("Cannot combine more than two conditions")
-        if not self.op[0] == 'g':
-            raise NotImplementedError("The left hand condition when using '&' must be > or >=. Found %s" % self._prop_str)
-        if not cond.op[0] == 'l':
-            raise NotImplementedError("The right hand condition when using '&' must be < or <=. Found %s" % cond._prop_str)
-        if self.cast != cond.cast:
-            raise NotImplementedError("Cannot '&' conditions for types %s and %s" % (self.cast.__name__, cond.cast.__name__))
-        op_new = _Condition(self.cast, self.op, self.other)
-        op_new.l_and = cond
-        return op_new
-
-    def test(self, value) -> bool:
-        """ Test whether 'value' satisfies the condition """
-        assert isinstance( value, self.cast ), "Internal error: 'value' should be of type %s but found type %s" % (self.cast.__name__, type(value).__name__ )
-        if self.op == "ge":
-            ok = value >= self.other
-        elif self.op == "gt":
-            ok = value > self.other
-        elif self.op == "le":
-            ok = value <= self.other
-        elif self.op == "lt":
-            ok = value < self.other
-        else:
-            raise RuntimeError("Internal error: unknown operator %s" % str(self.op))            
-        if not ok:
-            return False
-        return ok if self.l_and is None else self.l_and.test(value)
-        
-    @property
-    def _prop_str(self) -> str:
-        """ Returns the underlying operator for this conditon. Does NOT take into account any '&' operator """
-        if self.op == "ge":
-            return ">="
-        elif self.op == "gt":
-            return ">"
-        elif self.op == "le":
-            return "<="
-        elif self.op == "lt":
-            return "<"
-        raise RuntimeError("Internal error: unknown operator %s" % str(self.op))            
-
-    @property
-    def err_str(self) -> str:
-        """ Nice error string """
-        zero = self.cast(0)
-        def mk_txt(cond):
-            if cond.op == "ge":
-                s = ("not be lower than %s" % cond.other) if cond.other != zero else ("not be negative")
-            elif cond.op == "gt":
-                s = ("be bigger than %s" % cond.other) if cond.other != zero else ("be positive")
-            elif cond.op == "le":
-                s = ("not exceed %s" % cond.other) if cond.other != zero else ("not be positive")
-            elif cond.op == "lt":
-                s = ("be lower than %s" % cond.other) if cond.other != zero else ("be negative")
-            else:
-                raise RuntimeError("Internal error: unknown operator %s" % str(cond.op))
-            return s
-        
-        s    = "must " + mk_txt(self)
-        if not self.l_and is None:
-            s += " and " + mk_txt(self.l_and)
-        return s
-
-    @property
-    def help_cast(self) -> str:
-        """ Returns readable string """
-        s = str(self.cast.__name__) + self._prop_str + str(self.other)
-        if not self.l_and is None:
-            s += " and " + self.l_and.help_cast
-        return s
-             
-class _CastCond(object): # NOQA
-    """ Generates _Condition's
-        See the two members Float and Int
-    """
-    
-    def __init__(self, cast):# NOQA
-        self.cast = cast
-    def __ge__(self, other) -> bool:# NOQA
-        return _Condition( self.cast, 'ge', self.cast(other) )
-    def __gt__(self, other) -> bool:# NOQA
-        return _Condition( self.cast, 'gt', self.cast(other) )
-    def __le__(self, other) -> bool:# NOQA
-        return _Condition( self.cast, 'le', self.cast(other) )
-    def __lt__(self, other) -> bool:# NOQA
-        return _Condition( self.cast, 'lt', self.cast(other) )    
-    
-Float = _CastCond(float)
-Int = _CastCond(int)
-
-# ================================
-# Enum type for list 'cast's
-# ================================
-        
-class Enum(_Cast):# NOQA
-    """ Utility class to support enumerator types.
-        No need to use this classs directly. It will be automatically instantiated if a list is passed as type, e.g.
-        
-            code = config("code", "Python", ['C++', 'Python'], "Which language do we love")
-            
-        """
-        
-    def __init__(self, enum : list, config_name : str, key : str ):
-    
-        self.enum = list(enum)
-        _log.verify( len(self.enum) > 0, "Error in config '%s': 'cast' for key '%s' is an empty list or tuple. Lists are used for enumerator types", config_name, key )
-        self.cast = type( self.enum[0] )
-        for i in range(1,len(self.enum)):
-            try:
-                self.enum[i] = self.cast( self.enum[i] )
-            except:
-                _log.throw( "Error in config '%s': 'key '%s' members of the enumerated list are not of consistent type. Found %s for the first element which does match the type %s of the %ldth element",\
-                        config_name, key, self.cast.__name__, i, type(self.enum[i]).__name__)    
-        
-    def __call__( self, value ):# NOQA
-        """ cast 'value' to the proper type
-            Raises a KeyError if the value was not found in our enum """
-        return self.cast( value )
-
-    def test(self, value) -> bool:
-        """ Test whether 'value' satisfies the condition """
-        return value in self.enum
-
-    @property
-    def err_str(self) -> str:
-        """ Nice error string """        
-        s = "must be one of: '" + str(self.enum[0]) + "'"
-        for i in range(1,len(self.enum)-1):
-            s += ", '" + str(self.enum[i])
-        if len(self.enum) > 1:
-            s += " or '" + str(self.enum[-1]) + "'"
-        return s
-        
-    @property
-    def help_cast(self) -> str:
-        """ Returns readable string """
-        help_cast     = "[ "
-        for i in range(len(self.enum)):
-            help_cast += ( ", " + self.enum[i] ) if i > 0 else self.enum[i]
-        help_cast += " ]"
-        return help_cast
- 
-# ================================
-# Main Config
-# ================================
 
 class Config(OrderedDict):
     """
@@ -883,21 +685,19 @@ class Config(OrderedDict):
         
     def unique_id(self) -> str:
         """
-        Returns an MDH5 hash key for this object, based on 'input_report()'
+        Returns an MDH5 hash key for this object, based on its provided inputs /not/ based on its usage
         ** WARNING **
         This function ignores any config keys or children with leading '_'.
         """
-        inputs = []      
+        inputs = {}
         for key in self:
             if key[:1] == "_":
                 continue
-            value      = self.get_raw(key)
-            hash_      = uniqueHash(key,uniqueHash(value))
-            inputs.append( hash_ )
+            inputs[key] = self.get_raw(key) 
         for c in self._children:
             if c[:1] == "_":
                 continue
-            inputs.append( uniqueHash(c,self._children[c].unique_id) )
+            inputs[c] = self._children[c].unique_id() 
         return uniqueHash(inputs)
 
     # magic
@@ -910,92 +710,203 @@ class Config(OrderedDict):
         """
         return OrderedDict.__iter__(self)
     
-        
-def test( misspell = True ):
-    """ Test function as described in README.md of the package """
-    import numpy as np
+# ==============================================================================
+# New in version 0.1.45
+# Support for conditional types, e.g. we can write
+# 
+#  x = config(x, 0.1, Float >= 0., "An 'x' which cannot be negative")
+# ==============================================================================
     
-    class Test(object):
-        
-        def __init__( self, confg ):
-            # read top level parameters
-            self.features = config("features", [], list, "Features for the agent" )
-            self.weights  = config("weights", [], np.asarray, "Weigths for the agent", help_default="no initial weights")
+class _Cast(object):
     
-            # Accessing children directly with member notation
-            self.activation = config.network("activation", "relu", str, "Activation function for the network")
-    
-            # Accessing via the child node
-            network  = config.network 
-            self.depth = network('depth', 10000, int, "Depth for the network") 
-            self.width = network('width', 100, int, "Width for the network")
+    def __call__( self, value ):# NOQA
+        """ cast 'value' to the proper type """
+        raise NotImplementedError("Internal error")
 
-            # defer using training config to later
-            self.config_training = config.training.detach()
+    def test(self, value):
+        """ Test whether 'value' satisfies the condition """
+        raise NotImplementedError("Internal error")
+
+    @property
+    def err_str(self):
+        """ Nice error string """
+        raise NotImplementedError("Internal error")
+        
+    @property
+    def help_cast(self):
+        """ Returns readable string """
+        raise NotImplementedError("Internal error")
+    
+# ================================
+# Flaot and Int 'cast' types
+# ================================
+
+class _Condition(_Cast):
+    """ Represents a simple operator condition such as 'Float >= 0.' """
+    
+    def __init__(self, cast, op, other):# NOQA
+        self.cast    = cast
+        self.op      = op    
+        self.other   = other
+        self.l_and   = None
+
+    def __call__( self, value ):
+        """ Casts 'value' to the underlying data type """
+        return self.cast(value)
+
+    def __and__(self, cond):
+        """
+        Combines to conditions with logical AND .
+        Requires the left hand 'self' to be a > or >=; the right hand must be < or <=
+        This means you can write
+        
+            x = config("x", 0.5, (Float >= 0.) & (Float < 1.), "Variable x")
+        
+        """
+        if not self.l_and is None:
+            raise NotImplementedError("Cannot combine more than two conditions")
+        if not self.op[0] == 'g':
+            raise NotImplementedError("The left hand condition when using '&' must be > or >=. Found %s" % self._prop_str)
+        if not cond.op[0] == 'l':
+            raise NotImplementedError("The right hand condition when using '&' must be < or <=. Found %s" % cond._prop_str)
+        if self.cast != cond.cast:
+            raise NotImplementedError("Cannot '&' conditions for types %s and %s" % (self.cast.__name__, cond.cast.__name__))
+        op_new = _Condition(self.cast, self.op, self.other)
+        op_new.l_and = cond
+        return op_new
+
+    def test(self, value) -> bool:
+        """ Test whether 'value' satisfies the condition """
+        assert isinstance( value, self.cast ), "Internal error: 'value' should be of type %s but found type %s" % (self.cast.__name__, type(value).__name__ )
+        if self.op == "ge":
+            ok = value >= self.other
+        elif self.op == "gt":
+            ok = value > self.other
+        elif self.op == "le":
+            ok = value <= self.other
+        elif self.op == "lt":
+            ok = value < self.other
+        else:
+            raise RuntimeError("Internal error: unknown operator %s" % str(self.op))            
+        if not ok:
+            return False
+        return ok if self.l_and is None else self.l_and.test(value)
+        
+    @property
+    def _prop_str(self) -> str:
+        """ Returns the underlying operator for this conditon. Does NOT take into account any '&' operator """
+        if self.op == "ge":
+            return ">="
+        elif self.op == "gt":
+            return ">"
+        elif self.op == "le":
+            return "<="
+        elif self.op == "lt":
+            return "<"
+        raise RuntimeError("Internal error: unknown operator %s" % str(self.op))            
+
+    @property
+    def err_str(self) -> str:
+        """ Nice error string """
+        zero = self.cast(0)
+        def mk_txt(cond):
+            if cond.op == "ge":
+                s = ("not be lower than %s" % cond.other) if cond.other != zero else ("not be negative")
+            elif cond.op == "gt":
+                s = ("be bigger than %s" % cond.other) if cond.other != zero else ("be positive")
+            elif cond.op == "le":
+                s = ("not exceed %s" % cond.other) if cond.other != zero else ("not be positive")
+            elif cond.op == "lt":
+                s = ("be lower than %s" % cond.other) if cond.other != zero else ("be negative")
+            else:
+                raise RuntimeError("Internal error: unknown operator %s" % str(cond.op))
+            return s
+        
+        s    = "must " + mk_txt(self)
+        if not self.l_and is None:
+            s += " and " + mk_txt(self.l_and)
+        return s
+
+    @property
+    def help_cast(self) -> str:
+        """ Returns readable string """
+        s = str(self.cast.__name__) + self._prop_str + str(self.other)
+        if not self.l_and is None:
+            s += " and " + self.l_and.help_cast
+        return s
+             
+class _CastCond(object): # NOQA
+    """ Generates _Condition's
+        See the two members Float and Int
+    """
+    
+    def __init__(self, cast):# NOQA
+        self.cast = cast
+    def __ge__(self, other) -> bool:# NOQA
+        return _Condition( self.cast, 'ge', self.cast(other) )
+    def __gt__(self, other) -> bool:# NOQA
+        return _Condition( self.cast, 'gt', self.cast(other) )
+    def __le__(self, other) -> bool:# NOQA
+        return _Condition( self.cast, 'le', self.cast(other) )
+    def __lt__(self, other) -> bool:# NOQA
+        return _Condition( self.cast, 'lt', self.cast(other) )    
+    
+Float = _CastCond(float)
+Int = _CastCond(int)
+
+# ================================
+# Enum type for list 'cast's
+# ================================
+        
+class Enum(_Cast):# NOQA
+    """ Utility class to support enumerator types.
+        No need to use this classs directly. It will be automatically instantiated if a list is passed as type, e.g.
+        
+            code = config("code", "Python", ['C++', 'Python'], "Which language do we love")
             
-            # Do not forget to call <tt>done()</tt> once done with this config.
-            config.done()    # checks that we have read all keywords.
-
-        def training(self):
-
-            epochs     = self.config_training("epochs", 100, int, "Epochs for training")
-            batch_size = self.config_training("batch_size", None, help="Batch size. Use None for default of 32" )
-            self.config_training.done()
-
-    config = Config()
-    config['features']           = [ 'time', 'spot' ]
-    config.weights               = [ 1, 2, 3 ]
-    config.network.depth         = 10
-    config.network.activation    = 'relu'
-    if misspell:
-        config.network.widht         = 100   # (intentional typo)
-    else:
-        config.network.width         = 100   # (intentional typo)
-
-    test = Test(config)
-    test.training()
-    print( config.usage_report(with_cast=True) )
-    
-def test_to_kwargs():
-    """
-    Test using the ** operator.
-    This will not capture the default values provided to the function 'f'
-    """
-    
-    def f( a=1, b=2, c=3 ):
-        _ = a
-        _ = b
-        _ = c
+        """
         
-    config = Config()
-    config.a = 10
-    config.c = 30
+    def __init__(self, enum : list, config_name : str, key : str ):
     
-    f( **config )
-    config.done()
-    print( config.usage_report() )
-    
-def test_as_kwargs():
-    """
-    Test the use of config() as a good trackign tool when
-    **kwargs is used in a function
-    """
-    def g( **kwargs ):
-        kwargs = Config(kwargs)
-        a = kwargs.get("a", 100)
-        c = kwargs("c", 300)
-        d = kwargs.get("d", 100)
-        kwargs.done()
-            
-    config = Config()
-    config.a = 10
-    config.c = 30
+        self.enum = list(enum)
+        _log.verify( len(self.enum) > 0, "Error in config '%s': 'cast' for key '%s' is an empty list or tuple. Lists are used for enumerator types", config_name, key )
+        self.cast = type( self.enum[0] )
+        for i in range(1,len(self.enum)):
+            try:
+                self.enum[i] = self.cast( self.enum[i] )
+            except:
+                _log.throw( "Error in config '%s': 'key '%s' members of the enumerated list are not of consistent type. Found %s for the first element which does match the type %s of the %ldth element",\
+                        config_name, key, self.cast.__name__, i, type(self.enum[i]).__name__)    
+        
+    def __call__( self, value ):# NOQA
+        """ cast 'value' to the proper type
+            Raises a KeyError if the value was not found in our enum """
+        return self.cast( value )
 
-    g( **config )
-    config.done()
-    print( "g\n", config.usage_report() )
-    
-    
+    def test(self, value) -> bool:
+        """ Test whether 'value' satisfies the condition """
+        return value in self.enum
+
+    @property
+    def err_str(self) -> str:
+        """ Nice error string """        
+        s = "must be one of: '" + str(self.enum[0]) + "'"
+        for i in range(1,len(self.enum)-1):
+            s += ", '" + str(self.enum[i])
+        if len(self.enum) > 1:
+            s += " or '" + str(self.enum[-1]) + "'"
+        return s
+        
+    @property
+    def help_cast(self) -> str:
+        """ Returns readable string """
+        help_cast     = "[ "
+        for i in range(len(self.enum)):
+            help_cast += ( ", " + self.enum[i] ) if i > 0 else self.enum[i]
+        help_cast += " ]"
+        return help_cast
+ 
+
         
     
         

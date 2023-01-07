@@ -7,109 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from IPython import display
 from .logger import Logger
-_log = Logger("Log")
-
-
-class DeferredCall(object):
-    """
-    Utility class which allows deferring a function call on an object
-    Function can be access once execute() has been called
-    """    
-
-    class ResultHook(object):
-        """ Allows deferred access to returns from the deferred function """
-        
-        def __init__(self, function):
-            self._function  = function
-            self._return    = []
-            
-        def __getattr__(self, key): # NOQA
-            _log.verify( len(self._return) == 1, "Deferred function '%s' has not yet been called for key '%s'", self._function, key )
-            return getattr(self._return[0], key)
-        
-        def __getitem__(self, key): # NOQA
-            _log.verify( len(self._return) == 1, "Deferred function '%s' has not yet been called for key '%s'", self._function, key )
-            return self._return[0][key]
-        
-        def __call__(self, *kargs, **kwargs): # NOQA
-            _log.verify( len(self._return) == 1, "Deferred function '%s' has not yet been called", self._function )
-            return self._return[0](*kargs, **kwargs)            
-    
-    def __init__(self, function : str, reduce_single_list : bool = True ):
-        """ Initilize with the name 'function' of the function """
-        self.function    = function
-        self.red_list    = reduce_single_list
-        self.kargs       = None
-        self.kwargs      = None
-        self.result_hook = None
-    
-    def __call__(self, *kargs, **kwargs ):
-        """
-        Deferred function call.
-        The returned hook can be used to read the result once execute() was called.
-        """
-        self.kargs       = kargs
-        self.kwargs      = kwargs
-        self.result_hook = DeferredCall.ResultHook(self.function)
-        return self.result_hook
-
-    def execute(self, owner):
-        """
-        Execute delayed function call and place result in
-        function return b=hook
-        """
-        assert not self.kargs is None and not self.kwargs is None, "DreamCatcher for %s was never __call__ed" % self.function
-        assert len(self.result_hook._return) == 0, "DreamCatcher for %s was already called" % self.function
-        f = getattr(owner, self.function, None)
-        _log.verify( not f is None, "Member function %s not found in object of type %s", self.function, owner.__class__.__name__ )
-        r = f(*self.kargs, **self.kwargs)
-        self.result_hook._return.append( r )
-        
-class DynamicAx(object):
-    """ 
-    Wrapper around an matplotlib axis returned
-    by DynamicFig, which is returned by figure().
-    All calls to the returned axis are delegated to
-    matplotlib with the amendmend that if any such function
-    returs a list with one member, it will just return
-    this member.
-    This caters for the very common use case plot() where
-    x,y are vectors. Assume y2 is an updated data set
-    In this case we can use
-    
-        fig = figure()
-        ax  = fig.add_subplot()
-        lns = ax.plot( x, y, ":" )
-        fig.render() # --> draw graph
-        
-        lns.set_ydata( y2 )
-        fig.render() # --> change graph
-    """
-    
-    def __init__(self, row : int, col : int, kwargs : dict):
-        """ Creates internal object which defers the creation of various graphics to a later point """        
-        self.row    = row
-        self.col    = col
-        self.plots  = {}
-        self.caught = []
-        self.kwargs = kwargs
-        self.ax     = None
-    
-    def initialize( self, fig, rows : int, cols : int):
-        """ Creates the plot by calling all 'caught' functions calls in sequece """        
-        assert self.ax is None, "Internal error; function called twice?"
-        num     = 1 + self.col + self.row*cols
-        self.ax = fig.add_subplot( rows, cols, num, **self.kwargs )        
-        for catch in self.caught:
-            catch.execute( self.ax )
-        self.caught = []
-            
-    def __getattr__(self, key): # NOQA
-        if not self.ax is None:
-            return getattr(self.ax, key)
-        d = DeferredCall(key)
-        self.caught.append(d)
-        return d
+_log = Logger(__file__)
 
 class DynamicFig(object):
     """
@@ -335,6 +233,109 @@ def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kw
             A figure wrapper; see above.
     """   
     return DynamicFig( row_size=row_size, col_size=col_size, col_nums=col_nums, **fig_kwargs ) 
+
+
+class DeferredCall(object):
+    """
+    Utility class which allows deferring a function call on an object
+    Function can be access once execute() has been called
+    """    
+
+    class ResultHook(object):
+        """ Allows deferred access to returns from the deferred function """
+        
+        def __init__(self, function):
+            self._function  = function
+            self._return    = []
+            
+        def __getattr__(self, key): # NOQA
+            _log.verify( len(self._return) == 1, "Deferred function '%s' has not yet been called for key '%s'", self._function, key )
+            return getattr(self._return[0], key)
+        
+        def __getitem__(self, key): # NOQA
+            _log.verify( len(self._return) == 1, "Deferred function '%s' has not yet been called for key '%s'", self._function, key )
+            return self._return[0][key]
+        
+        def __call__(self, *kargs, **kwargs): # NOQA
+            _log.verify( len(self._return) == 1, "Deferred function '%s' has not yet been called", self._function )
+            return self._return[0](*kargs, **kwargs)            
+    
+    def __init__(self, function : str, reduce_single_list : bool = True ):
+        """ Initilize with the name 'function' of the function """
+        self.function    = function
+        self.red_list    = reduce_single_list
+        self.kargs       = None
+        self.kwargs      = None
+        self.result_hook = None
+    
+    def __call__(self, *kargs, **kwargs ):
+        """
+        Deferred function call.
+        The returned hook can be used to read the result once execute() was called.
+        """
+        self.kargs       = kargs
+        self.kwargs      = kwargs
+        self.result_hook = DeferredCall.ResultHook(self.function)
+        return self.result_hook
+
+    def execute(self, owner):
+        """
+        Execute delayed function call and place result in
+        function return b=hook
+        """
+        assert not self.kargs is None and not self.kwargs is None, "DreamCatcher for %s was never __call__ed" % self.function
+        assert len(self.result_hook._return) == 0, "DreamCatcher for %s was already called" % self.function
+        f = getattr(owner, self.function, None)
+        _log.verify( not f is None, "Member function %s not found in object of type %s", self.function, owner.__class__.__name__ )
+        r = f(*self.kargs, **self.kwargs)
+        self.result_hook._return.append( r )
+        
+class DynamicAx(object):
+    """ 
+    Wrapper around an matplotlib axis returned
+    by DynamicFig, which is returned by figure().
+    All calls to the returned axis are delegated to
+    matplotlib with the amendmend that if any such function
+    returs a list with one member, it will just return
+    this member.
+    This caters for the very common use case plot() where
+    x,y are vectors. Assume y2 is an updated data set
+    In this case we can use
+    
+        fig = figure()
+        ax  = fig.add_subplot()
+        lns = ax.plot( x, y, ":" )
+        fig.render() # --> draw graph
+        
+        lns.set_ydata( y2 )
+        fig.render() # --> change graph
+    """
+    
+    def __init__(self, row : int, col : int, kwargs : dict):
+        """ Creates internal object which defers the creation of various graphics to a later point """        
+        self.row    = row
+        self.col    = col
+        self.plots  = {}
+        self.caught = []
+        self.kwargs = kwargs
+        self.ax     = None
+    
+    def initialize( self, fig, rows : int, cols : int):
+        """ Creates the plot by calling all 'caught' functions calls in sequece """        
+        assert self.ax is None, "Internal error; function called twice?"
+        num     = 1 + self.col + self.row*cols
+        self.ax = fig.add_subplot( rows, cols, num, **self.kwargs )        
+        for catch in self.caught:
+            catch.execute( self.ax )
+        self.caught = []
+            
+    def __getattr__(self, key): # NOQA
+        if not self.ax is None:
+            return getattr(self.ax, key)
+        d = DeferredCall(key)
+        self.caught.append(d)
+        return d
+
 
 # ----------------------------------------------------------------------------------
 # color management

@@ -176,6 +176,10 @@ def plain( inn, sorted = False ):
     # nothing we can do
     raise TypeError(fmt("Cannot handle type %s", type(inn)))
 
+# =============================================================================
+# Hashing / unique representatives
+# =============================================================================
+
 def uniqueHash(*args, **kwargs) -> str:
     """ 
     Generates a hash key for any collection of python objects.
@@ -228,8 +232,8 @@ def uniqueHash(*args, **kwargs) -> str:
         # dictionaries
         if not isinstance(inn,dict):
             inn = getattr(inn,"__dict__",None)
-            if inn is None: raise TypeError(fmt("Cannot handle type %s", type(inn)))
-        
+            if inn is None:
+                raise TypeError(fmt("Cannot handle type %s", type(inn)))        
         inns = list(inn.keys())
         inns.sort() # this ensures that dictionaries are always in the right order
         for k in inn:
@@ -242,19 +246,135 @@ def uniqueHash(*args, **kwargs) -> str:
     visit(kwargs)
     return m.hexdigest()
 
+def uniqueHash_len( length ):
+    """ Computes a unique hash'd 'id' with maximum length """
+    def unique_filename(*args, **argv ):
+        """
+        Returns a unique filename of tghe specified len for the provided arguments
+        If the first argument is a string, and within 'length', then return that string.
+        """
+        if len(argv) == 0 and len(args) == 1 and isinstance(args[0], str):
+            if len(args[0]) <= length:
+                return args[0]
+        uid = uniqueHash(args,argv).encode('utf-8')
+        if len(uid) <= length:
+            return uid.decode()
+        m = hashlib.shake_128()
+        m.update(uid)
+        f = m.hexdigest(length//2)
+        return f.decode()
+    unique_filename.length = length
+    return unique_filename
+
+def uniqueHash32( *args, **argv ) -> str:
+    """ Compute a unique ID of length 32 for the provided arguments """
+    return uniqueHash_len(32)(*args,**argv)
+
+def uniqueHash48( *args, **argv ) -> str:
+    """ Compute a unique ID of length 48 for the provided arguments """
+    return uniqueHash_len(48)(*args,**argv)
+
+def uniqueHash64( *args, **argv ) -> str:
+    """ Compute a unique ID of length 64 for the provided arguments """
+    return uniqueHash_len(64)(*args,**argv)
+
 # =============================================================================
-# Numerical equality
+# Caching tools
 # =============================================================================
 
-def f_eq_zero(x : float, prec : float ,ref : float = 1.) -> bool:
-    """ Checks whether x is zero with precision prec*(ref+1.) """
-    return abs(x) <= prec * (abs(ref) + 1.)
-def f_leq_zero(x : float, prec : float,ref : float=1.) -> bool:
-    """ Checks whether x is smaller than zero with precision prec*(ref+1.) """
-    return x <= prec * (abs(ref) + 1.)
-def f_geq_zero(x : float, prec : float ,ref : float =1.) -> bool:
-    """ Checks whether x is greater than zero with precision prec*(ref+1.) """
-    return x >= - prec * (abs(ref) + 1.)
+class CacheMode(object):
+    """
+    CacheMode
+    A class which encodes standard behaviour of a caching strategy:
+    
+                                                on    off     renew    clear   readonly
+        load upon start from disk if exists     x     -       -        -       x
+        write updates to disk                   x     -       x        -       -
+        delete existing object upon start       -     -       -        x       -
+        
+    See cdxbasics.subdir for functions to manage files.
+    """
+    
+    ON = "on"
+    OFF = "off"
+    RENEW = "renew"
+    CLEAR = "clear"
+    READONLY = "readonly"
+    
+    MODES = [ ON, OFF, RENEW, CLEAR, READONLY ]
+    HELP = "'on' for standard caching; 'off' to turn off; 'renew' to overwrite any existing cache; 'clear' to clear existing caches; 'readonly' to read existing caches but not write new ones"
+    
+    def __init__(self, mode : str = None ):
+        """
+        Encodes standard behaviour of a caching strategy:
+
+                                                    on    off     renew    clear   readonly
+            load upon start from disk if exists     x     -       -        -       x
+            write updates to disk                   x     -       x        -       -
+            delete existing object upon start       -     -       -        x       -
+            
+        Parameters
+        ----------
+            mode : str
+                Which mode to use.
+        """
+        mode      = self.ON if mode is None else mode
+        self.mode = mode.mode if isinstance(mode, CacheMode) else str(mode)
+        if not self.mode in self.MODES:
+            raise Exception("Caching mode must be 'on', 'off', 'renew', 'clear', or 'readonly'. Found " + self.mode )
+        self._read   = self.mode in [self.ON, self.READONLY]
+        self._write  = self.mode in [self.ON, self.RENEW]
+        self._delete = self.mode == self.CLEAR
+        
+    @property
+    def read(self) -> bool:
+        """ Whether to load any existing data when starting """
+        return self._read
+    
+    @property
+    def write(self) -> bool:
+        """ Whether to write cache data to disk """
+        return self._write
+    
+    @property
+    def delete(self) -> bool:
+        """ Whether to delete existing data """
+        return self._delete
+
+    def __str__(self) -> str:# NOQA
+        return self.mode
+    def __repr__(self) -> str:# NOQA
+        return self.mode
+        
+    def __eq__(self, other) -> bool:# NOQA
+        return self.mode == other
+    def __neq__(self, other) -> bool:# NOQA
+        return self.mode != other
+    
+    @property
+    def is_off(self) -> bool:
+        """ Whether this cache mode is OFF """
+        return self.mode == self.OFF
+
+    @property
+    def is_on(self) -> bool:
+        """ Whether this cache mode is ON """
+        return self.mode == self.ON
+
+    @property
+    def is_renew(self) -> bool:
+        """ Whether this cache mode is RENEW """
+        return self.mode == self.RENEW
+
+    @property
+    def is_clear(self) -> bool:
+        """ Whether this cache mode is CLEAR """
+        return self.mode == self.CLEAR
+
+    @property
+    def is_readonly(self) -> bool:
+        """ Whether this cache mode is READONLY """
+        return self.mode == self.READONLY
 
 # =============================================================================
 # functional programming
@@ -281,164 +401,7 @@ def bind( F, **kwargs ):
 
 # =============================================================================
 # generic class
+# (superseded)
 # =============================================================================
 
 Generic = PrettyDict
-
-class __old_Generic(object):
-    """
-    An object which can be used as a generic store.
-    *** Depreciated. Use cdxbascis.prettydict.PrettyDict ***
-    
-    Constructions by keyword:        
-        g = Generic(a=1, b=2, c=3)
-                    
-    Access by key        
-        a = g.a
-        a = g['a']
-        e = g.get('e',None)   # with default
-        e = g('e',None)       # with default
-        del g.e
-        
-    Such objects can be extended with functions e.g. you can set
-        def f(x):
-            return x*x
-        g.f = f
-        g.f(2) --> 4
-
-    This works as well with bound functions, e.g. 
-        def F(self,a):
-            self.a = a            # set the value of the 'g' object
-        g.F = MethodType(F)
-        ...
-        g.F(1)
-        g.a --> 1
-            
-    Hans Buehler, 2013
-    """
-    
-    def __init__(self, *vargs, **kwargs):
-        """
-        Initialize object; use keyword notation such as
-            Generic(a=1, b=2)                
-        The 'vargs' argument allows passing on existing Generic, dict or generic objects;
-        see update() for further information
-        """
-        # allow construction the object as Generic(a=1,b=2)
-        self.update(*vargs,**kwargs)
-    
-    # make it behave like a dictionary    
-    
-    def __str__(self):# NOQA
-        return self.__dict__.__str__()
-    
-    def __repr__(self):# NOQA
-        return self.__dict__.__repr__()
-    
-    def __getitem__(self,key):# NOQA
-        return self.__dict__.__getitem__(key)
-
-    def __setattr__(self, key, value):
-        """ Assigns a value, including functions which will becomes methods, e.g. the first argument must be 'self' """
-        self.__setitem__(key,value)
-
-    def __setitem__(self,key,value):
-        """ Assigns a value, including functions which will becomes methods, e.g. the first argument must be 'self' """
-        if isinstance(value,types.FunctionType):
-            # bind function to this object
-            value = types.MethodType(value,self)
-        elif isinstance(value,types.MethodType):
-            # re-point the method to the current instance
-            value = types.MethodType(value.__func__,self)
-        self.__dict__.__setitem__(key,value)
-        
-    def __len__(self):# NOQA
-        return self.__dict__.__len__()
-        
-    def __delitem__(self,key):# NOQA
-        self.__dict__.__delitem__(key)
-
-    def __iter__(self):# NOQA
-        return self.__dict__.__iter__()
-    
-    def __contains__(self, key):# NOQA
-        return self.__dict__.__contains__(key)
-    
-    def __call__(self, key, *kargs):
-        """ Short-cut for get(), e.g. use __call__('a', 0) to ask for the value of 'a' with default 0 """
-        return self.get(key,*kargs)
-    
-    def keys(self):# NOQA
-        return self.__dict__.keys()
-
-    def get(self, key, *kargs):
-        """ Like dict.get(), e.g. get('a',0) gets the value of 'a' defaulting to 0. If no default is proivded, and 'a' is not defined the function fails """
-        if len(kargs) == 0 or key in self:
-            return self[key]
-        if len(kargs) != 1:
-            raise ValueError("get(): no or one argument expected; found %ld arguments", len(kargs))
-        return kargs[0]
-    
-    def __add__(self, o):
-        """
-        Allows merging dicts or other Generics into the Generic
-            g = Generic(a=1)
-            g += Generic(a=2,b=1)
-        or
-            g += {'a':2,'b':1)
-        gives a Generic witha=2,b=1.
-        """        
-        if not isinstance(o,(dict,Generic)):
-            raise ValueError("Cannot handle type %s. Use merge() explicitly to add object members" % type(o))
-        return Generic(self,o)
-    
-    def update(self,*vargs,**kwargs):
-        """ 
-        Merges various data into the generic.
-        
-        Parameters
-        ----------
-            varargs: 
-                for each element, add the key/value pairs of dictionaries, Generics or any object. For Generics, the function re-points methods
-            kwargs: 
-                are kwarg name/value pairs all added directly, e.g. merge(a=1) adds 'a' with a value of '1' to self
-            
-        Example
-            in1 = { 'a':1, 'b':2 }
-            in2 = Generic(c=3,d=4)
-            def F(self,x):
-                self.d = x
-            in2.F = F   <-- creates a method
-            def O(object):
-                def __init__(self):
-                    self.e = 5
-            in3 = O()                
-            update( in1, in2, in3, g=6 )
-            
-        Note
-            The function first processes the 'vargs' list, and then
-            any explicit keywords which will overwrite any duplicates
-        """
-        def merge_object_dict(o):
-            """ Allows loading data elements from a list, another Generic or any object """
-            if isinstance(o,dict):
-                self.__dict__.update(o)
-            elif isinstance(o,Generic):
-                dct = getattr(o,"__dict__",None)
-                for e in dct:
-                    # this function handles functions and methods correctly.
-                    self.__setitem__(e,dct[e])        
-            else:
-                dct = getattr(o,"__dict__",None)
-                if dct is None:
-                    raise ValueError("Cannot handle type %s. It has no __dict__",type(o))
-                for e in dct:
-                    if not isFunction(e):   # no automatic transfer of functions and methods from mere objects
-                        self.__dict__.__setitem__(e,dct[e])        
-        for o in vargs:
-            merge_object_dict(o)
-        merge_object_dict(kwargs)
-
-
-
-

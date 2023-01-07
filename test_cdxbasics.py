@@ -10,15 +10,24 @@ import cdxbasics.config as config
 import cdxbasics.kwargs as mdl_kwargs
 import cdxbasics.subdir as mdl_subdir
 import cdxbasics.logger as mdl_logger
-from cdxbasics.prettydict import PrettyDict, PrettySortedDict, PrettyOrderedDict
+import cdxbasics.prettydict as prettydict
+import importlib as imp
+#imp.reload(mdl_kwargs)
+#imp.reload(mdl_subdir)
+#imp.reload(mdl_logger)
+#imp.reload(config)
+#imp.reload(prettydict)
+#imp.reload(util)
 
-Root = mdl_subdir.Root
 SubDir = mdl_subdir.SubDir
 Logger = mdl_logger.Logger
 LogException = Logger.LogException
 dctkwargs = mdl_kwargs.dctkwargs
 Generic = util.Generic
 fmt = util.fmt
+PrettyDict = prettydict.PrettyDict
+PrettySortedDict = prettydict.PrettySortedDict
+PrettyOrderedDict = prettydict.PrettyOrderedDict
 
 Config = config.Config
 Float = config.Float
@@ -41,13 +50,14 @@ class CDXBasicsTest(unittest.TestCase):
             a = kwargs('a',1)      # with default
             b = kwargs['b']        # no default; must exist
             c = kwargs.get('c',3)  # with default
+            kwargs.done()
             return (a,b,c)
     
         self.assertEqual((-1,-2,-3), f1(a=-1,b=-2,c=-3))
         self.assertEqual((+1,-2,+3), f1(b=-2))
         with self.assertRaises(KeyError):
             f1() # missing b
-
+        
     def test_Generic(self):
         # PrettyDict is now PrettyDict
         self.assertEqual( Generic, PrettyDict )
@@ -272,7 +282,7 @@ class CDXBasicsTest(unittest.TestCase):
 
     def test_subdir(self):
         
-        sub = Root("!/.tmp_test_for_cdxbasics.subdir", raiseOnError=True )
+        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", eraseEverything=True )
         sub.x = 1
         sub['y'] = 2
         sub.write('z',3)
@@ -281,6 +291,10 @@ class CDXBasicsTest(unittest.TestCase):
 
         lst = str(sorted(sub.keys()))
         self.assertEqual(lst, "['a', 'b', 'l', 'x', 'y', 'z']")
+        
+        # test naming
+        self.assertEqual( str(sub), sub.path + ";*" + sub.ext )
+        self.assertEqual( repr(sub), "SubDir(" + sub.path + ";*" + sub.ext + ")" )
 
         # read them all back        
         self.assertEqual(sub.x,1)
@@ -289,6 +303,10 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual(sub.readString('l'),"hallo")
         self.assertEqual(sub.a,11)
         self.assertEqual(sub.b,22)
+        self.assertEqual(sub(['a','b'], None), [11,22])
+        self.assertEqual(sub.read(['a','b']), [11,22])
+        self.assertEqual(sub[['a','b']], [11,22])
+        self.assertEqual(sub(['aaaa','bbbb'], None), [None,None])
 
         # test alternatives
         self.assertEqual(sub['x'],1)
@@ -299,30 +317,29 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual(sub('u',None),None)
         
         # missing objects
-        with self.assertRaises(KeyError):
+        with self.assertRaises(AttributeError):
             print(sub.x2)
         with self.assertRaises(KeyError):
             print(sub['x2'])
         with self.assertRaises(KeyError):
             print(sub.read('x2',raiseOnError=True))
         
-        # delete & confirm they are gone            
+        # delete & confirm they are gone    
         del sub.x
         del sub['y']
         sub.delete('z')
 
-        with self.assertRaises(KeyError):
-            del sub.x
-        with self.assertRaises(KeyError):
-            del sub['x']
+        del sub.x    # silent
+        del sub['x'] # silent
         with self.assertRaises(KeyError):
             sub.delete('x',raiseOnError=True)
 
-        # sub dirs            
+        # sub dirs     
+        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", eraseEverything=True )
         s1 = sub("subDir1")
         s2 = sub("subDir2/")
-        s3 = sub.subDir("subDir3")
-        s4 = SubDir(sub,"subDir4")
+        s3 = SubDir("subDir3/",parent=sub)
+        s4 = SubDir("subDir4", parent=sub)
         self.assertEqual(s1.path, sub.path + "subDir1/")
         self.assertEqual(s2.path, sub.path + "subDir2/")
         self.assertEqual(s3.path, sub.path + "subDir3/")
@@ -335,24 +352,14 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual(len(sub.subDirs()),0)
         sub.eraseEverything()
 
-        # version without KeyErrors
-        sub = Root("!/.tmp_test_for_cdxbasics.subdir", raiseOnError=False )
-        sub.x = 1
-        self.assertEqual(sub.x, 1)
-        self.assertEqual(sub.z, None)
-        self.assertEqual(sub['z'], None)
-        
-        # do not throw
-        del sub.z
-        del sub['z']
-        sub.eraseEverything()
-        
         # test vectors
-        sub = Root("!/.tmp_test_for_cdxbasics.subdir", raiseOnError=False )
+        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", eraseEverything=True )
         sub.x = 1
         sub[['y','z']] = [2,3]
         
-        self.assertEqual(sub[['x','y','z','r']], [1,2,3,None])
+        self.assertEqual(sub[['x','y','z']], [1,2,3])
+        with self.assertRaises(KeyError):
+            self.assertEqual(sub[['x','y','z','r']], [1,2,3,None])
         self.assertEqual(sub.read(['x','r'],default=None), [1,None])
         self.assertEqual(sub(['x','r'],default=None), [1,None])
 
@@ -363,13 +370,24 @@ class CDXBasicsTest(unittest.TestCase):
         with self.assertRaises(LogException):
             sub.write(['x','y'],[1,2,3])
         sub.eraseEverything()
+        
+        # test setting ext
+        sub1 = "!/.tmp_test_for_cdxbasics.subdir"
+        fd1  = SubDir(sub1).path
+        sub  = SubDir("!/.tmp_test_for_cdxbasics.subdir/test;*.bin", eraseEverything=True )
+        self.assertEqual(sub.path, fd1+"test/")        
+        fn   = sub.fullKeyName("file")
+        self.assertEqual(fn,fd1+"test/file.bin")
+        sub.eraseEverything()
+        
+        
 
-# testing our auto-logger
+# testing our auto-caching
 # need to auto-clean up
 
 class CDXBasicsCacheTest(unittest.TestCase):
 
-    cacheRoot = Root("!/test_caching", eraseEverything=True)
+    cacheRoot = SubDir("!/test_caching", eraseEverything=True)
 
     @cacheRoot.cache     
     def f(self, x, y):
