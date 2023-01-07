@@ -2,7 +2,7 @@
 
 Collection of basic tools for Python development.<br>
 
-<h2>dynaplot</h2>
+## dynaplot
 
 Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit is making it easy to develop visualization with <tt>matplotlib</tt> which dynamically updates, for example during training with machine learing kits such as <tt>tensorflow</tt>. This has been tested with Anaconda's JupyterHub and <tt>%matplotlib inline</tt>. 
 
@@ -10,12 +10,12 @@ Some users reported that the package does not work in some versions of Jupyter.
 In this case, please try <tt>fig.render( "canvas" )</tt>. I appreciate if you let me know whether this resolved
 the problem.
 
-<h4>Animation</h4>
+#### Animation
 
 See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb) for some applications. 
 
-<img src=https://github.com/hansbuehler/cdxbasics/raw/master/media/dynaplot.gif />
-<img src=https://github.com/hansbuehler/cdxbasics/raw/master/media/dynaplot3D.gif />
+![dynamic line plot](https://github.com/hansbuehler/cdxbasics/raw/master/media/dynaplot.gif)
+![dynamic 3D plot](https://github.com/hansbuehler/cdxbasics/raw/master/media/dynaplot3D.gif)
 
     # example
     %matplotlib inline
@@ -41,7 +41,7 @@ See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbu
 
 See example notebook for how to use the package for lines, confidence intervals, and 3D graphs.
 
-<h4>Simpler sub_plot</h4>
+#### Simpler sub_plot
 
 The package lets you create sub plots without having to know their number in advance: you do not need to specify <tt>rol, col, num</tt>
 when calling <tt>add_subplot</tt>.
@@ -62,7 +62,7 @@ when calling <tt>add_subplot</tt>.
     
     fig.render()                    # draws the plots
    
-<h4>Other features</h4>
+#### Other features
 
 
 
@@ -106,7 +106,7 @@ There are a number of other functions to aid plotting
 
 </ul>
 
-<h2>prettydict</h2>
+## prettydict
 
 A number of simple extensions to standard dictionaries which allow accessing any element of the dictionary with "." notation:
 
@@ -127,7 +127,7 @@ There are three versions:
         Pretty version of sorted dictionary.
 </ul>
 
-<h4>Functions</h4>
+#### Functions
 
 The classes also allow assigning bona fide member functions by a simple semantic of the form:
 
@@ -151,7 +151,7 @@ The reason for this is as follows: consider
     pdct.mult(3,4) --> 12
  
 
-<h2>config</h2>
+## config
 
 Tooling for setting up program-wide configuration. Aimed at machine learning
 programs to ensure consistency of code accross experimentation.
@@ -166,7 +166,8 @@ Key features
 <li>Nicer synthax than dictionary notation.
 </ul>
 
-<b>Creating configs</b><br>
+#### Creating configs
+
 Set data with both dictionary and member notation:
         
             config = Config()
@@ -186,7 +187,7 @@ This is equivalent to
             config.network.activation    = 'relu'
             config.network.widht         = 100   # (intentional typo)
 
-<b>Reading a config</b><br>
+#### Reading a config
 Reading a config provides notation for type handling and also specifying help on what the respective feature is used for. See the <tt>usage_report()</tt>
 member.
 
@@ -216,6 +217,8 @@ Accessing via the child node
             network  = config.network 
             self.depth = network('depth', 10000, int, "Depth for the network") 
             
+#### Imposing simple restrictions on values
+
 We can impose simple restrictions
 
             self.width = network('width', 100, Int>3, "Width for the network")
@@ -227,6 +230,8 @@ Restrictions on both sides of a scalar:
 Enforce being a member of a list
 
             self.ntype = network('ntype', 'fastforward', ['fastforward','recurrent','lstm'], "Type of network")
+
+#### Ensuring that we had no typos & that all provided data is meaningful
 
 Do not forget to call <tt>done()</tt> once done with this config. 
 
@@ -243,9 +248,8 @@ It will alert you if there are keywords or children which haven't been read. Mos
         config['features'] = ['time', 'spot'] # Features for the agent; default: []
         config['weights'] = [1 2 3] # Weigths for the agent; default: []
 
+#### Detaching child configs
 
-
-<b>Detaching child configs</b><br>
 You can also detach a child config, which allows you to store it for later
 use without triggering <tt>done()</tt>  errors for its parent.
     
@@ -264,7 +268,8 @@ use without triggering <tt>done()</tt>  errors for its parent.
 
 Use <tt>copy()</tt> to make a bona fide copy of a child, without marking the source child as 'done'.
 
-<b>Self-recording all available configs</b><br>
+#### Self-recording all available configs
+
 Once your program ran, you can read the summary of all values, their defaults, and their help texts.
 
         print( config.usage_report( with_cast=True ) )
@@ -281,7 +286,7 @@ Prints:
         config['features'] = ['time', 'spot'] # (list) Features for the agent; default: []
         config['weights'] = [1 2 3] # (asarray) Weigths for the agent; default: no initial weights
 
-<b>Calling functions with named parameters:</b>
+#### Calling functions with named parameters:
 
         def create_network( depth=20, activation="relu", width=4 ):
             ...
@@ -292,7 +297,14 @@ We may use
 
 However, there is no magic - this function will mark all direct members (not children) as 'done' and will not record the default values of the function <tt>create_network</tt>. Therefore <tt>usage_report</tt> will be somewhat useless. This method will still catch unused variables as "unexpected keyword arguments". 
 
-<b>Advanced **kwargs Handling</b>
+#### Unique ID
+
+Another common use case is that we wish to cache some process in a complex operation. Assuming that the <tt>config</tt> describes all relevant parameters
+we can use <tt>config.unique_id()</tt> to obtain a unique hash ID for the given config.
+
+This can be used, for example, as file name for caching. See also <tt>cdxbasics.subdir</tt> below.
+
+#### Advanced **kwargs Handling
 
 The <tt>Config</tt> class can be used to improve <tt>kwargs</tt> handling.
 Assume we have
@@ -319,7 +331,7 @@ Another pattern is to allow both <tt>config</tt> and <tt>kwargs</tt>:
             b = kwargs("b", 20)
             kwargs.done()
 
-<h2>logger</h2>
+## logger
 
 Tools for defensive programming a'la the C++ ASSERT/VERIFY macros. Aim is to provide one line validation of inputs to functions with intelligible error messages:
 
@@ -330,7 +342,7 @@ Tools for defensive programming a'la the C++ ASSERT/VERIFY macros. Aim is to pro
         _log.verify( a==1, "'a' is not one but %s", a)
         _log.warn_if( a!=1, "'a' was not one but %s", a)
         
-<b>Functions available, mostly self-explanatory:</b>
+#### Member functions; mostly self-explanatory:
 
 Exceptions independent of logging level
         
@@ -377,7 +389,7 @@ If-conditional functions
         prnt_if( cond, text, *args, **kwargs )      # with EOL
         write_if( cond, text, *args, **kwargs )     # without EOL
 
-<h2>verbose</h2>
+## verbose
 
 Utility class for printing 'verbose' information, with indentation.
 
@@ -450,28 +462,25 @@ Returns
 
 The purpose of initializing functions usually with <tt>quiet</tt> is that they can be used accross different contexts without printing anything by default.
 
-<h2>util</h2>
+## util
 
 Some basic utilities to make live easier.
 
-
-<ul>
-    <li><tt>fmt()</tt>: C++ style format function.
-    <li><tt>uniqueHash()</tt>: runs a standard hash over most combinations of standard elements or objects.
-    <li><tt>plain()</tt>: converts most combinations of standards elements or objects into plain list/dict structures.
-    <li><tt>isAtomic()</tt>: whether something is string, float, int, bool or date.
-    <li><tt>isFloat()</tt>: whether something is a float, including a numpy float.
-    <li><tt>isFunction()</tt>: whether something is some function.
-    <li><tt>bind()</tt>: simple shortcut to find a function, e.g.
+* <tt>fmt()</tt>: C++ style format function.
+* <tt>uniqueHash()</tt>: runs a standard hash over most combinations of standard elements or objects;
+<tt>uniqueHash32()</tt>, <tt>uniqueHash48()</tt>, and <tt>uniqueHash64()</tt> return hash values of at most length 32, 48, or 64.
+* <tt>plain()</tt>: converts most combinations of standards elements or objects into plain list/dict structures.
+* <tt>isAtomic()</tt>: whether something is string, float, int, bool or date.
+* <tt>isFloat()</tt>: whether something is a float, including a numpy float.
+* <tt>isFunction()</tt>: whether something is some function.
+* <tt>bind()</tt>: simple shortcut to bind function parameters, e.g.
 
         def f(a, b, c):
             pass
 
         f_a = bind(f, a=1)
 
-</ul>
-
-<h2>subdir</h2>
+## subdir
 A few tools to handle file i/o in a transparent way in the new <tt>subdir</tt> module. For the time being this is experimental.
 Please share any bugs with the author in case you do end up using them.
 
