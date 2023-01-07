@@ -438,13 +438,15 @@ If-conditional functions
 
 ## subdir
 
-A few tools to handle file i/o in a transparent way in the new <tt>subdir</tt> module. Main focus is caching of data. They key idea is to provide transparent, concise pickle access to the file system in a manner similar to dictionary access. Files managed by <tt>subdir</tt> also all have the same extension, which is <tt>pck</tt> by default.
+A few tools to handle file i/o in a transparent way, focusing on caching data. The key idea is to provide transparent, concise pickle access to the file system in a manner similar to dictionary access. Files managed by <tt>subdir</tt> also all have the same extension, which is <tt>pck</tt> by default.
 
-Key pattern:
+#### Key pattern:
+
+Our pattern assumes that each calcuation is determined by a number of parameters for which we can compute a unique (file) ID for caching results. Unique file IDs can be computed using <tt>uniqueFileName48()</tt>. Here is an example:
+
 
     from cdxbasics.config import Config
-    from cdxbasics.util import CacheMode, uniqueHash48
-    from cdxbasics.subdir import SubDir
+    from cdxbasics.subdir import SubDir, CacheMode, uniqueFileName48
 
     def function_with_caching( config ):
         # split configuration between function data (which alter the result of the calculatio), and caching data (which does not affect the function calculation)
@@ -454,7 +456,7 @@ Key pattern:
         # determine caching strategy
         cache_mode = config_caching("mode", CacheMode.ON, CacheMode.MODES, "Caching strategy: " + CacheMode.HELP)
         cache_dir  = config.caching("directory", "caching", str, "Caching directory")
-        cache_file = uniqueHash48( config.my_function.unique_id() ) # get unique file name
+        cache_file = uniqueFileName48( config_my_function.unique_id() ) # get unique file name
 
         # check whether we should delete any existing files
         if cache_mode.delete:
@@ -478,8 +480,7 @@ Key pattern:
 The above can be made more concise as follows
 
     from cdxbasics.config import Config
-    from cdxbasics.util import CacheMode, uniqueHash48
-    from cdxbasics.subdir import SubDir
+    from cdxbasics.subdir import SubDir, CacheMode, uniqueFileName48
 
     def function_with_caching( config ):
         # split configuration between function data (which alter the result of the calculatio), and caching data (which does not affect the function calculation)
@@ -489,7 +490,7 @@ The above can be made more concise as follows
         # determine caching strategy
         cache_mode = config_caching("mode", CacheMode.ON, CacheMode.MODES, "Caching strategy: " + CacheMode.HELP)
         cache_dir  = config.caching("directory", "caching", str, "Caching directory")
-        cache_file = uniqueHash48( config.my_function.unique_id() ) # get unique file name
+        cache_file = uniqueFileName48( config_my_function.unique_id() ) # get unique file name
 
         # check whether we should delete any existing files
         data_of_my_function = cache_dir.cache_read( cache_mode, cache_file, default=None )

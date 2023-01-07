@@ -812,10 +812,13 @@ class SubDir(object):
     def cache(self, f, cacheName = None, cacheSubDir = None):
         """
         Decorater to create an auto-matically cached version of 'f'.
-        The function will compute a uniqueHash() accross all 'vargs' and 'kwargs'
-        Using MD5 to identify the call signature.
+
+        The wrapped function will
+            1) Compute a hash key for all parameters to be passed to 'f'
+            2) Depending on an additional cacheMode optional parameter, attempt to read the cache from disk
+            3) If not possible, call 'f', and store the result on disk
         
-        autoRoot = Root("!/caching")
+        autoRoot = SubDir("!/caching")   # create directory
         
         @autoRoot.cache
         def my_function( x, y ):
@@ -823,65 +826,57 @@ class SubDir(object):
       
         Advanced arguments
            cacheName        : specify name for the cache for this function.
-                              By default it is the name of the function
+                              By default it is the name of the function, potentiall hashed if it is too long
            cacheSubDir      : specify a subdirectory for the function directory
-                              By default it is the module name
+                              By default it is the module name, potentially hashed if it is too long
                               
         When calling the resulting decorate functions, you can use
-           caching='yes'    : default, caching is on
-           caching='no'     : no caching
-           caching='clear'  : delete existing cache. Do not update
-           caching='update' : update cache.
+           cachingMode='on'      : default, caching is on
+           cachingMode='off'     : no caching
+           cachingMode='clear'   : delete existing cache. Do not update
+           cachingMode='update'  : update cache.
+           cachingMode='readonly': only read; do not write.
                 
-        The function will set properties afther the function call:
+        The wrapped function has the following properties set after the first function call:
            cached           : True or False to indicate whether cached data was used
            cacheArgKey      : The hash key for this particular set of arguments
            cacheFullKey     : Full key path
            
         my_function(1,2)
-        print("Result was cached " if my_function.cached else "Result was computed")
-        
-        *WARNING*
-        The automatic internal file structure is cut off at 64 characters to ensure directory
-        names do not fall foul of system limitations.
-        This means that the directory for a function may not be unique. Note that the hash
-        key for the arguments includes the function and module name, therefore that is
-        unique within the limitations of the hash key.
+        print("Result was cached " if my_function.cached else "Result was computed")        
         """
-        print(f)
-        f_subDir = SubDir(f.__module__[0:64] if cacheSubDir is None else cacheSubDir, parent=self)
-        f_subDir = SubDir(f.__name__[0:64] if cacheName is None else cacheName, parent=f_subDir)
+        f_subDir = SubDir( uniqueFileName48(f.__module__ if cacheSubDir is None else cacheSubDir), parent=self)
+        f_subDir = SubDir( uniqueFileName48(f.__name__ if cacheName is None else cacheName), parent=f_subDir)
     
         @wraps(f)
         def wrapper(*vargs,**kwargs):
-            caching = 'yes'
-            if 'caching' in kwargs:            
-                caching = kwargs['caching'].lower()
-                del kwargs['caching']            
+            caching = CacheMode('on')
+            if 'cacheMode' in kwargs:            
+                caching = CacheMode( kwargs['cacheMode'] )
+                del kwargs['cacheMode']        # do not pass 'cacheMode' as parameter to 'f'     
             # simply no caching
-            if caching == 'no':
-                wrapper.cached = False
-                wrapper.cacheArgKey = None
+            if caching.off:
+                wrapper.cached       = False
+                wrapper.cacheArgKey  = None
                 wrapper.cacheFullKey = None
                 return f(*vargs,**kwargs)   
-            _log.verify( caching in ['yes','clear','update'], "'caching': argument must be 'yes', 'no', 'clear', or 'update'. Found %s", caching )
             # compute key
             key = uniqueFileName48(f.__module__, f.__name__,vargs,kwargs)
-            wrapper.cacheArgKey = key
+            wrapper.cacheArgKey  = key
             wrapper.cacheFullKey = f_subDir.fullKeyName(key)
-            wrapper.cached = False
+            wrapper.cached       = False
             # clear?
-            if caching != 'yes':
+            if caching.delete:
                 f_subDir.delete(key)
-            if caching == 'clear':
-                return f(*vargs,**kwargs)            
-            # use cache
-            if caching == 'yes' and key in f_subDir:
+            # read?
+            if caching.read and key in f_subDir:
                 wrapper.cached = True
                 return f_subDir[key]
+            # call function 'f'                
             value = f(*vargs,**kwargs)
-            f_subDir.write(key,value)
-            f_subDir[key] = value
+            if caching.write:
+                f_subDir.write(key,value)
+                f_subDir[key] = value                
             return value
     
         return wrapper
