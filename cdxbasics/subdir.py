@@ -8,7 +8,7 @@ This is under development. I have not figured out how to test file i/o on GitHub
 """
 
 from .logger import Logger
-from .util import uniqueHash
+from .util import CacheMode, uniqueHash48
 _log = Logger(__file__)
 
 import os
@@ -19,6 +19,8 @@ import tempfile
 import shutil
 import datetime
 from collections.abc import Collection, Mapping
+
+uniqueFileName48 = uniqueHash48
 
 def _remove_trailing( path ):
     if len(path) > 0:
@@ -613,6 +615,11 @@ class SubDir(object):
         Deletes all valid keys and subdirectories in this sub directory.
         Does not delete files with other extensions.
         Use eraseEverything() if the aim is to delete everything.
+        
+        Parameters
+        ----------
+            deleteSelf: whether to delete the directory or only its contents
+            raiseOnError: False for silent failure
         """
         # do not do anything if the object was deleted
         if self._path is None:
@@ -777,10 +784,34 @@ class SubDir(object):
         _log.verify( key[:1] != "_", "Deleting protected or private members disabled. Fix __delattr__ to support this")
         return self.delete( key=key, raiseOnError=False )
         
+    # -- short cuts for manual caching --
+    
+    def cache_read( self, cache_mode : CacheMode, key, default = None ):
+        """
+        Standard caching pattern ahead of a complex function:
+            1) Check whether the cache is to be cleared. If so, delete any existing files and return 'default'
+            2) If caching is enabled attempt to read the file 'key'. Return 'default' if not possible or enabled.
+        """
+        if cache_mode.delete:
+            self.delete(key,raiseOnError=False)
+            return default
+        if cache_mode.read:
+            return self.read(key,default=default,raiseOnError=False)
+        return default
+
+    def cache_write( self, cache_mode : CacheMode, key, value ):
+        """            
+        Standard caching pattern at the end of a complex function:
+            3) If caching is enabled, write 'value' to file 'key'
+        """
+        if cache_mode.write:
+            self.write( key, value )
+    
     # -- automatic caching --
     
     def cache(self, f, cacheName = None, cacheSubDir = None):
-        """ Decorater to create an auto-matically cached version of 'f'.
+        """
+        Decorater to create an auto-matically cached version of 'f'.
         The function will compute a uniqueHash() accross all 'vargs' and 'kwargs'
         Using MD5 to identify the call signature.
         
@@ -835,7 +866,7 @@ class SubDir(object):
                 return f(*vargs,**kwargs)   
             _log.verify( caching in ['yes','clear','update'], "'caching': argument must be 'yes', 'no', 'clear', or 'update'. Found %s", caching )
             # compute key
-            key = uniqueHash(f.__module__, f.__name__,vargs,kwargs)
+            key = uniqueFileName48(f.__module__, f.__name__,vargs,kwargs)
             wrapper.cacheArgKey = key
             wrapper.cacheFullKey = f_subDir.fullKeyName(key)
             wrapper.cached = False
@@ -854,10 +885,4 @@ class SubDir(object):
             return value
     
         return wrapper
-
-"""
-Default root directories
-"""
-TempRoot = SubDir("!")
-UserRoot = SubDir("~")
 

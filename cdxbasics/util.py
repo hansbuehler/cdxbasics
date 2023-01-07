@@ -287,7 +287,7 @@ class CacheMode(object):
     CacheMode
     A class which encodes standard behaviour of a caching strategy:
     
-                                                on    off     renew    clear   readonly
+                                                on    off     update   clear   readonly
         load upon start from disk if exists     x     -       -        -       x
         write updates to disk                   x     -       x        -       -
         delete existing object upon start       -     -       -        x       -
@@ -297,21 +297,21 @@ class CacheMode(object):
     
     ON = "on"
     OFF = "off"
-    RENEW = "renew"
+    UPDATE = "update"
     CLEAR = "clear"
     READONLY = "readonly"
     
-    MODES = [ ON, OFF, RENEW, CLEAR, READONLY ]
-    HELP = "'on' for standard caching; 'off' to turn off; 'renew' to overwrite any existing cache; 'clear' to clear existing caches; 'readonly' to read existing caches but not write new ones"
+    MODES = [ ON, OFF, UPDATE, CLEAR, READONLY ]
+    HELP = "'on' for standard caching; 'off' to turn off; 'update' to overwrite any existing cache; 'clear' to clear existing caches; 'readonly' to read existing caches but not write new ones"
     
     def __init__(self, mode : str = None ):
         """
         Encodes standard behaviour of a caching strategy:
 
-                                                    on    off     renew    clear   readonly
+                                                    on    off     update   clear   readonly
             load upon start from disk if exists     x     -       -        -       x
             write updates to disk                   x     -       x        -       -
-            delete existing object upon start       -     -       -        x       -
+            delete existing object upon start       -     -       x        x       -
             
         Parameters
         ----------
@@ -321,10 +321,10 @@ class CacheMode(object):
         mode      = self.ON if mode is None else mode
         self.mode = mode.mode if isinstance(mode, CacheMode) else str(mode)
         if not self.mode in self.MODES:
-            raise Exception("Caching mode must be 'on', 'off', 'renew', 'clear', or 'readonly'. Found " + self.mode )
+            raise KeyError( self.mode, "Caching mode must be 'on', 'off', 'update', 'clear', or 'readonly'. Found " + self.mode )
         self._read   = self.mode in [self.ON, self.READONLY]
-        self._write  = self.mode in [self.ON, self.RENEW]
-        self._delete = self.mode == self.CLEAR
+        self._write  = self.mode in [self.ON, self.UPDATE]
+        self._delete = self.mode in [self.UPDATE, self.CLEAR]
         
     @property
     def read(self) -> bool:
@@ -362,9 +362,9 @@ class CacheMode(object):
         return self.mode == self.ON
 
     @property
-    def is_renew(self) -> bool:
-        """ Whether this cache mode is RENEW """
-        return self.mode == self.RENEW
+    def is_update(self) -> bool:
+        """ Whether this cache mode is UPDATE """
+        return self.mode == self.UPDATE
 
     @property
     def is_clear(self) -> bool:

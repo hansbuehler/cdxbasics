@@ -12,14 +12,16 @@ import cdxbasics.subdir as mdl_subdir
 import cdxbasics.logger as mdl_logger
 import cdxbasics.prettydict as prettydict
 import importlib as imp
-#imp.reload(mdl_kwargs)
-#imp.reload(mdl_subdir)
-#imp.reload(mdl_logger)
-#imp.reload(config)
-#imp.reload(prettydict)
-#imp.reload(util)
+if False:
+    imp.reload(mdl_kwargs)
+    imp.reload(mdl_subdir)
+    imp.reload(mdl_logger)
+    imp.reload(config)
+    imp.reload(prettydict)
+    imp.reload(util)
 
 SubDir = mdl_subdir.SubDir
+CacheMode = mdl_subdir.CacheMode
 Logger = mdl_logger.Logger
 LogException = Logger.LogException
 dctkwargs = mdl_kwargs.dctkwargs
@@ -380,7 +382,28 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual(fn,fd1+"test/file.bin")
         sub.eraseEverything()
         
+    def test_cache_mode(self):
         
+        on = CacheMode("on")
+        of = CacheMode("off")
+        cl = CacheMode("clear")
+        up = CacheMode("update")
+        ro = CacheMode("readonly")
+
+        with self.assertRaises(KeyError):
+            _ = CacheMode("OFF")
+        
+        allc = [on, of, cl, up, ro]
+        
+        self.assertEqual( [ x.is_on for x in allc ], [True, False, False, False, False ] )
+        self.assertEqual( [ x.is_off for x in allc ], [False, True, False, False, False ] )
+        self.assertEqual( [ x.is_clear for x in allc ], [False, False, True, False, False ] )
+        self.assertEqual( [ x.is_update for x in allc ], [False, False, False, True, False ] )
+        self.assertEqual( [ x.is_readonly for x in allc ], [False, False, False, False, True ] )
+        
+        self.assertEqual( [ x.read for x in allc ],  [True, False, False, False, True] )
+        self.assertEqual( [ x.write for x in allc ], [True, False, False, True, False] )
+        self.assertEqual( [ x.delete for x in allc ], [False, False, True, True, False ] )
 
 # testing our auto-caching
 # need to auto-clean up

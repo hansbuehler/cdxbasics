@@ -436,6 +436,173 @@ If-conditional functions
         prnt_if( cond, text, *args, **kwargs )      # with EOL
         write_if( cond, text, *args, **kwargs )     # without EOL
 
+## subdir
+
+A few tools to handle file i/o in a transparent way in the new <tt>subdir</tt> module. Main focus is caching of data. They key idea is to provide transparent, concise pickle access to the file system in a manner similar to dictionary access. Files managed by <tt>subdir</tt> also all have the same extension, which is <tt>pck</tt> by default.
+
+Key pattern:
+
+    from cdxbasics.config import Config
+    from cdxbasics.util import CacheMode, uniqueHash48
+    from cdxbasics.subdir import SubDir
+
+    def function_with_caching( config ):
+        # split configuration between function data (which alter the result of the calculatio), and caching data (which does not affect the function calculation)
+        config_my_function = config.function  # parameters for the function
+        config_caching     = config.caching   # parameters for caching
+
+        # determine caching strategy
+        cache_mode = config_caching("mode", CacheMode.ON, CacheMode.MODES, "Caching strategy: " + CacheMode.HELP)
+        cache_dir  = config.caching("directory", "caching", str, "Caching directory")
+        cache_file = uniqueHash48( config.my_function.unique_id() ) # get unique file name
+
+        # check whether we should delete any existing files
+        if cache_mode.delete:
+            cache_dir.delete(cache_file)
+
+        # read existing file, if desired and possible
+        data_of_my_function = cache_dir.read(cache_file) if cache_mode.read else None
+
+        # check whether we need to compute some data
+        if not data_of_my_function is None:
+            ....
+            data_of_my_function = ....
+            ....
+
+        # write back to disk
+        if cache_node.write:
+            cache_dir.write(cache_file, data_of_my_function)
+
+        return data_of_my_function
+
+The above can be made more concise as follows
+
+    from cdxbasics.config import Config
+    from cdxbasics.util import CacheMode, uniqueHash48
+    from cdxbasics.subdir import SubDir
+
+    def function_with_caching( config ):
+        # split configuration between function data (which alter the result of the calculatio), and caching data (which does not affect the function calculation)
+        config_my_function = config.function  # parameters for the function
+        config_caching     = config.caching   # parameters for caching
+
+        # determine caching strategy
+        cache_mode = config_caching("mode", CacheMode.ON, CacheMode.MODES, "Caching strategy: " + CacheMode.HELP)
+        cache_dir  = config.caching("directory", "caching", str, "Caching directory")
+        cache_file = uniqueHash48( config.my_function.unique_id() ) # get unique file name
+
+        # check whether we should delete any existing files
+        data_of_my_function = cache_dir.cache_read( cache_mode, cache_file, default=None )
+
+        # check whether we need to compute some data
+        if not data_of_my_function is None:
+            ....
+            data_of_my_function = ....
+            ....
+
+        # write back to disk
+        cache_dir.cache_write(cache_mode, cache_file, data_of_my_function)
+
+        return data_of_my_function
+
+
+#### Creating directories
+
+You can create directories using the <tt>SubDir</tt> class. Simply write
+
+    subdir = SubDir("my_directory")      # relative to current working directory
+    subdir = SubDir("./my_directory")    # relative to current working directory
+    subdir = SubDir("~/my_directory")    # relative to home directory
+    subdir = SubDir("!/my_directory")    # relative to default temp directory
+
+You can specify a parent for relative path names:
+
+    subdir = SubDir("my_directory", "~")  # relative to home directory
+
+Change the extension to <tt>bin</tt>
+
+    subdir = SubDir("~/my_directory;*.bin")     
+    subdir = SubDir("~/my_directory", ext="bin")    
+    subdir = SubDir("my_directory", "~", ext="bin")    
+
+You can also use the <tt>()</tt> operator to generate sub directories. This operator is overloaded: for a single argument, it creates a relative sub-directory:
+
+    parent = SubDir("~/parent")
+    subdir = parent("subdir")
+
+Be aware that when the operator <tt>()</tt> is called with two arguments, then it reads files; see below.
+
+You can obtain a list of all sub directories in a directory by using <tt>subDirs()</tt>.
+
+#### I/O
+##### Reading
+
+To read the data contained in a file 'file.pck' in our subdirectory with extension 'pck' use either of the following
+
+    data = subdir.read("file")                 # returns the default if file is not found
+    data = subdir.read("file", default=None)   # returns the default if file is not found
+
+This function will return <tt>None</tt> by default if 'file' does not exist. You can make it throw an error by calling <tt>subdir.read("file", throwOnError=True)</tt> instead.
+
+You can also use the <tt>()</tt> operator, in which case you must specify a default value (if you don't, then the operator will return a sub directory):
+
+    data = subdir("file", None)   # returns None if file is not found
+
+You can also use both member and item notation to access files. In this case, though, an error will be thrown if the file does not exist
+
+    data = subdir.file      # raises AtttributeError if file is not found
+    data = subdir['file']   # raises KeyError if file is not found
+
+You can read a range of files in one function call:
+
+    data = subdir.read( ["file1", "file2"] )
+
+Finally, you can also iterate through all existing files:
+
+    for file in subdir:
+        data = subdir.read(file)
+        ...
+
+To obtain a list of all files  in our directory which have the correct extension, use <tt>keys()</tt>.
+
+##### Writing
+
+To write data, use any of
+
+    subdir.write("file", data)
+    subdir.file    = data
+    subdir['file'] = data
+
+To write several files at once, write
+
+    subdir.write(["file1", "file"], [data1, data2])
+
+##### Test existence of files
+
+To test existence of 'file' in a directory, use one of
+
+    subdir.exist('file')
+    'file' in subdir
+
+#### Deleting files
+
+To delete a 'file', use any of the following:
+
+    subdir.delete(file)
+    del subdir.file
+    del subdir['file']
+
+All of these are _silent_, and will not throw errors if 'file' does not exist. In order to throw an  error use
+
+    subdir.delete(file, raiseOnError=True)
+
+Other file and directoru deletion methods:
+
+* <tt>deleteAllKeys</tt>: delete all files in the directory, but do not delete sub directories or files with extensions different to our own.
+* <tt>deleteAllContent</tt>: delete all files with our extension, and all sub directories.
+* <tt>eraseEverything</tt>: delete everything
+
+
 ## verbose
 
 Utility class for printing 'verbose' information, with indentation.
@@ -509,10 +676,14 @@ Returns
 
 The purpose of initializing functions usually with <tt>quiet</tt> is that they can be used accross different contexts without printing anything by default.
 
+
+
+
 ## util
 
 Some basic utilities to make live easier.
 
+* <tt>CacheMode</tt> is a standardized pattern for caching data. See <tt>subdir</tt>.
 * <tt>fmt()</tt>: C++ style format function.
 * <tt>uniqueHash()</tt>: runs a standard hash over most combinations of standard elements or objects;
 <tt>uniqueHash32()</tt>, <tt>uniqueHash48()</tt>, and <tt>uniqueHash64()</tt> return hash values of at most length 32, 48, or 64.
@@ -526,9 +697,4 @@ Some basic utilities to make live easier.
             pass
 
         f_a = bind(f, a=1)
-
-## subdir
-A few tools to handle file i/o in a transparent way in the new <tt>subdir</tt> module. For the time being this is experimental.
-Please share any bugs with the author in case you do end up using them.
-
 
