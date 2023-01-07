@@ -1,16 +1,15 @@
 # cdxbasics
 
-Collection of basic tools for Python development.<br>
+Collection of basic tools for Python development.
 
 ## dynaplot
 
 Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit is making it easy to develop visualization with <tt>matplotlib</tt> which dynamically updates, for example during training with machine learing kits such as <tt>tensorflow</tt>. This has been tested with Anaconda's JupyterHub and <tt>%matplotlib inline</tt>. 
 
-Some users reported that the package does not work in some versions of Jupyter.
-In this case, please try <tt>fig.render( "canvas" )</tt>. I appreciate if you let me know whether this resolved
+Some users reported that the package does not work in some versions of Jupyter. In this case, please try <tt>fig.render( "canvas" )</tt>. I appreciate if you let me know whether this resolved
 the problem.
 
-#### Animation
+#### Animated Matplotlib in Jupyter
 
 See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb) for some applications. 
 
@@ -108,7 +107,7 @@ There are a number of other functions to aid plotting
 
 ## prettydict
 
-A number of simple extensions to standard dictionaries which allow accessing any element of the dictionary with "." notation:
+A number of simple extensions to standard dictionaries which allow accessing any element of the dictionary with "." notation. The purpose is to create a functional-programming style method of generating complex objects.
 
     from cdxbasics.prettydict import PrettyDict
     pdct = PrettyDict(z=1)
@@ -127,9 +126,9 @@ There are three versions:
         Pretty version of sorted dictionary.
 </ul>
 
-#### Functions
+#### Assigning member functions
 
-The classes also allow assigning bona fide member functions by a simple semantic of the form:
+"Pretty" objects also allow assigning bona fide member functions by a simple semantic of the form:
 
     def mult_b( self, x ):
         return self.b * x
@@ -153,17 +152,17 @@ The reason for this is as follows: consider
 
 ## config
 
-Tooling for setting up program-wide configuration. Aimed at machine learning
-programs to ensure consistency of code accross experimentation.
+Tooling for setting up program-wide configuration. Aimed at machine learning programs to ensure consistency of code accross experimentation.
 
     from cdxbasics.config import Config
     config = Config()
 
-Key features
+**Key features**
 <ul>
 <li>Detect misspelled parameters by checking that all parameters of a config have been read.
 <li>Provide summary of all values read, including summary help for what they were for.
 <li>Nicer synthax than dictionary notation.
+<li>Simple validation to ensure values are within a given range or from a list of options.
 </ul>
 
 #### Creating configs
@@ -188,16 +187,15 @@ This is equivalent to
             config.network.widht         = 100   # (intentional typo)
 
 #### Reading a config
-Reading a config provides notation for type handling and also specifying help on what the respective feature is used for. See the <tt>usage_report()</tt>
-member.
+
+When reading a config, the recommended pattern involves providing a default value, its type (and possibly simple restrictions; see below), and a help text. The latter is used by the function  <tt>usage_report()</tt> which therefore provides live documentation of the code which uses the config object.
 
         def __init__( self, confg ):
             # read top level parameters
             self.features = config("features", [], list, "Features for the agent" )
             self.weights  = config("weights", [], np.asarray, "Weigths for the agent", help_default="no initial weights")
 
-When a parameter is read with <tt>()</tt>, we are able to specify not only the name, but also its default value, and a <i>cast</i> operator. For example,
-in the case of <tt>weigths</tt> we provide the numpy function <tt>asarray</tt>.
+In above example <tt>weigths</tt>  <tt>asarray</tt>.
 
 Further parameters of <tt>()</tt> are the help text, plus ability to provide text versions of the default with <tt>help_default</tt> (e.g. if the default value is complex), and the cast operator with <tt>help_cast</tt> (again if the
 respective operation is complex).
