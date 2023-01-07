@@ -371,24 +371,30 @@ class Config(OrderedDict):
     def done(self, include_children : bool = True, mark_done : bool = True ):
         """ 
         Closes the config and checks that no unread parameters remain.
-        By default this function also validates that all child configs were
-        "done".
-        If you want to make a copy of a child config for later processing
-        use detach() first
-        
+        By default this function also validates that all child configs were done".
+
+        If you want to make a copy of a child config for later processing use detach() first
+            config = Config()
+            config.a = 1
+            config.child.b = 2
+            
+            _ = config.a # read a
+            config.done()   # error because confg.child.b has not been read yet        
+
+        Instead use:
             config = Config()
             config.a = 1
             config.child.b = 2
             
             _ = config.a # read a
             child = config.child.detach()
-            config.done()   # no error
-        
+            config.done()   # no error, even though confg.child.b has not been read yet        
         """
         inputs = set(self)
         rest   = inputs - self._done
         if len(rest) > 0:
-            _log.verify( False, "Error closing config '%s': the following config arguments were not read: %s\nRecord of this object:\n%s", \
+            _log.verify( False, "Error closing '%s': the following config arguments were not read: %s\n\n"\
+                                "Summary of all variables read from this object:\n%s", \
                                         self._name, list(rest), \
                                         self.usage_report(filter_path=self._name ) )        
         if include_children:
@@ -823,7 +829,11 @@ class Config(OrderedDict):
             else:
                 reported += report + "\n"
 
-        return rep_here + "# \n" + reported if len(rep_here) > 0 else reported
+        if len(reported) == 0:
+            return rep_here
+        if len(rep_here) == 0:
+            return reported
+        return rep_here + "# \n" + reported
 
     def usage_reproducer(self) -> str:
         """

@@ -161,7 +161,7 @@ Tooling for setting up program-wide configuration. Aimed at machine learning pro
 <ul>
 <li>Detect misspelled parameters by checking that all parameters of a config have been read.
 <li>Provide summary of all values read, including summary help for what they were for.
-<li>Nicer synthax than dictionary notation.
+<li>Nicer synthax than dictionary notation, in particular for nested configurations.
 <li>Simple validation to ensure values are within a given range or from a list of options.
 </ul>
 
@@ -169,87 +169,136 @@ Tooling for setting up program-wide configuration. Aimed at machine learning pro
 
 Set data with both dictionary and member notation:
         
-            config = Config()
-            config['features']           = [ 'time', 'spot' ]
-            config.weights               = [ 1, 2, 3 ]
+    config = Config()
+    config['features']           = [ 'time', 'spot' ]
+    config.weights               = [ 1, 2, 3 ]
             
 Create sub configurations with member notation
         
-            config.network.depth         = 10
-            config.network.activation    = 'relu'
-            config.network.width         = 100   # (intentional typo)
+    config.network.depth         = 10
+    config.network.activation    = 'relu'
+    config.network.width         = 100   # (intentional typo)
 
 This is equivalent to 
 
-            config.network               = Config()
-            config.network.depth         = 10
-            config.network.activation    = 'relu'
-            config.network.widht         = 100   # (intentional typo)
+    config.network               = Config()
+    config.network.depth         = 10
+    config.network.activation    = 'relu'
+    config.network.width         = 100
 
 #### Reading a config
 
-When reading a config, the recommended pattern involves providing a default value, its type (and possibly simple restrictions; see below), and a help text. The latter is used by the function  <tt>usage_report()</tt> which therefore provides live documentation of the code which uses the config object.
+When reading a config, the recommended pattern involves providing a default value, its cast-type (and possibly simple restrictions; see below), and a help text. The latter is used by the function  <tt>usage_report()</tt> which therefore provides live documentation of the code which uses the config object.
 
-        def __init__( self, confg ):
+    class Network(object):
+        def __init__( self, config ):
             # read top level parameters
             self.features = config("features", [], list, "Features for the agent" )
             self.weights  = config("weights", [], np.asarray, "Weigths for the agent", help_default="no initial weights")
+            config.done() # see below
 
-In above example <tt>weigths</tt>  <tt>asarray</tt>.
+In above example any data provided for they keywords <tt>weigths</tt> will be cast using <tt>numpy.asarray</tt>. 
 
 Further parameters of <tt>()</tt> are the help text, plus ability to provide text versions of the default with <tt>help_default</tt> (e.g. if the default value is complex), and the cast operator with <tt>help_cast</tt> (again if the
 respective operation is complex).
 
-__Important__: the <tt>()</tt> operator will <i>not</i> default 'default' to None as <tt>dict.get</tt> does. If no default is specified, then
-<tt>()</tt> will return an error
-if the respective value was not provided. Therefore, <tt>config(key)</tt> behaves like <tt>config[key]</tt>.
+__Important__: the <tt>()</tt> operator does not have a default value unless specified. If no default value is specified, then an error is generated.
 
-<br>
+You can read sub-configurations with the previsouly introduced member notation:
 
-Accessing children directly with member notation
+    self.activation = config.network("activation", "relu", str, "Activation function for the network")
 
-            self.activation = config.network("activation", "relu", str, "Activation function for the network")
+An alternative is the explicit:
 
-Accessing via the child node
-
-            network  = config.network 
-            self.depth = network('depth', 10000, int, "Depth for the network") 
+    network  = config.network 
+    self.depth = network('depth', 10000, int, "Depth for the network") 
             
 #### Imposing simple restrictions on values
 
-We can impose simple restrictions
+We can impose simple restrictions to any values read from a config. To this end, import the respective type operators:
 
-            self.width = network('width', 100, Int>3, "Width for the network")
+    from cdxbasics.config import Int, Float
+
+One-sided restriction:
+
+    self.width = network('width', 100, Int>3, "Width for the network")
 
 Restrictions on both sides of a scalar:
 
-            self.percentage = network('percentage', 0.5, ( Float >= 0. ) & ( Float <= 1.), "A percentage")
+    self.percentage = network('percentage', 0.5, ( Float >= 0. ) & ( Float <= 1.), "A percentage")
 
-Enforce being a member of a list
+Enforce the value being a member of a list:
 
-            self.ntype = network('ntype', 'fastforward', ['fastforward','recurrent','lstm'], "Type of network")
+    self.ntype = network('ntype', 'fastforward', ['fastforward','recurrent','lstm'], "Type of network")
 
 #### Ensuring that we had no typos & that all provided data is meaningful
 
-Do not forget to call <tt>done()</tt> once done with this config. 
+A common issue when using dictionary-based code is that we might misspell one of the parameters. Unless this is a mandatory parameter we might not notice that we have not actually changed its value in the code below.
 
-            config.done()    # checks that we have read all keywords.
+To check that all values of <tt>config</tt> are read use <tt>done()</tt>
+
+    config.done()    # checks that we have read all keywords.
             
-It will alert you if there are keywords or children which haven't been read. Most likely, those will be typos. In our example above, <tt>width</tt> was misspelled in setting up the config, so you will get a warning to this end:
+It will alert you if there are keywords or children which haven't been read. Most likely, those will be typos. Consider the following example where <tt>width</tt> is misspelled in our config:
 
-        *** LogException: Error closing config 'config.network': the following config arguments were not read: ['widht']
-        Record of this object:
-        config.network['activation'] = relu # Activation function for the network; default: relu
-        config.network['depth'] = 10 # Depth for the network; default: 10000
-        config.network['width'] = 100 # Width for the network; default: 100
-        #
-        config['features'] = ['time', 'spot'] # Features for the agent; default: []
-        config['weights'] = [1 2 3] # Weigths for the agent; default: []
+    class Network(object):
+        def __init__( self, config ):
+            # read top level parameters
+            self.depth     = config("depth", 1, Int>=1, "Depth of the network")
+            self.width     = config("width", 3, Int>=1, "Width of the network")
+            self.activaton = config("activation", "relu", help="Activation function", help_cast="String with the function name, or function")
+            config.done() # <-- test that all members of config where read
+
+    config                       = Config()
+    config.features              = ['time', 'spot']
+    config.network.depth         = 10
+    config.network.activation    = 'relu'
+    config.network.widht         = 100   # (intentional typo)
+
+    n = Network(config.network)
+
+Since <tt>width</tt> was misspelled in setting up the config, you will get a warning to this end:
+
+    Error closing 'config.network': the following config arguments were not read: ['widht']
+
+    Summary of all variables read from this object:
+    config.network['activation'] = relu # Activation function; default: relu
+    config.network['depth'] = 10 # Depth of the network; default: 1
+    config.network['width'] = 3 # Width of the network; default: 3
+
+Note that you can also call <tt>done()</tt> at top level:
+
+    class Network(object):
+        def __init__( self, config ):
+            # read top level parameters
+            self.depth     = config("depth", 1, Int>=1, "Depth of the network")
+            self.width     = config("width", 3, Int>=1, "Width of the network")
+            self.activaton = config("activation", "relu", help="Activation function", help_cast="String with the function name, or function")
+
+    config                       = Config()
+    config.features              = ['time', 'spot']
+    config.network.depth         = 10
+    config.network.activation    = 'relu'
+    config.network.widht         = 100   # (intentional typo)
+
+    n = Network(config.network)
+    test_features = config("features", [], list, "Features for my network")
+    config.done()
+
+produces
+
+    ERROR:x:Error closing 'config.network': the following config arguments were not read: ['widht']
+
+    Summary of all variables read from this object:
+    config.network['activation'] = relu # Activation function; default: relu
+    config.network['depth'] = 10 # Depth of the network; default: 1
+    config.network['width'] = 3 # Width of the network; default: 3
+    # 
+    config['features'] = ['time', 'spot'] #  Default: 2
 
 #### Detaching child configs
 
-You can also detach a child config, which allows you to store it for later
-use without triggering <tt>done()</tt>  errors for its parent.
+You can also detach a child config, which allows you to store it for later use without triggering <tt>done()</tt> errors:
     
         def read_config(  self, confg ):
             ...
