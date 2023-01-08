@@ -21,8 +21,8 @@ the problem.
 
 See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb) for some applications. 
 
-![dynamic line plot](https://github.com/hansbuehler/cdxbasics/raw/master/media/dynaplot.gif)
-![dynamic 3D plot](https://github.com/hansbuehler/cdxbasics/raw/master/media/dynaplot3D.gif)
+![dynamic line plot](media/dynaplot.gif)
+![dynamic 3D plot](media/dynaplot3D.gif)
 
     # example
     %matplotlib inline
