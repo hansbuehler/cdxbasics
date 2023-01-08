@@ -199,7 +199,20 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual( util.isAtomic(datetime.date(2020,4,1)), True )
         self.assertEqual( util.isAtomic(datetime.datetime(2020,4,1,11,0,0)), False )
         self.assertEqual( util.isAtomic(O()), False  )
-        
+
+        self.assertEqual( util.isAtomic(np.int_(0)), True  )
+        self.assertEqual( util.isAtomic(np.int32(0)), True  )
+        self.assertEqual( util.isAtomic(np.int64(0)), True  )
+        self.assertEqual( util.isAtomic(np.complex_(0)), True  )
+        self.assertEqual( util.isAtomic(np.datetime64()), True  )
+        self.assertEqual( util.isAtomic(np.timedelta64()), True  )
+        self.assertEqual( util.isAtomic(np.ushort(0)), True  )
+        self.assertEqual( util.isAtomic(np.float32(0)), True  )
+        self.assertEqual( util.isAtomic(np.float64(0)), True  )
+        self.assertEqual( util.isAtomic(np.ulonglong(0)), True  )
+        self.assertEqual( util.isAtomic(np.longdouble(0)), True  )
+        self.assertEqual( util.isAtomic(np.half(0)), True  )
+
         def f(x):
             pass
         
