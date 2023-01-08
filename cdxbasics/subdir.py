@@ -855,7 +855,7 @@ class SubDir(object):
                 caching = CacheMode( kwargs['cacheMode'] )
                 del kwargs['cacheMode']        # do not pass 'cacheMode' as parameter to 'f'     
             # simply no caching
-            if caching.off:
+            if caching.is_off:
                 wrapper.cached       = False
                 wrapper.cacheArgKey  = None
                 wrapper.cacheFullKey = None

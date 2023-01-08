@@ -7,7 +7,7 @@ import datetime as datetime
 import types as types
 from functools import wraps
 import hashlib as hashlib
-
+from collections.abc import Mapping, Collection
 from .prettydict import PrettyDict
 
 # support for numpy and pandas is optional for this module
@@ -180,6 +180,7 @@ def plain( inn, sorted = False ):
 # Hashing / unique representatives
 # =============================================================================
 
+
 def uniqueHash(*args, **kwargs) -> str:
     """ 
     Generates a hash key for any collection of python objects.
@@ -196,7 +197,8 @@ def uniqueHash(*args, **kwargs) -> str:
     """    
     m = hashlib.md5()
     def update(s):
-        m.update(repr(s).encode('utf-8'))
+        s_ =  repr(s).encode('utf-8')
+        m.update(s_)
     def visit(inn):
         # basics
         if inn is None:
@@ -220,27 +222,30 @@ def uniqueHash(*args, **kwargs) -> str:
         if not pd is None and isinstance(inn,pd.DataFrame):
             update(inn)
             return
-        # sets --> sorted list
-        if isinstance(inn,set):
-            inn = list(inn)
-            inn.sort()
-        # lists, tuples and everything which looks like it --> lists
-        if not getattr(inn,"__iter__",None) is None:
-            for k in inn:
-                visit(k)
-            return
-        # dictionaries
-        if not isinstance(inn,dict):
-            inn = getattr(inn,"__dict__",None)
-            if inn is None:
-                raise TypeError(fmt("Cannot handle type %s", type(inn)))        
-        inns = list(inn.keys())
-        inns.sort() # this ensures that dictionaries are always in the right order
-        for k in inn:
-            if k[0] != '_':
+        # dictionaries, and similar
+        if isinstance(inn,Mapping):
+            assert not isinstance(inn, list)
+            inn_ = sorted(inn.keys())
+            for k in inn_:
+                if k[:1] == '_':
+                    continue
                 update(k)
                 visit(inn[k])
-        return
+            return
+        # lists, tuples and everything which looks like it --> lists
+        if isinstance(inn, Collection):
+            assert not isinstance(inn, dict)
+            for k in inn:
+                if isinstance(k,str) and k[:1] == "_":
+                    continue
+                visit(k)
+            return
+        # objects: treat like dictionaries        
+        inn_ = getattr(inn,"__dict__",None)
+        if inn_ is None:
+            raise TypeError(fmt("Cannot handle type %s", type(inn)))        
+        assert isinstance(inn_,Mapping)
+        visit(inn_)
         
     visit(args)
     visit(kwargs)
@@ -405,3 +410,50 @@ def bind( F, **kwargs ):
 # =============================================================================
 
 Generic = PrettyDict
+
+
+"""
+class Object(object):
+    def __init__(self):
+        self.x = [ 1,2,3. ]
+        self.y = { 'a':1, 'b':2 }
+        self.z = PrettyDict(c=3,d=4)
+        self.r = set([65,6234,1231,123123,12312]) 
+        self.t = (1,2,"test")
+                    
+        def ff():
+            pass
+        
+        self.ff = ff
+        self.gg = lambda x : x*x
+        
+        if not np is None and not pd is None:
+            self.a = np.array([1,2,3])
+            self.b = np.zeros((3,4,2))
+            self.c = pd.DataFrame({'a':np.array([1,2,3]),'b':np.array([10,20,30]),'c':np.array([100,200,300]),  })
+            
+            u = uniqueHash(self.b) # numpy
+            assert u=="863f748c37fa0aa44bc1c4a5f8093244", u
+            u = uniqueHash(self.c) # panda frame
+            assert u=="61af55defe5d0d51d5cad16c944460c9", u
+    
+    def f(self):
+        pass
+    
+    @staticmethod
+    def g(self):
+        pass
+    
+    @property
+    def h(self):
+        return self.x
+
+x = np.array([1,2,3,4.])
+u = uniqueHash(x)
+assert u == "d819f0b72b849d66112e139fa3b7c9f1", u
+    
+o = Object()
+u = uniqueHash(o)
+assert u == "6e29f83d29e8432cf46e34c47d605e89", u
+"""
+

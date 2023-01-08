@@ -11,14 +11,17 @@ import cdxbasics.kwargs as mdl_kwargs
 import cdxbasics.subdir as mdl_subdir
 import cdxbasics.logger as mdl_logger
 import cdxbasics.prettydict as prettydict
-import importlib as imp
 if False:
+    import importlib as imp
     imp.reload(mdl_kwargs)
     imp.reload(mdl_subdir)
     imp.reload(mdl_logger)
     imp.reload(config)
     imp.reload(prettydict)
     imp.reload(util)
+
+import numpy as np
+import pandas as pd
 
 SubDir = mdl_subdir.SubDir
 CacheMode = mdl_subdir.CacheMode
@@ -30,18 +33,13 @@ fmt = util.fmt
 PrettyDict = prettydict.PrettyDict
 PrettySortedDict = prettydict.PrettySortedDict
 PrettyOrderedDict = prettydict.PrettyOrderedDict
+uniqueHash = util.uniqueHash
 
 Config = config.Config
 Float = config.Float
 Int = config.Int
 
-mdl_subdir._log.setLevel(Logger.CRITICAL)   # no logging in testing
-
-# support for numpy and pandas is optional
-# for this module
-# April'20
-np = util.np   # might be None
-pd = util.pd   # might be None
+mdl_subdir._log.setLevel(Logger.CRITICAL+1)   # no logging in testing
 
 class CDXBasicsTest(unittest.TestCase):
 
@@ -235,9 +233,10 @@ class CDXBasicsTest(unittest.TestCase):
             def __init__(self):
                 self.x = [ 1,2,3. ]
                 self.y = { 'a':1, 'b':2 }
-                self.z = util.PrettyDict(c=3,d=4)
+                self.z = PrettyDict(c=3,d=4)
                 self.r = set([65,6234,1231,123123,12312]) 
-                
+                self.t = (1,2,"test")
+                            
                 def ff():
                     pass
                 
@@ -249,8 +248,10 @@ class CDXBasicsTest(unittest.TestCase):
                     self.b = np.zeros((3,4,2))
                     self.c = pd.DataFrame({'a':np.array([1,2,3]),'b':np.array([10,20,30]),'c':np.array([100,200,300]),  })
                     
-                    u = util.uniqueHash(self.c)
-                    tst.assertEqual(u,"61af55defe5d0d51d5cad16c944460c9")
+                    u = uniqueHash(self.b) # numpy
+                    tst.assertEqual( u, "863f748c37fa0aa44bc1c4a5f8093244" )
+                    u = uniqueHash(self.c) # panda frame
+                    tst.assertEqual( u, "61af55defe5d0d51d5cad16c944460c9" )
             
             def f(self):
                 pass
@@ -262,22 +263,20 @@ class CDXBasicsTest(unittest.TestCase):
             @property
             def h(self):
                 return self.x
-
-        if not np is None:
-            x = np.array([1,2,3,4.])
-            u = util.uniqueHash(x)
-            self.assertEqual(u,"d819f0b72b849d66112e139fa3b7c9f1")
-
+        
+        x = np.array([1,2,3,4.])
+        u = uniqueHash(x)
+        self.assertEqual( u, "d819f0b72b849d66112e139fa3b7c9f1" )
+            
         o = Object()
-        u = util.uniqueHash(o)
-        if (not np is None) and (not pd is None):
-            self.assertEqual(u,"fabf6f1ae209dec8c9afc020d642c2c5")
-        else:
-            self.assertEqual(u,"a0a5d25d01daad0025420024a933e068")
+        u = uniqueHash(o)
+        self.assertEqual( u, "b6dd9dd20b081fc257295a9d0f6ed6f4" )
+            
+        # plain
         p = util.plain(o)
         p = str(p).replace(' ','').replace('\n','')
         if (not np is None) and (not pd is None):
-            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234],'a':array([1,2,3]),'b':array([[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]]]),'c':None}"
+            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234],'t':[1,2,'test'],'a':array([1,2,3]),'b':array([[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]]]),'c':None}"
         else:
             tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234]}"
         self.assertEqual(p,tst)
@@ -436,11 +435,11 @@ class CDXBasicsCacheTest(unittest.TestCase):
 
         _ = self.f(x,y)
         self.assertTrue( self.f.cached )
-        _ = self.f(x,y,caching='no')
+        _ = self.f(x,y,cacheMode='off')
         self.assertFalse( self.f.cached )
         _ = self.f(x,y)
         self.assertTrue( self.f.cached )
-        _ = self.f(x,y,caching='clear')
+        _ = self.f(x,y,cacheMode='clear')
         self.assertFalse( self.f.cached )
         
         _ = CDXBasicsCacheTest.g(x,y)
@@ -584,6 +583,64 @@ class CDXCConfigTest(unittest.TestCase):
         self.assertEqual( config.sub.get_recorded("b"), 22)
         self.assertEqual( config.det.get_recorded("o"), 1)
         self.assertEqual( config.det.get_recorded("p"), 22)
+        
+        # unique ID
+        
+        config = Config()
+        # world
+        config.world.samples = 10000
+        config.world.steps = 20
+        config.world.black_scholes = True
+        config.world.rvol = 0.2    # 20% volatility
+        config.world.drift = 0.    # real life drift
+        config.world.cost_s = 0.
+        # gym
+        config.gym.objective.utility = "cvar"
+        config.gym.objective.lmbda = 1.  
+        config.gym.agent.network.depth = 6
+        config.gym.agent.network.width = 40
+        config.gym.agent.network.activation = "softplus"
+        # trainer
+        config.trainer.train.optimizer = "adam"
+        config.trainer.train.batch_size = None
+        config.trainer.train.epochs = 400
+        config.trainer.caching.epoch_freq = 10
+        config.trainer.caching.mode = "on"
+        config.trainer.visual.epoch_refresh = 1
+        config.trainer.visual.time_refresh = 10
+        config.trainer.visual.confidence_pcnt_lo = 0.25
+        config.trainer.visual.confidence_pcnt_hi = 0.75
+        
+        id1 = config.unique_id()
+        
+        config = Config()
+        # world
+        config.world.samples = 10000
+        config.world.steps = 20
+        config.world.black_scholes = True
+        config.world.rvol = 0.2    # 20% volatility
+        config.world.drift = 0.    # real life drift
+        config.world.cost_s = 0.
+        # gym
+        config.gym.objective.utility = "cvar"
+        config.gym.objective.lmbda = 1.  
+        config.gym.agent.network.depth = 5   # <====== changed this
+        config.gym.agent.network.width = 40
+        config.gym.agent.network.activation = "softplus"
+        # trainer
+        config.trainer.train.optimizer = "adam"
+        config.trainer.train.batch_size = None
+        config.trainer.train.epochs = 400
+        config.trainer.caching.epoch_freq = 10
+        config.trainer.caching.mode = "on"
+        config.trainer.visual.epoch_refresh = 1
+        config.trainer.visual.time_refresh = 10
+        config.trainer.visual.confidence_pcnt_lo = 0.25
+        config.trainer.visual.confidence_pcnt_hi = 0.75
+        
+        id2 = config.unique_id()
+        
+        self.assertNotEqual(id1,id2)
         
 if __name__ == '__main__':
     unittest.main()
