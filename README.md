@@ -2,6 +2,14 @@
 
 Collection of basic tools for Python development.
 
+Install by
+
+    conda install cdxbasics -c hansbuehler
+
+or
+
+    pip install cdxbasics
+
 ## dynaplot
 
 Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit is making it easy to develop visualization with <tt>matplotlib</tt> which dynamically updates, for example during training with machine learing kits such as <tt>tensorflow</tt>. This has been tested with Anaconda's JupyterHub and <tt>%matplotlib inline</tt>. 
