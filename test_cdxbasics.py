@@ -281,10 +281,14 @@ class CDXBasicsTest(unittest.TestCase):
         u = uniqueHash(x)
         self.assertEqual( u, "d819f0b72b849d66112e139fa3b7c9f1" )
             
+        o2 = [ np.float32(0), np.float64(0), np.int32(0), np.int64(0) ]
+        u = uniqueHash(o2)
+        self.assertEqual( u, "818745c4d2c2ac8393b1d9571dc0d1bc" )
+            
         o = Object()
         u = uniqueHash(o)
         self.assertEqual( u, "b6dd9dd20b081fc257295a9d0f6ed6f4" )
-            
+        
         # plain
         p = util.plain(o)
         p = str(p).replace(' ','').replace('\n','')
@@ -293,6 +297,8 @@ class CDXBasicsTest(unittest.TestCase):
         else:
             tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234]}"
         self.assertEqual(p,tst)
+        
+        
 
     def test_subdir(self):
         
