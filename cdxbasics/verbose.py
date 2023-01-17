@@ -4,7 +4,7 @@ Utility for verbose printing with indentation
 Hans Buehler 2022
 """
 
-from .util import prnt, fmt
+from .util import fmt
 from .logger import Logger
 _log = Logger(__file__)
 
@@ -24,6 +24,10 @@ class Context(object):
         f_2( context.sub(1, "Entering 'f_2'") )
     
     """
+    
+    QUIET   = "quiet"
+    ALL     = "all"
+    DEFAULT = "default"
         
     def __init__(self, *,  parent =None, verbose="default", level : int=None, default_sub : int=None, indent : int=None, fmt_level : str="%02ld: " ):
         """
@@ -50,11 +54,11 @@ class Context(object):
                 Formatting for the level when reporting. Defaults to "%0ld: ". Use " " to just indent, or "" for not printing anything per level.
         """
         if isinstance( verbose, str ):
-            if verbose == "quiet":
+            if verbose == self.QUIET:
                 verbose = -1
-            elif verbose == "all":
+            elif verbose == self.ALL:
                 verbose = None
-            elif verbose == "default":
+            elif verbose == self.DEFAULT:
                 verbose = parent.verbose if not parent is None else -1
             else:
                 verbose = int(verbose)
@@ -112,7 +116,7 @@ class Context(object):
     def fmt( self, level : int, message : str, *args, **kwargs ) -> str:
         """
         Formats message with the formattting arguments at curent context level plus 'level'
-        The message will be formatted as util.fmt( message, *args, **kwargs ) and then indented appropriately.
+        The message will be formatted with util.fmt( message, *args, **kwargs ) and then indented appropriately.
         
         Parameters
         ----------
@@ -146,12 +150,13 @@ class Context(object):
                 Level of the sub context with respect to self. Set to 0 for the same level.
                 Use None to use the default increase set in self.default_sub (typically 1)
             message, fmt, args:
-                If message is not None, call report() at current level.
+                If message is not None, call report() at _current_ level, not the newly
+                created sub level
                 
         Returns
         -------
             Context
-                Sub contextn with level = self.level + sub_level
+                Sub context with level = self.level + sub_level
         """
         sub_level = int(sub_level) if not sub_level is None else self.default_sub
         _log.verify( sub_level >= 0, "'sub_level' cannot be negative. Found %ld", sub_level)
@@ -177,14 +182,14 @@ class Context(object):
         """ Whether the current context is quiet """
         return not self.verbose is None and self.verbose < 0
 
-    def shall_report(self, sub_level) -> bool:
-        """ Returns whether to print at 'sub_level' """
+    def shall_report(self, sub_level : int = 0 ) -> bool:
+        """ Returns whether to print something at 'sub_level' relative to the current level """
         sub_level  = int(sub_level)
         _log.verify( sub_level >= 0, "'sub_level' cannot be negative. Found %ld", sub_level)
         return self.verbose is None or self.verbose >= self.level + sub_level
     
-    def str_indent(self, sub_level=0) -> str:
-        """ Returns the string identation for a given sublevel, or the context """
+    def str_indent(self, sub_level : int = 0) -> str:
+        """ Returns the string identation for a given 'sub_level', or the context """
         sub_level  = int(sub_level)
         _log.verify( sub_level >= 0, "'sub_level' cannot be negative. Found %ld", sub_level)
         s1 = ' ' * (self.indent * (self.level + sub_level))
@@ -192,10 +197,10 @@ class Context(object):
         return s2+s1
 
 # Recommended default parameter 'quiet' for functions accepting a context parameter
-quiet = Context(verbose="quiet")
+quiet = Context(verbose=Context.QUIET)
 Context.quiet = quiet
     
-def test():
+def test():#NOQA
     
     def f_sub( num=10, context = quiet ):
             context.report(0, "Entering loop")

@@ -347,8 +347,12 @@ class Config(OrderedDict):
         return self._children
     
     def __str__(self) -> str:
-        """ Print all inputs """
-        return self.usage_report()
+        """ Print myself as dictionary """
+        return str(self.as_dict)
+
+    def __repr__(self) -> str:
+        """ Print myself as reconstructable object """
+        return "Config( **" + self.__str__() + " )"
 
     @property
     def as_dict(self) -> dict:
