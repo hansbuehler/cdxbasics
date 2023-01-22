@@ -192,6 +192,7 @@ def uniqueHash(*args, **kwargs) -> str:
         2) keys of dictionaries, and sets are sorted to ensure equality of hashes
            accross different memory setups of strings
         3) Members with leading '_' are ignored
+        4) Functions and properties are ignored
     
     Hans Buehler 2017
     """    

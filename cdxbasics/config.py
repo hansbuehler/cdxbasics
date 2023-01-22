@@ -886,7 +886,16 @@ class Config(OrderedDict):
         """
         Returns an MDH5 hash key for this object, based on its provided inputs /not/ based on its usage
         ** WARNING **
-        This function ignores any config keys or children with leading '_'.
+        This function ignores 
+         1) Config keys or children with leading '_'s
+         2) Functions and properties.
+                That means that 
+                    config = Config()
+                    config.f = lamnda x : x**2
+                and
+                    config = Config()
+                    config.f = lamnda x : 2*x
+                cannot be distinguished with this function.
         """
         inputs = {}
         for key in self:
