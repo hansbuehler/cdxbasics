@@ -7,6 +7,7 @@ import datetime as datetime
 import types as types
 from functools import wraps
 import hashlib as hashlib
+import inspect as inspect
 from collections.abc import Mapping, Collection
 from .prettydict import PrettyDict
 
@@ -180,6 +181,92 @@ def plain( inn, sorted = False ):
 # Hashing / unique representatives
 # =============================================================================
 
+def _compress_function_code( f ):
+    """ Returns a compressed version of the code of the function 'f' """
+    src = inspect.getsourcelines( f )[0]
+    if isinstance(f,types.LambdaType):
+        assert len(src) > 0, "No source code ??"
+        l = src[0]
+        i = l.lower().find("lambda ")
+        src[0] = l[i+len("lambda "):]        
+    src = [ l.replace("\t"," ").replace(" ","").replace("\n","") for l in src ]
+    return src
+
+def uniqueHashExt( length, parse_functions = False ):
+    """ Returns a function which generates hashes of length 'length', or of standard length if length is None """
+    def unique_hash(*args, **kwargs) -> str:
+        """ 
+        Generates a hash key for any collection of python objects.
+        Typical use is for key'ing data vs a unique configuation.
+        
+        The function
+            1) uses the repr() function to feed objects to the hash algorithm.
+               that means is only distinguishes floats up to str conversion precision
+            2) keys of dictionaries, and sets are sorted to ensure equality of hashes
+               accross different memory setups of strings
+            3) Members with leading '_' are ignored
+            4) Functions and properties are ignored
+        
+        Hans Buehler 2017
+        """    
+        m = hashlib.md5() if length is None else hashlib.shake_128()
+        def update(s):
+            s_ =  repr(s).encode('utf-8')
+            m.update(s_)
+        def visit(inn):
+            # basics
+            if inn is None:
+                return
+            # by default do not handle functions.
+            if isFunction(inn) or isinstance(inn,property):
+                if parse_functions: update( _compress_function_code(inn) )
+                return 
+            # basic elements
+            if isAtomic(inn):
+                update(inn)
+                return
+            # some standard types
+            if isinstance(inn,(datetime.time,datetime.date,datetime.datetime)):
+                update(inn)
+                return
+            # numpy
+            if not np is None and isinstance(inn,np.ndarray):
+                update(inn)
+                return
+            # pandas
+            if not pd is None and isinstance(inn,pd.DataFrame):
+                update(inn)
+                return
+            # dictionaries, and similar
+            if isinstance(inn,Mapping):
+                assert not isinstance(inn, list)
+                inn_ = sorted(inn.keys())
+                for k in inn_:
+                    if k[:1] == '_':
+                        continue
+                    update(k)
+                    visit(inn[k])
+                return
+            # lists, tuples and everything which looks like it --> lists
+            if isinstance(inn, Collection):
+                assert not isinstance(inn, dict)
+                for k in inn:
+                    if isinstance(k,str) and k[:1] == "_":
+                        continue
+                    visit(k)
+                return
+            # objects: treat like dictionaries        
+            inn_ = getattr(inn,"__dict__",None)
+            if inn_ is None:
+                raise TypeError(fmt("Cannot handle type %s", type(inn)))        
+            assert isinstance(inn_,Mapping)
+            visit(inn_)
+            
+        visit(args)
+        visit(kwargs)
+        return m.hexdigest() if length is None else m.hexdigest(length//2)
+    unique_hash.name = "uniqueHash(%s,%s)" % (str(length),str(parse_functions))
+    return unique_hash
 
 def uniqueHash(*args, **kwargs) -> str:
     """ 
@@ -196,93 +283,19 @@ def uniqueHash(*args, **kwargs) -> str:
     
     Hans Buehler 2017
     """    
-    m = hashlib.md5()
-    def update(s):
-        s_ =  repr(s).encode('utf-8')
-        m.update(s_)
-    def visit(inn):
-        # basics
-        if inn is None:
-            return
-        # can't handle functions --> return None
-        if isFunction(inn) or isinstance(inn,property):
-            return None
-        # basic elements
-        if isAtomic(inn):
-            update(inn)
-            return
-        # some standard types
-        if isinstance(inn,(datetime.time,datetime.date,datetime.datetime)):
-            update(inn)
-            return
-        # numpy
-        if not np is None and isinstance(inn,np.ndarray):
-            update(inn)
-            return
-        # pandas
-        if not pd is None and isinstance(inn,pd.DataFrame):
-            update(inn)
-            return
-        # dictionaries, and similar
-        if isinstance(inn,Mapping):
-            assert not isinstance(inn, list)
-            inn_ = sorted(inn.keys())
-            for k in inn_:
-                if k[:1] == '_':
-                    continue
-                update(k)
-                visit(inn[k])
-            return
-        # lists, tuples and everything which looks like it --> lists
-        if isinstance(inn, Collection):
-            assert not isinstance(inn, dict)
-            for k in inn:
-                if isinstance(k,str) and k[:1] == "_":
-                    continue
-                visit(k)
-            return
-        # objects: treat like dictionaries        
-        inn_ = getattr(inn,"__dict__",None)
-        if inn_ is None:
-            raise TypeError(fmt("Cannot handle type %s", type(inn)))        
-        assert isinstance(inn_,Mapping)
-        visit(inn_)
-        
-    visit(args)
-    visit(kwargs)
-    return m.hexdigest()
-
-def uniqueHash_len( length ):
-    """ Computes a unique hash'd 'id' with maximum length """
-    def unique_filename(*args, **argv ):
-        """
-        Returns a unique filename of tghe specified len for the provided arguments
-        If the first argument is a string, and within 'length', then return that string.
-        """
-        if len(argv) == 0 and len(args) == 1 and isinstance(args[0], str):
-            if len(args[0]) <= length:
-                return args[0]
-        uid = uniqueHash(args,argv).encode('utf-8')
-        if len(uid) <= length:
-            return uid.decode()
-        m = hashlib.shake_128()
-        m.update(uid)
-        f = m.hexdigest(length//2)
-        return f.decode()
-    unique_filename.length = length
-    return unique_filename
+    return uniqueHashExt(None)(*args,**kwargs)
 
 def uniqueHash32( *args, **argv ) -> str:
     """ Compute a unique ID of length 32 for the provided arguments """
-    return uniqueHash_len(32)(*args,**argv)
+    return uniqueHashExt(32)(*args,**argv)
 
 def uniqueHash48( *args, **argv ) -> str:
     """ Compute a unique ID of length 48 for the provided arguments """
-    return uniqueHash_len(48)(*args,**argv)
+    return uniqueHashExt(48)(*args,**argv)
 
 def uniqueHash64( *args, **argv ) -> str:
     """ Compute a unique ID of length 64 for the provided arguments """
-    return uniqueHash_len(64)(*args,**argv)
+    return uniqueHashExt(64)(*args,**argv)
 
 # =============================================================================
 # Caching tools

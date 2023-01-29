@@ -7,7 +7,7 @@ Hans Buehler 2022
 from collections import OrderedDict
 from collections.abc import Mapping
 from sortedcontainers import SortedDict
-from .util import uniqueHash
+from .util import uniqueHashExt
 from .prettydict import PrettyDict as pdct
 from .logger import Logger
 _log = Logger(__file__)
@@ -873,29 +873,29 @@ class Config(OrderedDict):
             report += i + "\n"        
         return report
         
-    def input_dict(self) -> dict:
+    def input_dict(self, ignore_underscore = True ) -> dict:
         """ Returns a (pretty) dictionary of all inputs into this config. """
         inputs = pdct()  
         for key in self:
+            if ignore_underscore and key[:1] == "_":
+                continue
             inputs[key] = self.get_raw(key)
         for c in self._children:
+            if ignore_underscore and c[:1] == "_":
+                continue
             inputs[c] = self._children[c].input_dict()
         return inputs
         
-    def unique_id(self) -> str:
+    def unique_id(self, length = None, parse_functions = False ) -> str:
         """
         Returns an MDH5 hash key for this object, based on its provided inputs /not/ based on its usage
         ** WARNING **
         This function ignores 
          1) Config keys or children with leading '_'s
-         2) Functions and properties.
-                That means that 
-                    config = Config()
-                    config.f = lamnda x : x**2
-                and
-                    config = Config()
-                    config.f = lamnda x : 2*x
-                cannot be distinguished with this function.
+         2) Functions and properties unless parse_functions is True
+            In the latter case function code will be used to distinguish 
+            functions assigned to the config.
+        See util.unqiueHashExt() for further information.
         """
         inputs = {}
         for key in self:
@@ -906,7 +906,7 @@ class Config(OrderedDict):
             if c[:1] == "_":
                 continue
             inputs[c] = self._children[c].unique_id() 
-        return uniqueHash(inputs)
+        return uniqueHashExt(length=length,parse_functions=parse_functions)(inputs)
 
     # magic
     # -----

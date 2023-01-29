@@ -287,8 +287,14 @@ class SubDir(object):
         """
         if self._path is None:
             return None
-        if len(self._ext) > 0 and key[-len(self._ext):] != self._ext:
-                 
+        _log.verify( len(key) > 0, "'key' cannot be empty")
+        _log.verify( key.find("/") == -1, "'key' must be a filename without directory information. It cannot contain forward slashes '/'. Found %s", key)
+        _log.verify( key.find("\\") == -1, "'key' must be a filename without directory information. It cannot contain backward slashes '\\'. Found %s", key)
+        _log.verify( key.find(":") == -1, "'key' must be a filename without directory information. It cannot contain ':'. Found %s", key)
+        _log.verify( key.find("~") == -1, "'key' must be a filename without directory information. It cannot contain '~'. Found %s", key)
+        _log.verify( key[0] != '!', "'key' must be a filename without directory information. It cannot start with '!'. Found %s", key)
+        
+        if len(self._ext) > 0 and key[-len(self._ext):] != self._ext:                 
             return self._path + key + self._ext
         return self._path + key
 

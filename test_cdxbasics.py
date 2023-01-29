@@ -33,7 +33,12 @@ fmt = util.fmt
 PrettyDict = prettydict.PrettyDict
 PrettySortedDict = prettydict.PrettySortedDict
 PrettyOrderedDict = prettydict.PrettyOrderedDict
-uniqueHash = util.uniqueHash
+uniqueHash   = util.uniqueHash
+uniqueHash32 = util.uniqueHash32
+uniqueHash48 = util.uniqueHash48
+uniqueHash64 = util.uniqueHash64
+uniqueHashExt = util.uniqueHashExt
+_compress_function_code = util._compress_function_code
 
 Config = config.Config
 Float = config.Float
@@ -288,7 +293,38 @@ class CDXBasicsTest(unittest.TestCase):
         o = Object()
         u = uniqueHash(o)
         self.assertEqual( u, "b6dd9dd20b081fc257295a9d0f6ed6f4" )
+        u = uniqueHash32(o)
+        self.assertEqual( u, "872bd1c11bbcfc0c1c4e583ffb9935b2" )
+        u = uniqueHash48(o)
+        self.assertEqual( u, "872bd1c11bbcfc0c1c4e583ffb9935b20b3fa73668accd0f" )
+        u = uniqueHash64(o)
+        self.assertEqual( u, "872bd1c11bbcfc0c1c4e583ffb9935b20b3fa73668accd0f9ea2c2c22d03ba8e" )
         
+        # test functions
+        f1 = lambda x : x*x
+        f2 = lambda x : x*x
+        f3 = lambda x : x+2
+
+        u0 = uniqueHash(None)
+        u1 = uniqueHash(f1)
+        u2 = uniqueHash(f2)
+        u3 = uniqueHash(f3)
+        self.assertEqual(u1,u0)
+        self.assertEqual(u2,u0)
+        self.assertEqual(u3,u0)
+        
+        raw1 = _compress_function_code(f1)
+        raw2 = _compress_function_code(f2)
+        raw3 = _compress_function_code(f3)
+        self.assertEqual(raw1,raw2)
+        self.assertNotEqual(raw1,raw3)
+        
+        u1 = uniqueHashExt(32,True)(f1)
+        u2 = uniqueHashExt(32,True)(f2)
+        u3 = uniqueHashExt(32,True)(f3)
+        self.assertEqual(u1,u2)
+        self.assertNotEqual(u1,u3)
+                
         # plain
         p = util.plain(o)
         p = str(p).replace(' ','').replace('\n','')
@@ -298,8 +334,6 @@ class CDXBasicsTest(unittest.TestCase):
             tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234]}"
         self.assertEqual(p,tst)
         
-        
-
     def test_subdir(self):
         
         sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", eraseEverything=True )
@@ -422,6 +456,7 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual( [ x.read for x in allc ],  [True, False, False, False, True] )
         self.assertEqual( [ x.write for x in allc ], [True, False, False, True, False] )
         self.assertEqual( [ x.delete for x in allc ], [False, False, True, True, False ] )
+        
 
 # testing our auto-caching
 # need to auto-clean up
