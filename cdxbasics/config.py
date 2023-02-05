@@ -7,9 +7,9 @@ Hans Buehler 2022
 from collections import OrderedDict
 from collections.abc import Mapping
 from sortedcontainers import SortedDict
-from cdxbasics.util import uniqueHashExt
-from cdxbasics.prettydict import PrettyDict as pdct
-from cdxbasics.logger import Logger
+from .util import uniqueHashExt
+from .prettydict import PrettyDict as pdct
+from .logger import Logger
 _log = Logger(__file__)
 
 class _ID(object):
