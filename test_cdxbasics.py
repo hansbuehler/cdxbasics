@@ -713,7 +713,7 @@ class CDXCConfigTest(unittest.TestCase):
         binary   = pickle.dumps(config)
         restored = pickle.loads(binary)
         idrest   = restored.unique_id()
-        self.assertNotEqual(idrest,id2)
+        self.assertEqual(idrest,id2)
         
         
 if __name__ == '__main__':

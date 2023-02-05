@@ -704,7 +704,6 @@ class Config(OrderedDict):
         
     def __getitem__(self, key : str):
         """ Returns self(key) """
-        print("__getitem__", key)
         return self(key)
     def get(self, key : str, default = None ):
         """
@@ -712,7 +711,6 @@ class Config(OrderedDict):
         Note that if a default is provided, then this function will fail if a previous call has provided help texts, or a different default.
         If no default is provided, then this function operates silently and will not trigger an error if previous use provided additional, inconsistent information.
         """
-        print("get", key)
         return self(key, default)
     def get_default(self, key : str, default):
         """
