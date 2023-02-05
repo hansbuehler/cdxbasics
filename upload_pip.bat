@@ -1,4 +1,4 @@
-@echo off
+#@echo off
 REM before using this script, update the version string in setup.py and __init__.py
 
 echo =====================================================================================
@@ -20,8 +20,8 @@ echo ===========================================================================
 REM https://docs.conda.io/projects/conda-build/en/latest/user-guide/tutorials/build-pkgs-skeleton.html#troubleshooting
 if exist conda rmdir /Q /S conda
 mkdir conda
-cp conda_exists.py conda/
-cp conda_modify_yaml.py conda/
+copy conda_exists.py conda
+copy conda_modify_yaml.py conda
 cd conda
 python -m conda_exists.py
 if not %ERRORLEVEL% == 0 goto NOTFOUND

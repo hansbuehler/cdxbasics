@@ -5,6 +5,7 @@ Created on Tue Apr 14 21:24:52 2020
 """
 
 import unittest
+import pickle
 import cdxbasics.util as util
 import cdxbasics.config as config 
 import cdxbasics.kwargs as mdl_kwargs
@@ -706,6 +707,14 @@ class CDXCConfigTest(unittest.TestCase):
         id2 = config.unique_id()
         
         self.assertNotEqual(id1,id2)
+
+        # pickle test
+        
+        binary   = pickle.dumps(config)
+        restored = pickle.loads(binary)
+        idrest   = restored.unique_id()
+        self.assertNotEqual(idrest,id2)
+        
         
 if __name__ == '__main__':
     unittest.main()

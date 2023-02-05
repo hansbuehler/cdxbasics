@@ -7,9 +7,9 @@ Hans Buehler 2022
 from collections import OrderedDict
 from collections.abc import Mapping
 from sortedcontainers import SortedDict
-from .util import uniqueHashExt
-from .prettydict import PrettyDict as pdct
-from .logger import Logger
+from cdxbasics.util import uniqueHashExt
+from cdxbasics.prettydict import PrettyDict as pdct
+from cdxbasics.logger import Logger
 _log = Logger(__file__)
 
 class _ID(object):
@@ -621,7 +621,8 @@ class Config(OrderedDict):
         Returns
         -------
             Value.
-        """       
+        """
+        _log.verify( isinstance(key, str), "'key' must be a string. Found type %s. Details: %s", type(key), key)
         _log.verify( key.find('.') == -1 , "Error in config '%s': key name cannot contain '.'. Found %s", self._name, key )
         
         # determine raw value
@@ -703,6 +704,7 @@ class Config(OrderedDict):
         
     def __getitem__(self, key : str):
         """ Returns self(key) """
+        print("__getitem__", key)
         return self(key)
     def get(self, key : str, default = None ):
         """
@@ -710,6 +712,7 @@ class Config(OrderedDict):
         Note that if a default is provided, then this function will fail if a previous call has provided help texts, or a different default.
         If no default is provided, then this function operates silently and will not trigger an error if previous use provided additional, inconsistent information.
         """
+        print("get", key)
         return self(key, default)
     def get_default(self, key : str, default):
         """
@@ -918,7 +921,71 @@ class Config(OrderedDict):
         """
         return OrderedDict.__iter__(self)
     
+    # pickling
+    # --------
+    
+    def __reduce__(self):
+        """
+        Pickling this object explicitly
+        See https://docs.python.org/3/library/pickle.html#object.__reduce__
+        """
+        keys = [ k for k in self ]
+        data = [ self.get_raw(k) for k in keys ]
+        state = dict(done = self._done,
+                     name = self._name,
+                     children = self._children,
+                     recorder = self._recorder,
+                     keys = keys,
+                     data = data )
+        return (Config, (), state)
+    
+    def __setstate__(self, state):
+        """ Supports unpickling """
+        self._name = state['name']
+        self._done = state['done']
+        self._children = state['children']
+        self._recorder = state['recorder']
+        data = state['data']
+        keys = state['keys']
+        for (k,d) in zip(keys,data):
+            self[k] = d
 
+def __test_pickle():
+    import pickle
+    
+    config = Config()
+    # world
+    config.world.samples = 10000
+    config.world.steps = 20
+    config.world.black_scholes = True
+    config.world.rvol = 0.2    # 20% volatility
+    config.world.drift = 0.    # real life drift
+    config.world.cost_s = 0.
+    # gym
+    config.gym.objective.utility = "cvar"
+    config.gym.objective.lmbda = 1.  
+    config.gym.agent.network.depth = 5   # <====== changed this
+    config.gym.agent.network.width = 40
+    config.gym.agent.network.activation = "softplus"
+    # trainer
+    config.trainer.train.optimizer = "adam"
+    config.trainer.train.batch_size = None
+    config.trainer.train.epochs = 400
+    config.trainer.caching.epoch_freq = 10
+    config.trainer.caching.mode = "on"
+    config.trainer.visual.epoch_refresh = 1
+    config.trainer.visual.time_refresh = 10
+    config.trainer.visual.confidence_pcnt_lo = 0.25
+    config.trainer.visual.confidence_pcnt_hi = 0.75
+    
+    id2 = config.unique_id()
+    
+    # pickle test
+    
+    binary   = pickle.dumps(config)
+    restored = pickle.loads(binary)
+    idrest   = restored.unique_id()
+    assert idrest == id2, (idrest, id2)
+    
         
-    
-    
+        
