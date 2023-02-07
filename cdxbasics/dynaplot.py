@@ -155,6 +155,7 @@ class DynamicFig(object):
                 It is recommended not to use 'figsize'
         """                
         self.hdisplay   = display.display(display_id=True)
+        _log.verify( not self.hdisplay is None, "Could not obtain display handle.")
         self.axes       = []
         self.fig        = None
         self.row_size   = int(row_size)
