@@ -6,6 +6,7 @@ Hans Buehler 2022
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from IPython import display
+import io as io
 from .deferred import Deferred
 from .logger import Logger
 _log = Logger(__file__)
@@ -149,10 +150,16 @@ class DynamicFig(Deferred):
         self.this_col = 0
         self.this_row = self.this_row + 1
             
-    def render(self):
+    def render(self, draw : bool = True):
         """
         Plot all axes.
         Once called, no further plots can be added, but the plots can be updated in place
+        
+        Parameters
+        ----------
+            draw : bool
+                If False, then the figure is created, but not drawn.
+                This can be used e.g. when you are planning to save the figure to a file.
         """
         _log.verify( not self.closed, "Cannot call render() after close() was called")        
         if self.this_row == 0 and self.this_col == 0:
@@ -170,10 +177,9 @@ class DynamicFig(Deferred):
             for ax in self.axes:
                 ax.initialize( self.fig, rows, cols )
             # execute all deferred calls to fig()
-            self._dereference( self.fig )
-            # close.
-            # This removes a second shaddow draw in Jupyter    
-            
+            self._dereference( self.fig )            
+        if not draw:
+            return
         if self.MODE == 'hdisplay':
             if self.hdisplay is None:
                 self.hdisplay = display.display(display_id=True)
@@ -185,31 +191,61 @@ class DynamicFig(Deferred):
             _log.verify( self.MODE == "canvas", "DynamicFig.MODE must be 'hdisplay' or 'canvas'. Found %s", self.MODE )
             self.fig.canvas.draw()
             
-    def savefig(self, fname, **kwargs ):
+    def savefig(self, fname, silent_close : bool = True, **kwargs ):
         """
         Saves the figure to a file.
         https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.savefig.html
         This is just a short cut which calls render() first.
+        
+        Parameters
+        ----------
+            fname : filename or file-like object, c.f. https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.savefig.html
+            silent_close : if True, call close() without rendering the figure.
+            kwargs : to be passed to https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.savefig.html
+        """
+        _log.verify( not self.closed, "Cannot call savefig() after close() was called")
+        if self.fig is None:
+            self.render(draw=False)
+        self.fig.savefig( fname, **kwargs )
+        if silent_close:
+            self.close(render=False)
+            
+    def to_bytes(self, silent_close : bool = True ) -> bytes:
+        """
+        Convert figure to a byte stream
+        This stream can be used to generate a IPython image using 
+        
+            from IPython.display import Image, display
+            bytes = fig.to_bytes()
+            image = Image(data=byes)
+            display(image)
+            
+        Parameters
+        ----------
+            silent_close : if False, call render() and then close the figure. Else just close.
         """
         _log.verify( not self.closed, "Cannot call savefig() after close() was called")  
-        self.render()
-        self.fig.savefig( fname, **kwargs )
+        img_buf = io.BytesIO()
+        if self.fig is None:
+            self.render(draw=False)
+        self.fig.savefig( img_buf )
+        if silent_close:
+            self.close(render=False)
+        data = img_buf.getvalue()
+        img_buf.close()
+        return data
         
-    def close(self):
+    def close(self, render : bool = True ):
         """
         Close down the figure. Does not clear the figure.
         Call this to remove the resiudal print in jupyter at the end of your animation
+        
         Parameters
         ----------
-            experimental_mode : str, optional
-                Passed on to render()
-                How to render an updated graph.
-                The default, hdisplay has worked on JupyterHub but some users
-                reported that this is not working for Jupyter.
-                Use 'canvas' in this case.
+            render : if True, this function will call render() before closing the figure
         """
         if not self.closed:
-            self.render()
+            if render: self.render()
             plt.close(self.fig)  
         self.closed = True
 
