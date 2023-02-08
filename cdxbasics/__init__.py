@@ -4,7 +4,7 @@ Created on June 2022
 @author: hansb
 """
 
-__version__ = "0.2.18"  # auto-updated by setup.py
+__version__ = "0.2.19"  # auto-updated by setup.py
 
 from .util import *
 from .logger import Logger
