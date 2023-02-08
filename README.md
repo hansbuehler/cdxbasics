@@ -12,9 +12,9 @@ or
 
 ## dynaplot
 
-Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit is making it easy to develop visualization with <tt>matplotlib</tt> which dynamically updates, for example during training with machine learing kits such as <tt>tensorflow</tt>. This has been tested with Anaconda's JupyterHub and <tt>%matplotlib inline</tt>. 
+Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit is making it easy to develop visualization with `matplotlib` which dynamically updates, for example during training with machine learing kits such as `tensorflow`. This has been tested with Anaconda's JupyterHub and `%matplotlib inline`. 
 
-Some users reported that the package does not work in some versions of Jupyter. In this case, please try <tt>fig.render( "canvas" )</tt>. I appreciate if you let me know whether this resolved
+Some users reported that the package does not work in some versions of Jupyter. In this case, please try setting `dynaplot.DynamicFig.MODE = 'canvas'`. I appreciate if you let me know whether this resolved
 the problem.
 
 #### Animated Matplotlib in Jupyter
@@ -34,24 +34,23 @@ See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbu
     from cdxbasics.dynaplot import figure
     fig = figure()                  # equivalent to matplotlib.figure
     ax  = fig.add_subplot()         # no need to specify row,col,num
-    l   = ax.plot( x, y[:,0] )[0] 
-    fig.render()                     # construct figure & draw graph
+    l   = ax.plot( x, y[:,0] )[0]   # get fist line2D object
+    fig.render()                    # construct figure & draw graph
     
     # animate
     import time
     for i in range(1,5):
         time.sleep(1) 
-        l[0].set_ydata( y[:,i] )       # update data
+        l.set_ydata( y[:,i] )       # update data
         fig.render()
         
-    fig.close()                   # clear figure to avoid duplication
+    fig.close()                     # clear figure to avoid duplication
 
 See example notebook for how to use the package for lines, confidence intervals, and 3D graphs.
 
 #### Simpler sub_plot
 
-The package lets you create sub plots without having to know their number in advance: you do not need to specify <tt>rol, col, num</tt>
-when calling <tt>add_subplot</tt>.
+The package lets you create sub plots without having to know the number of plots in advance: you do not need to specify `rol, col, num` when calling `add_subplot`. The underlying figure object will automatically arrange them on a grid for you. 
 
     # create figure
     from cdxbasics.dynaplot import figure
@@ -74,26 +73,24 @@ when calling <tt>add_subplot</tt>.
 
 
 There are a number of other functions to aid plotting
-<ul>
-<li><tt>figure()</tt>:<br>
-    Function to replace <tt>matplotlib.figure</tt> which will defer creation of the figure until the first call of <tt>render()</tt>.
-    This way we do not have to specify row, col, num when adding subplots. 
-    <br>    
-    Instead of <tt>figsize</tt> specify <tt>row_size</tt>, <tt>col_size</tt> and <tt>col_nums</tt>  to dynamically generate an appropriate figure size.
-    <br>
-    Key member functions are:
-    <ul>
-            <li><tt>add_subplot</tt> to add a new plot. No arguments needed.
-            <li><tt>next_row()</tt> to skip to the next row.
-            <li><tt>render()</tt> to draw the figure. When called the first time will create all the underlying matplotlib objects. Subsequent calls
-                will re-draw the canvas if the figure was modified. See examples in https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb
-            <li><tt>close()</tt> to close the figure. If not called, Jupyter creates an unseemly second copy of the graph when the current cell is finished running.
-    </ul>
 
-<li><tt>color_css4, color_base, color_tableau, color_xkcd</tt>:<br>
-    Each function returns the <tt>i</tt>th element of the respective matplotlib color
+* `figure()` which returns a `DynamicFig` object:
+
+    Function to replace `matplotlib.figure` which will defer creation of the figure until the first call of `render()`. The effect is that we no longer need to provide  the total number of rows and columns in advance - i.e. you won't need to call the equivalent of `fig.add_subplot(3,4,14)` but can just call `fig.add_subplot()`.
+
+    * Instead of `figsize` the function `figure()` accepts `row_size`, `col_size` and `col_nums` to dynamically generate an appropriate figure size.
+
+    Key member functions of `DynamicFig` are:
+    * `add_subplot` to add a new plot. No arguments needed.
+    * `next_row()` to skip to the next row.
+    * `render()` to draw the figure. When called the first time will create all the underlying matplotlib objects. Subsequent calls will re-draw the canvas if the figure was modified. See examples in https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb
+    * `close()` to close the figure. If not called, Jupyter creates an unseemly second copy of the graph when the current cell is finished running.
+
+* `color_css4, color_base, color_tableau, color_xkcd`:
+
+    Each function returns the $i$th element of the respective matplotlib color
     table. The purpose is to simplify using consistent colors accross different plots.
-    <br>
+    
     Example:
     
         fig = dynaplot.figure()
@@ -108,10 +105,9 @@ There are a number of other functions to aid plotting
             ax.plot( x, z[i], color=color_css4(i) )
         fig.render()
     
-<li><tt>colors_css4, colors_base, colors_tableau, colors_xkcd</tt>:<br>
-    Generator versions of the <tt>color_</tt> functions.
+* `colors_css4, colors_base, colors_tableau, colors_xkcd`:
 
-</ul>
+    Generator versions of the `color_` functions.
 
 ## prettydict
 
@@ -125,14 +121,13 @@ A number of simple extensions to standard dictionaries which allow accessing any
     _ = pdct("c",3)     # short cut for pdct.get("c",3)
 
 There are three versions:
-<ul>
-    <li><tt>PrettyDict</tt>:<br>
-        Pretty version of standard dictionary.
-    <li><tt>PrettyOrderedDict</tt>:<br>
-        Pretty version of ordered dictionary.
-    <li><tt>PrettySortedDict</tt>:<br>
-        Pretty version of sorted dictionary.
-</ul>
+
+* `PrettyDict`:
+    Pretty version of standard dictionary.
+* `PrettyOrderedDict`:
+    Pretty version of ordered dictionary.
+* `PrettySortedDict`:
+    Pretty version of sorted dictionary.
 
 #### Assigning member functions
 
@@ -142,8 +137,8 @@ There are three versions:
         return self.b * x
     pdct = mult_a 
 
-Calling <tt>pdct.mult_a(3)</tt> with above config will return <tt>6</tt> as expected. This only works when using the member synthax for assigning values
-to a pretty dictionary; if the standard <tt>[]</tt> operator is used then functions will be assigned to the dictionary as usual, hence they are static members of the object.
+Calling `pdct.mult_a(3)` with above config will return `6` as expected. This only works when using the member synthax for assigning values
+to a pretty dictionary; if the standard `[]` operator is used then functions will be assigned to the dictionary as usual, hence they are static members of the object.
 
 The reason for this is as follows: consider
 
@@ -166,12 +161,11 @@ Tooling for setting up program-wide configuration. Aimed at machine learning pro
     config = Config()
 
 **Key features**
-<ul>
-<li>Detect misspelled parameters by checking that all parameters of a config have been read.
-<li>Provide summary of all values read, including summary help for what they were for.
-<li>Nicer synthax than dictionary notation, in particular for nested configurations.
-<li>Simple validation to ensure values are within a given range or from a list of options.
-</ul>
+
+* Detect misspelled parameters by checking that all parameters of a config have been read.
+* Provide summary of all values read, including summary help for what they were for.
+* Nicer synthax than dictionary notation, in particular for nested configurations.
+* Simple validation to ensure values are within a given range or from a list of options.
 
 #### Creating configs
 
@@ -196,7 +190,7 @@ This is equivalent to
 
 #### Reading a config
 
-When reading a config, the recommended pattern involves providing a default value, its cast-type (and possibly simple restrictions; see below), and a help text. The latter is used by the function  <tt>usage_report()</tt> which therefore provides live documentation of the code which uses the config object.
+When reading a config, the recommended pattern involves providing a default value, its cast-type (and possibly simple restrictions; see below), and a help text. The latter is used by the function  `usage_report()` which therefore provides live documentation of the code which uses the config object.
 
     class Network(object):
         def __init__( self, config ):
@@ -205,12 +199,12 @@ When reading a config, the recommended pattern involves providing a default valu
             self.weights  = config("weights", [], np.asarray, "Weigths for the agent", help_default="no initial weights")
             config.done() # see below
 
-In above example any data provided for they keywords <tt>weigths</tt> will be cast using <tt>numpy.asarray</tt>. 
+In above example any data provided for they keywords `weigths` will be cast using `numpy.asarray`. 
 
-Further parameters of <tt>()</tt> are the help text, plus ability to provide text versions of the default with <tt>help_default</tt> (e.g. if the default value is complex), and the cast operator with <tt>help_cast</tt> (again if the
+Further parameters of `()` are the help text, plus ability to provide text versions of the default with `help_default` (e.g. if the default value is complex), and the cast operator with `help_cast` (again if the
 respective operation is complex).
 
-__Important__: the <tt>()</tt> operator does not have a default value unless specified. If no default value is specified, then an error is generated.
+__Important__: the `()` operator does not have a default value unless specified. If no default value is specified, then an error is generated.
 
 You can read sub-configurations with the previsouly introduced member notation:
 
@@ -243,11 +237,11 @@ Enforce the value being a member of a list:
 
 A common issue when using dictionary-based code is that we might misspell one of the parameters. Unless this is a mandatory parameter we might not notice that we have not actually changed its value in the code below.
 
-To check that all values of <tt>config</tt> are read use <tt>done()</tt>
+To check that all values of `config` are read use `done()`
 
     config.done()    # checks that we have read all keywords.
             
-It will alert you if there are keywords or children which haven't been read. Most likely, those will be typos. Consider the following example where <tt>width</tt> is misspelled in our config:
+It will alert you if there are keywords or children which haven't been read. Most likely, those will be typos. Consider the following example where `width` is misspelled in our config:
 
     class Network(object):
         def __init__( self, config ):
@@ -265,7 +259,7 @@ It will alert you if there are keywords or children which haven't been read. Mos
 
     n = Network(config.network)
 
-Since <tt>width</tt> was misspelled in setting up the config, you will get a warning to this end:
+Since `width` was misspelled in setting up the config, you will get a warning to this end:
 
     Error closing 'config.network': the following config arguments were not read: ['widht']
 
@@ -274,7 +268,7 @@ Since <tt>width</tt> was misspelled in setting up the config, you will get a war
     config.network['depth'] = 10 # Depth of the network; default: 1
     config.network['width'] = 3 # Width of the network; default: 3
 
-Note that you can also call <tt>done()</tt> at top level:
+Note that you can also call `done()` at top level:
 
     class Network(object):
         def __init__( self, config ):
@@ -306,14 +300,14 @@ produces
 
 #### Detaching child configs
 
-You can also detach a child config, which allows you to store it for later use without triggering <tt>done()</tt> errors:
+You can also detach a child config, which allows you to store it for later use without triggering `done()` errors:
     
         def read_config(  self, confg ):
             ...
             self.config_training = config.training.detach()
             config.done()
 
-<tt>detach()</tt> will mark he original child as 'done'. Therefore, we will need to call <tt>done()</tt> again, when we finished processing the detached child:
+`detach()` will mark he original child as 'done'. Therefore, we will need to call `done()` again, when we finished processing the detached child:
 
         def training(self)
             epochs     = self.config_training("epochs", 100, int, "Epochs for training")
@@ -321,7 +315,7 @@ You can also detach a child config, which allows you to store it for later use w
 
             self.config_training.done()
 
-Use <tt>copy()</tt> to make a bona fide copy of a child, without marking the source child as 'done'.
+Use `copy()` to make a bona fide copy of a child, without marking the source child as 'done'.
 
 #### Self-recording all available configs
 
@@ -350,18 +344,18 @@ We may use
 
         create_network( **config.network )
 
-However, there is no magic - this function will mark all direct members (not children) as 'done' and will not record the default values of the function <tt>create_network</tt>. Therefore <tt>usage_report</tt> will be somewhat useless. This method will still catch unused variables as "unexpected keyword arguments". 
+However, there is no magic - this function will mark all direct members (not children) as 'done' and will not record the default values of the function `create_network`. Therefore `usage_report` will be somewhat useless. This method will still catch unused variables as "unexpected keyword arguments". 
 
 #### Unique ID
 
-Another common use case is that we wish to cache some process in a complex operation. Assuming that the <tt>config</tt> describes all relevant parameters
-we can use <tt>config.unique_id()</tt> to obtain a unique hash ID for the given config.
+Another common use case is that we wish to cache some process in a complex operation. Assuming that the `config` describes all relevant parameters
+we can use `config.unique_id()` to obtain a unique hash ID for the given config.
 
-This can be used, for example, as file name for caching. See also <tt>cdxbasics.subdir</tt> below.
+This can be used, for example, as file name for caching. See also `cdxbasics.subdir` below.
 
 #### Advanced **kwargs Handling
 
-The <tt>Config</tt> class can be used to improve <tt>kwargs</tt> handling.
+The `Config` class can be used to improve `kwargs` handling.
 Assume we have
 
         def f(**kwargs):
@@ -376,9 +370,9 @@ We run the usual risk of somebody mispronouncing the parameter name which we wou
             b = kwargs("b", 20)
             kwargs.done()
 
-If now a user calls <tt>f</tt> with a misspelled <tt>config(difficlt_name=5)</tt> an error will be raised.
+If now a user calls `f` with a misspelled `config(difficlt_name=5)` an error will be raised.
 
-Another pattern is to allow both <tt>config</tt> and <tt>kwargs</tt>:
+Another pattern is to allow both `config` and `kwargs`:
 
         def f( config=Config(), **kwargs):
             kwargs = config.detach.update(kwargs)
@@ -446,11 +440,11 @@ If-conditional functions
 
 ## subdir
 
-A few tools to handle file i/o in a transparent way, focusing on caching data. The key idea is to provide transparent, concise pickle access to the file system in a manner similar to dictionary access. Files managed by <tt>subdir</tt> also all have the same extension, which is <tt>pck</tt> by default.
+A few tools to handle file i/o in a transparent way, focusing on caching data. The key idea is to provide transparent, concise pickle access to the file system in a manner similar to dictionary access. Files managed by `subdir` also all have the same extension, which is `pck` by default.
 
 #### Key pattern:
 
-Our pattern assumes that each calcuation is determined by a number of parameters for which we can compute a unique (file) ID for caching results. Unique file IDs can be computed using <tt>uniqueFileName48()</tt>. Here is an example:
+Our pattern assumes that each calcuation is determined by a number of parameters for which we can compute a unique (file) ID for caching results. Unique file IDs can be computed using `uniqueFileName48()`. Here is an example:
 
 
     from cdxbasics.config import Config
@@ -517,7 +511,7 @@ The above can be made more concise as follows
 
 #### Creating directories
 
-You can create directories using the <tt>SubDir</tt> class. Simply write
+You can create directories using the `SubDir` class. Simply write
 
     subdir = SubDir("my_directory")      # relative to current working directory
     subdir = SubDir("./my_directory")    # relative to current working directory
@@ -528,20 +522,20 @@ You can specify a parent for relative path names:
 
     subdir = SubDir("my_directory", "~")  # relative to home directory
 
-Change the extension to <tt>bin</tt>
+Change the extension to `bin`
 
     subdir = SubDir("~/my_directory;*.bin")     
     subdir = SubDir("~/my_directory", ext="bin")    
     subdir = SubDir("my_directory", "~", ext="bin")    
 
-You can also use the <tt>()</tt> operator to generate sub directories. This operator is overloaded: for a single argument, it creates a relative sub-directory:
+You can also use the `()` operator to generate sub directories. This operator is overloaded: for a single argument, it creates a relative sub-directory:
 
     parent = SubDir("~/parent")
     subdir = parent("subdir")
 
-Be aware that when the operator <tt>()</tt> is called with two arguments, then it reads files; see below.
+Be aware that when the operator `()` is called with two arguments, then it reads files; see below.
 
-You can obtain a list of all sub directories in a directory by using <tt>subDirs()</tt>.
+You can obtain a list of all sub directories in a directory by using `subDirs()`.
 
 #### I/O
 ##### Reading
@@ -551,9 +545,9 @@ To read the data contained in a file 'file.pck' in our subdirectory with extensi
     data = subdir.read("file")                 # returns the default if file is not found
     data = subdir.read("file", default=None)   # returns the default if file is not found
 
-This function will return <tt>None</tt> by default if 'file' does not exist. You can make it throw an error by calling <tt>subdir.read("file", throwOnError=True)</tt> instead.
+This function will return `None` by default if 'file' does not exist. You can make it throw an error by calling `subdir.read("file", throwOnError=True)` instead.
 
-You can also use the <tt>()</tt> operator, in which case you must specify a default value (if you don't, then the operator will return a sub directory):
+You can also use the `()` operator, in which case you must specify a default value (if you don't, then the operator will return a sub directory):
 
     data = subdir("file", None)   # returns None if file is not found
 
@@ -572,7 +566,7 @@ Finally, you can also iterate through all existing files:
         data = subdir.read(file)
         ...
 
-To obtain a list of all files  in our directory which have the correct extension, use <tt>keys()</tt>.
+To obtain a list of all files  in our directory which have the correct extension, use `keys()`.
 
 ##### Writing
 
@@ -607,9 +601,9 @@ All of these are _silent_, and will not throw errors if 'file' does not exist. I
 
 Other file and directoru deletion methods:
 
-* <tt>deleteAllKeys</tt>: delete all files in the directory, but do not delete sub directories or files with extensions different to our own.
-* <tt>deleteAllContent</tt>: delete all files with our extension, and all sub directories.
-* <tt>eraseEverything</tt>: delete everything
+* `deleteAllKeys`: delete all files in the directory, but do not delete sub directories or files with extensions different to our own.
+* `deleteAllContent`: delete all files with our extension, and all sub directories.
+* `eraseEverything`: delete everything
 
 
 ## verbose
@@ -683,24 +677,21 @@ Returns
 
     Verbose='quiet'
 
-The purpose of initializing functions usually with <tt>quiet</tt> is that they can be used accross different contexts without printing anything by default.
-
-
-
+The purpose of initializing functions usually with `quiet` is that they can be used accross different contexts without printing anything by default.
 
 ## util
 
 Some basic utilities to make live easier.
 
-* <tt>CacheMode</tt> is a standardized pattern for caching data. See <tt>subdir</tt>.
-* <tt>fmt()</tt>: C++ style format function.
-* <tt>uniqueHash()</tt>: runs a standard hash over most combinations of standard elements or objects;
-<tt>uniqueHash32()</tt>, <tt>uniqueHash48()</tt>, and <tt>uniqueHash64()</tt> return hash values of at most length 32, 48, or 64.
-* <tt>plain()</tt>: converts most combinations of standards elements or objects into plain list/dict structures.
-* <tt>isAtomic()</tt>: whether something is string, float, int, bool or date.
-* <tt>isFloat()</tt>: whether something is a float, including a numpy float.
-* <tt>isFunction()</tt>: whether something is some function.
-* <tt>bind()</tt>: simple shortcut to bind function parameters, e.g.
+* `CacheMode` is a standardized pattern for caching data. See `subdir`.
+* `fmt()`: C++ style format function.
+* `uniqueHash()`: runs a standard hash over most combinations of standard elements or objects;
+`uniqueHash32()`, `uniqueHash48()`, and `uniqueHash64()` return hash values of at most length 32, 48, or 64.
+* `plain()`: converts most combinations of standards elements or objects into plain list/dict structures.
+* `isAtomic()`: whether something is string, float, int, bool or date.
+* `isFloat()`: whether something is a float, including a numpy float.
+* `isFunction()`: whether something is some function.
+* `bind()`: simple shortcut to bind function parameters, e.g.
 
         def f(a, b, c):
             pass
