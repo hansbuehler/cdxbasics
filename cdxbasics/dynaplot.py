@@ -6,65 +6,11 @@ Hans Buehler 2022
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from IPython import display
+from .deferred import Deferred
 from .logger import Logger
 _log = Logger(__file__)
 
-class DeferredCall(object):
-    """
-    Utility class which allows deferring a function call on an object
-    Function can be access once execute() has been called
-    """    
-
-    class ResultHook(object):
-        """ Allows deferred access to returns from the deferred function """
-        
-        def __init__(self, function):
-            self._function  = function
-            self._return    = []
-            
-        def __getattr__(self, key): # NOQA
-            _log.verify( len(self._return) == 1, "Deferred function '%s' has not yet been called for key '%s'", self._function, key )
-            return getattr(self._return[0], key)
-        
-        def __getitem__(self, key): # NOQA
-            _log.verify( len(self._return) == 1, "Deferred function '%s' has not yet been called for key '%s'", self._function, key )
-            return self._return[0][key]
-        
-        def __call__(self, *kargs, **kwargs): # NOQA
-            _log.verify( len(self._return) == 1, "Deferred function '%s' has not yet been called", self._function )
-            return self._return[0](*kargs, **kwargs)            
-    
-    def __init__(self, function : str, reduce_single_list : bool = True ):
-        """ Initilize with the name 'function' of the function """
-        self.function    = function
-        self.red_list    = reduce_single_list
-        self.kargs       = None
-        self.kwargs      = None
-        self.result_hook = None
-    
-    def __call__(self, *kargs, **kwargs ):
-        """
-        Deferred function call.
-        The returned hook can be used to read the result once execute() was called.
-        """
-        self.kargs       = kargs
-        self.kwargs      = kwargs
-        self.result_hook = DeferredCall.ResultHook(self.function)
-        return self.result_hook
-
-    def execute(self, owner):
-        """
-        Execute delayed function call and place result in
-        function return b=hook
-        """
-        assert not self.kargs is None and not self.kwargs is None, "DreamCatcher for %s was never __call__ed" % self.function
-        assert len(self.result_hook._return) == 0, "DreamCatcher for %s was already called" % self.function
-        f = getattr(owner, self.function, None)
-        _log.verify( not f is None, "Member function %s not found in object of type %s", self.function, owner.__class__.__name__ )
-        r = f(*self.kargs, **self.kwargs)
-        self.result_hook._return.append( r )
-        
-class DynamicAx(object):
+class DynamicAx(Deferred):
     """ 
     Wrapper around an matplotlib axis returned
     by DynamicFig, which is returned by figure().
@@ -78,19 +24,19 @@ class DynamicAx(object):
     
         fig = figure()
         ax  = fig.add_subplot()
-        lns = ax.plot( x, y, ":" )
-        fig.render() # --> draw graph
-        
-        lns.set_ydata( y2 )
-        fig.render() # --> change graph
+        lns = ax.plot( x, y, ":" )    # 'lns' here is a Deferred object. Does not call plot() yet.
+        fig.render()                  # renders the figure with the correct plots
+                                      # and executes plot() which returns a list of Line2Ds
+        lns[0].set_ydata( y2 )        # now access result from plot
+        fig.render()                  # update graph
     """
     
     def __init__(self, row : int, col : int, kwargs : dict):
-        """ Creates internal object which defers the creation of various graphics to a later point """        
+        """ Creates internal object which defers the creation of various graphics to a later point """ 
+        Deferred.__init__(self,"axes(%ld,%ld)" % (row, col))
         self.row    = row
         self.col    = col
         self.plots  = {}
-        self.caught = []
         self.kwargs = kwargs
         self.ax     = None
     
@@ -99,18 +45,9 @@ class DynamicAx(object):
         assert self.ax is None, "Internal error; function called twice?"
         num     = 1 + self.col + self.row*cols
         self.ax = fig.add_subplot( rows, cols, num, **self.kwargs )        
-        for catch in self.caught:
-            catch.execute( self.ax )
-        self.caught = []
+        self._dereference( self.ax )
             
-    def __getattr__(self, key): # NOQA
-        if not self.ax is None:
-            return getattr(self.ax, key)
-        d = DeferredCall(key)
-        self.caught.append(d)
-        return d
-
-class DynamicFig(object):
+class DynamicFig(Deferred):
     """
     Figure.
     Wraps matplotlib figures.
@@ -131,6 +68,8 @@ class DynamicFig(object):
     object; most useful for: suptitle, supxlabel, supylabel
     https://matplotlib.org/stable/gallery/subplots_axes_and_figures/figure_title.html
     """
+    
+    MODE = 'hdisplay'  # switch to 'canvas' if it doesn't work
     
     def __init__(self, row_size : int = 5, 
                        col_size : int = 4, 
@@ -153,9 +92,9 @@ class DynamicFig(object):
                     Short cut for tight_layout
                     https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.figure.html#
                 It is recommended not to use 'figsize'
-        """                
-        self.hdisplay   = display.display(display_id=True)
-        _log.verify( not self.hdisplay is None, "Could not obtain display handle.")
+        """
+        Deferred.__init__(self, "figure")
+        self.hdisplay   = None
         self.axes       = []
         self.fig        = None
         self.row_size   = int(row_size)
@@ -170,7 +109,7 @@ class DynamicFig(object):
         self.this_row  = 0
         self.this_col  = 0
         self.max_col   = 0
-        self.caught    = []
+        self.closed    = False
         
     def __del__(self): # NOQA
         """ Ensure the figure is closed """
@@ -188,7 +127,8 @@ class DynamicFig(object):
                 Whether to force a new row. Default is False
             kwargs : other arguments to be passed to matplotlib's add_subplot, for example projection='3d'
         """
-        _log.verify( self.fig is None and not self.hdisplay is None, "Cannot call add_subplot() after render() was called")        
+        _log.verify( not self.closed, "Cannot call add_subplot() after close() was called")        
+        _log.verify( self.fig is None, "Cannot call add_subplot() after render() was called")
         if (self.this_col >= self.col_nums) or ( new_row and not self.this_col == 0 ):
             self.this_col = 0
             self.this_row = self.this_row + 1
@@ -203,27 +143,18 @@ class DynamicFig(object):
     
     def next_row(self):
         """ Skip to next row """
-        _log.verify( self.fig is None and  not self.hdisplay is None, "Cannot call next_row() after render() was called")        
+        _log.verify( self.fig is None, "Cannot call next_row() after render() was called")        
         if self.this_col == 0:
             return
         self.this_col = 0
         self.this_row = self.this_row + 1
             
-    def render(self, experimental_mode = "hdisplay"):
+    def render(self):
         """
         Plot all axes.
-        Once called, no further plots can be added, but the plots can
-        be updated in place
-        
-        Parameters
-        ----------
-            experimental_mode : str, optional
-                How to render an updated graph.
-                The default, hdisplay has worked on JupyterHub but some users
-                reported that this is not working for Jupyter.
-                Use 'canvas' in this case.
+        Once called, no further plots can be added, but the plots can be updated in place
         """
-        _log.verify( not self.hdisplay is None, "Cannot call render() after close() was called")        
+        _log.verify( not self.closed, "Cannot call render() after close() was called")        
         if self.this_row == 0 and self.this_col == 0:
             return
         if self.fig is None:
@@ -238,19 +169,33 @@ class DynamicFig(object):
             cols      = self.max_col+1
             for ax in self.axes:
                 ax.initialize( self.fig, rows, cols )
-            # execute all caught calls to fig()
-            for catch in self.caught:
-                catch.execute( self.fig )
-            self.caught = []
+            # execute all deferred calls to fig()
+            self._dereference( self.fig )
             # close.
-            # This removes a second shaddow draw in Jupyter       
-        if experimental_mode == "hdisplay":
+            # This removes a second shaddow draw in Jupyter    
+            
+        if self.MODE == 'hdisplay':
+            if self.hdisplay is None:
+                self.hdisplay = display.display(display_id=True)
+                _log.verify( not self.hdisplay is None, "Could not optain current IPython display ID from IPython.display.display(). Set DynamicFig.MODE = 'canvas' for an alternative mode")
             self.hdisplay.update(self.fig)  
+        elif self.MODE == 'canvas_idle':
+            self.fig.canvas.draw_idle()
         else:
-            _log.verify( experimental_mode == "canvas", "'experimental_mode' must be 'hdisplay' or 'canvas'")
+            _log.verify( self.MODE == "canvas", "DynamicFig.MODE must be 'hdisplay' or 'canvas'. Found %s", self.MODE )
             self.fig.canvas.draw()
+            
+    def savefig(self, fname, **kwargs ):
+        """
+        Saves the figure to a file.
+        https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.savefig.html
+        This is just a short cut which calls render() first.
+        """
+        _log.verify( not self.closed, "Cannot call savefig() after close() was called")  
+        self.render()
+        self.fig.savefig( fname, **kwargs )
         
-    def close(self, experimental_mode = "hdisplay"):
+    def close(self):
         """
         Close down the figure. Does not clear the figure.
         Call this to remove the resiudal print in jupyter at the end of your animation
@@ -263,23 +208,11 @@ class DynamicFig(object):
                 reported that this is not working for Jupyter.
                 Use 'canvas' in this case.
         """
-        if not self.hdisplay is None:
-            self.render(experimental_mode)            
+        if not self.closed:
+            self.render()
             plt.close(self.fig)  
-        self.hdisplay = None
+        self.closed = True
 
-    def __getattr__(self, key): 
-        """
-        Allows delaying a call to figure to when it is constructed.
-        E.g. if you call self.tight_layout() before render() then tight_layout() will called after render().        
-        This will not work with functions which return anything
-        """
-        _log.verify( not self.hdisplay is None, "Figure was closed.")        
-        if not self.fig is None:
-            return getattr(self.fig, key)
-        d = DeferredCall(key)
-        self.caught.append(d)
-        return d
         
 def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kwargs ) -> DynamicFig:
     """

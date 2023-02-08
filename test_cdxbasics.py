@@ -707,9 +707,12 @@ class CDXCConfigTest(unittest.TestCase):
         id2 = config.unique_id()
         self.assertNotEqual(id1,id2)
 
+        print(config)
+
         _ = config.nothing("get_nothing", 0)  # this triggered a new ID in old versions
 
         id3 = config.unique_id()
+        print(config)
         self.assertEqual(id2,id3)
         
         # pickle test

@@ -310,8 +310,6 @@ class Config(OrderedDict):
             Returns a blank copy of the current config, with a new recorder.
     """
     
-    LEGACY_UNIQUE_ID_CHILDREN = False
-        
     def __init__(self, *args, config_name : str = "config", **kwargs):
         """
         See help(Config) for a description of this class.
@@ -910,11 +908,9 @@ class Config(OrderedDict):
             child_data = self._children[c].unique_id() 
             # we only register children if they have keys.
             # this way we do not trigger a change in ID simply due to a failed read access.
-            # Use LEGACY_UNIQUE_ID_CHILDREN to turn on old behaviour where empty child
-            # data were collected
-            if len(child_data) > 0 or self.LEGACY_UNIQUE_ID_CHILDREN:
+            if child_data != "":
                 inputs[c]  = child_data
-        return uniqueHashExt(length=length,parse_functions=parse_functions)(inputs)
+        return uniqueHashExt(length=length,parse_functions=parse_functions)(inputs) if len(inputs) > 0 else ""
 
     # magic
     # -----
