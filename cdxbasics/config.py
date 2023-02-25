@@ -179,9 +179,8 @@ class _CastCond(_Cast): # NOQA
         return cast(value, config_name, key_name)
     def __str__(self) -> str:
         """ This gets called if the type was used without operators """
-        cast = _Simple(self.cast, config_name, key_name)
-        return str(cast)
-    
+        return _cast_name(self.cast)
+        
 Float = _CastCond(float)
 Int   = _CastCond(int)
 
