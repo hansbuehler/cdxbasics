@@ -26,36 +26,55 @@ no_default = _ID()    # creates a unique object which can be used to detect if a
     
 class _Cast(object):
     
-    def __call__( self, value ):# NOQA
+    def __call__( self, value, config_name : str, key_name : str ):
         """ cast 'value' to the proper type """
         raise NotImplementedError("Internal error")
 
-    def test(self, value):
-        """ Test whether 'value' satisfies the condition """
+    def __str__(self) -> str:
+        """ Returns readable string description of 'self' """
         raise NotImplementedError("Internal error")
 
-    @property
-    def err_str(self):
-        """ Nice error string """
-        raise NotImplementedError("Internal error")
-        
-    @property
-    def help_cast(self):
-        """ Returns readable string """
-        raise NotImplementedError("Internal error")
+def _cast_name( cast : type ) -> str:
+    """ Returns the class name of 'cast' """
+    if cast is None:
+        return ""
+    return getattr(cast,"__name__", str(cast))
     
+# ================================
+# Simple wrapper
+# ================================
+
+class _Simple(_Cast):# NOQA
+
+    def __init__(self, cast : type, config_name : str, key_name : str  ):
+        """ Simple atomic caster """
+        if not cast is None:
+            _log.verify( not isinstance(cast, str), "Error in definition for key '%s' in config '%s': 'cast' must be a type. Found a string. Most likely this happened because a help string was defined as position argument, but no 'cast' type. In this case, use 'help=' to specify the help text.", key_name, config_name )
+            _log.verify( not isinstance(cast, _Cast), "Internal error in definition for key '%s' in config '%s': 'cast' should not be derived from _Cast. Object is %s", key_name, config_name, str(cast) )
+            _log.verify( isinstance( cast, type ), "Error in definition for key '%s' in config '%s': 'cast' must be a type. Found %s", key_name, config_name, str(cast) )
+        self.cast = cast
+
+    def __call__(self, value, config_name : str, key_name : str ):
+        """ Cast 'value' to the proper type """
+        return self.cast(value) if not self.cast is None else value
+        
+    def __str__(self) -> str:
+        """ Returns readable string """
+        return _cast_name(self.cast)
+
+# ================================
+# Conditional types such as Int>0
+# ================================
+
 class _Condition(_Cast):
     """ Represents a simple operator condition such as 'Float >= 0.' """
     
-    def __init__(self, cast, op, other):# NOQA
+    def __init__(self, cast, op, other):
+        """ Initialize the condition for a base type 'cast' and an 'op' with an 'other'  """
         self.cast    = cast
         self.op      = op    
         self.other   = other
         self.l_and   = None
-
-    def __call__( self, value ):
-        """ Casts 'value' to the underlying data type """
-        return self.cast(value)
 
     def __and__(self, cond):
         """
@@ -69,18 +88,19 @@ class _Condition(_Cast):
         if not self.l_and is None:
             raise NotImplementedError("Cannot combine more than two conditions")
         if not self.op[0] == 'g':
-            raise NotImplementedError("The left hand condition when using '&' must be > or >=. Found %s" % self._prop_str)
+            raise NotImplementedError("The left hand condition when using '&' must be > or >=. Found %s" % self._op_str)
         if not cond.op[0] == 'l':
-            raise NotImplementedError("The right hand condition when using '&' must be < or <=. Found %s" % cond._prop_str)
+            raise NotImplementedError("The right hand condition when using '&' must be < or <=. Found %s" % cond._op_str)
         if self.cast != cond.cast:
             raise NotImplementedError("Cannot '&' conditions for types %s and %s" % (self.cast.__name__, cond.cast.__name__))
         op_new = _Condition(self.cast, self.op, self.other)
         op_new.l_and = cond
         return op_new
 
-    def test(self, value) -> bool:
+    def __call__(self, value, config_name : str, key_name : str ):
         """ Test whether 'value' satisfies the condition """
-        assert isinstance( value, self.cast ), "Internal error: 'value' should be of type %s but found type %s" % (self.cast.__name__, type(value).__name__ )
+        value = self.cast(value)
+
         if self.op == "ge":
             ok = value >= self.other
         elif self.op == "gt":
@@ -91,13 +111,19 @@ class _Condition(_Cast):
             ok = value < self.other
         else:
             raise RuntimeError("Internal error: unknown operator %s" % str(self.op))            
-        if not ok:
-            return False
-        return ok if self.l_and is None else self.l_and.test(value)
+        _log.verify( ok, "Config '%s': value for key '%s' %s. Found %s", config_name, key_name, self.err_str, value )
+        return self.l_and( value, config_name, key_name) if not self.l_and is None else value
         
+    def __str__(self) -> str:
+        """ Returns readable string """
+        s = _cast_name(self.cast) + self._op_str + str(self.other)
+        if not self.l_and is None:
+            s += " and " + str(self.l_and)
+        return s
+
     @property
-    def _prop_str(self) -> str:
-        """ Returns the underlying operator for this conditon. Does NOT take into account any '&' operator """
+    def _op_str(self) -> str:
+        """ Returns a string for the operator of this conditon """
         if self.op == "ge":
             return ">="
         elif self.op == "gt":
@@ -127,18 +153,11 @@ class _Condition(_Cast):
         
         s    = "must " + mk_txt(self)
         if not self.l_and is None:
-            s += " and " + mk_txt(self.l_and)
+            s += ", and " + mk_txt(self.l_and)
         return s
 
-    @property
-    def help_cast(self) -> str:
-        """ Returns readable string """
-        s = str(self.cast.__name__) + self._prop_str + str(self.other)
-        if not self.l_and is None:
-            s += " and " + self.l_and.help_cast
-        return s
              
-class _CastCond(object): # NOQA
+class _CastCond(_Cast): # NOQA
     """
     Generates compound _Condition's
     See the two members Float and Int
@@ -154,42 +173,52 @@ class _CastCond(object): # NOQA
         return _Condition( self.cast, 'le', self.cast(other) )
     def __lt__(self, other) -> bool:# NOQA
         return _Condition( self.cast, 'lt', self.cast(other) )    
+    def __call__(self, value, config_name : str, key_name : str ):
+        """ This gets called if the type was used without operators """
+        cast = _Simple(self.cast, config_name, key_name)
+        return cast(value, config_name, key_name)
+    def __str__(self) -> str:
+        """ This gets called if the type was used without operators """
+        cast = _Simple(self.cast, config_name, key_name)
+        return str(cast)
     
 Float = _CastCond(float)
-Int = _CastCond(int)
+Int   = _CastCond(int)
 
 # ================================
 # Enum type for list 'cast's
 # ================================
         
-class Enum(_Cast):# NOQA
-    """ Utility class to support enumerator types.
-        No need to use this classs directly. It will be automatically instantiated if a list is passed as type, e.g.
-        
-            code = config("code", "Python", ['C++', 'Python'], "Which language do we love")
-            
-        """
-        
-    def __init__(self, enum : list, config_name : str, key : str ):
+class _Enum(_Cast):
+    """
+    Utility class to support enumerator types.
+    No need to use this classs directly. It will be automatically instantiated if a list is passed as type, e.g.
     
+        code = config("code", "Python", ['C++', 'Python'], "Which language do we love")
+        
+    Note that all list members must be of the same type.        
+    """
+        
+    def __init__(self, enum : list, config_name : str, key_name : str ):
+        """ Initializes an enumerator casting type. """
         self.enum = list(enum)
-        _log.verify( len(self.enum) > 0, "Error in config '%s': 'cast' for key '%s' is an empty list or tuple. Lists are used for enumerator types", config_name, key )
-        self.cast = type( self.enum[0] )
+        _log.verify( len(self.enum) > 0, "Error in config '%s': 'cast' for key '%s' is an empty list. Lists are used for enumerator types, hence passing empty list is not defined", config_name, key_name )
+        self.cast = _Simple( type(self.enum[0]), config_name, key_name )
         for i in range(1,len(self.enum)):
             try:
-                self.enum[i] = self.cast( self.enum[i] )
+                self.enum[i] = self.cast( self.enum[i], config_name, key_name )
             except:
-                _log.throw( "Error in config '%s': 'key '%s' members of the enumerated list are not of consistent type. Found %s for the first element which does match the type %s of the %ldth element",\
-                        config_name, key, self.cast.__name__, i, type(self.enum[i]).__name__)    
+                _log.throw( "Error in config '%s': 'key '%s' members of the list are not of consistent type. Found %s for the first element which does match the type %s of the %ldth element",\
+                        config_name, key_name, self.cast, _cast_name(type(self.enum[i])), i )
         
-    def __call__( self, value ):# NOQA
-        """ cast 'value' to the proper type
-            Raises a KeyError if the value was not found in our enum """
-        return self.cast( value )
-
-    def test(self, value) -> bool:
-        """ Test whether 'value' satisfies the condition """
-        return value in self.enum
+    def __call__( self, value, config_name, key_name ):
+        """
+        Cast 'value' to the proper type and check is one of the list members
+        Raises a KeyError if the value was not found in our enum
+        """
+        value = self.cast(value, config_name, key_name)
+        _log.verify( value in self.enum, "Config '%s': value for key '%s' %s. Found %s", config_name, key_name, self.err_str, str(value) )        
+        return value
 
     @property
     def err_str(self) -> str:
@@ -201,15 +230,85 @@ class Enum(_Cast):# NOQA
             s += " or '" + str(self.enum[-1]) + "'"
         return s
         
-    @property
-    def help_cast(self) -> str:
+    def __str__(self) -> str:
         """ Returns readable string """
-        help_cast     = "[ "
+        s     = "[ "
         for i in range(len(self.enum)):
-            help_cast += ( ", " + self.enum[i] ) if i > 0 else self.enum[i]
-        help_cast += " ]"
-        return help_cast
+            s += ( ", " + self.enum[i] ) if i > 0 else self.enum[i]
+        s += " ]"
+        return s
  
+# ================================
+# Multiple types
+# ================================
+        
+class _Alt(_Cast):
+    """
+    Initialize a casting compund "alternative" type, e.g. it the variable may contain several types, each of which is acceptable.
+    This is invokved when a tuple is passed, e.g
+
+        config("spread", None, ( None, float ), "Float or None")
+        config("spread", 1, ( Int<=-1, Int>=1. ), "A variable which has to be outside (-1,+1)")
+    """
+    
+    def __init__(self, casts : list, config_name : str, key_name : str ):
+        """ Initialize a compound cast """
+        _log.verify( len(casts) > 0, "Error in config '%s': 'cast' for key '%s' is an empty tuple. Tupeks are used for aleternative types, hence passing empty tuple is not defined", config_name, key_name )
+        self.casts = [ _create_caster(cast, config_name, key_name) for cast in casts ]
+    
+    def __call__( self, value, config_name : str, key_name : str ):
+        """ Cast 'value' to the proper type """
+        e0   = None
+        done = True
+        for cast in self.casts:
+            try:
+                return cast(value, config_name, key_name )
+            except Exception as e:
+                e0 = e if e0 is None else e0
+        _log.throw("Error in config '%s': value for key '%s' %s. Found %s", config_name, key_name, self.err_str,str(value))
+
+    def test(self, value):
+        """ Test whether 'value' satisfies the condition """
+        raise self.test
+
+    @property
+    def err_str(self):
+        """ Returns readable string """
+        return "must be one of the following types: " + self.__str__
+        
+    def __str__(self):
+        """ Returns readable string """
+        s = ""
+        for cast in self.casts[:-1]:
+            s += str(cast) + " or "
+        s += str(self.casts[-1])
+        return s
+
+def _create_caster( cast : type, name : str, key : str ):
+    """
+    Implements casting.
+    
+    Parameters
+    ----------
+        value: value, either from the user or the default value if provided
+        cast : cast input to call() from the user, or None.
+        name : name of the config
+        key  : name of the key being access
+        user___str__ : string the user provided for casting help, or None
+
+    Returns
+    -------
+        value : casted value
+        __str__ : casting help text. Empty if 'cast' is None
+    """
+    
+    if isinstance(cast, list):
+        return _Enum( cast, name, key )
+    elif isinstance(cast, tuple):
+        return _Alt( cast, name, key )
+    elif isinstance(cast,_Cast):
+        return cast
+    return _Simple( cast, name, key )
 
 # ==============================================================================
 #
@@ -575,7 +674,7 @@ class Config(OrderedDict):
         
     def __call__(self, key          : str,
                        default      = no_default, 
-                       cast         : object = None, 
+                       cast         : type = None, 
                        help         : str = None, 
                        help_default : str = None, 
                        help_cast    : str = None,
@@ -631,22 +730,10 @@ class Config(OrderedDict):
         else:
             value = OrderedDict.get(self,key)
 
-        # enum support
-        cast = Enum( cast, self._name, key ) if isinstance( cast, (list,tuple) ) else cast
-        _log.verify( not isinstance(cast, str), "Error in definition of config '%s': 'cast' must be a class. Found a string. Most likely this happened because a help string was defined, but no 'cast' class. In this case, use 'help=' to specify the help text.")
+        # casting
+        caster = _create_caster( cast, self._name, key )
+        value  = caster( value, self._name, key )
                         
-        # convert value to 'cast'
-        # validate value is in enum if applicable
-        if not value is None and not cast is None:
-            try:
-                value = cast( value )
-            except Exception as e:
-                cast_name = cast.__name__ if not isinstance( cast, _CastCond ) else _CastCond.cast.__name__
-                _log.throw( "Error in config '%s': value '%s' for key '%s' cannot be cast to type '%s': %s", self._name, value, key, cast_name, str(e))
-                
-            if isinstance( cast, _Cast ) and not cast.test(value):
-                _log.throw( "Error in config '%s': value '%s' for key '%s' %s", self._name, value, key, cast.err_str )
-                    
         # mark key as read, and record call
         if mark_done:
             self._done.add(key)
@@ -661,19 +748,11 @@ class Config(OrderedDict):
         help          = help[:-1] if help[-1:] == "." else help
         help_default  = str(help_default) if not help_default is None else ""
         help_default  = str(default) if default != no_default and len(help_default) == 0 else help_default
+        help_cast     = help_cast if not help_cast is None else str(caster)
         _log.verify( default != no_default or help_default == "", "Config %s setup error for key %s: cannot specify 'help_default' if no default is given", self._name, key )
         
-        if not help_cast is None:
-            help_cast     = str(help_cast)
-        elif cast is None:
-            help_cast     = ""
-        elif isinstance( cast, _Cast ):
-            help_cast     = cast.help_cast
-        else:
-            help_cast     = str(cast.__name__)
-            
         raw_use       = help == "" and help_cast == "" and help_default == "" # raw_use, e.g. simply get() or []. Including internal use
-        record        = SortedDict( value=value, 
+        record        = SortedDict( value=value,
                                     raw_use=raw_use,
                                     help=help,
                                     help_default=help_default,

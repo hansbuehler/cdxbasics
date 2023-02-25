@@ -75,6 +75,7 @@ class DynamicFig(Deferred):
     def __init__(self, row_size : int = 5, 
                        col_size : int = 4, 
                        col_nums : int = 5,
+                       title    : str = None,
                        **fig_kwargs ):
         """
         Setup object with a given output geometry.
@@ -87,6 +88,8 @@ class DynamicFig(Deferred):
                 Size for a column for matplot luib. Default is 4
             col_nums : int, optional
                 How many columns. Default is 5   
+            title : str, optional
+                An optional title which will be passed to suptitle()
             fig_kwargs :
                 kwargs for matplotlib figure plus
                 tight : bool, optional (False)
@@ -110,6 +113,7 @@ class DynamicFig(Deferred):
         self.this_row  = 0
         self.this_col  = 0
         self.max_col   = 0
+        self.fig_title = title
         self.closed    = False
         
     def __del__(self): # NOQA
@@ -172,6 +176,8 @@ class DynamicFig(Deferred):
             if self.tight:
                 self.fig.tight_layout()
                 self.fig.set_tight_layout(True)
+            if not self.fig_title is None:
+                self.fig.suptitle( self.fig_title )
             rows      = self.this_row+1
             cols      = self.max_col+1
             for ax in self.axes:

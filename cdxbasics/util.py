@@ -306,31 +306,34 @@ class CacheMode(object):
     CacheMode
     A class which encodes standard behaviour of a caching strategy:
     
-                                                on    off     update   clear   readonly
-        load upon start from disk if exists     x     -       -        -       x
-        write updates to disk                   x     -       x        -       -
-        delete existing object upon start       -     -       -        x       -
+                                                on    gen    off     update   clear   readonly
+        load upon start from disk if exists     x     x     -       -        -       x
+        write updates to disk                   x     x     -       x        -       -
+        delete existing object upon start       -     -     -       -        x       -
+        delete existing object if incompatible  x     -     -       x        x       -
         
     See cdxbasics.subdir for functions to manage files.
     """
     
     ON = "on"
+    GEN = "gen"
     OFF = "off"
     UPDATE = "update"
     CLEAR = "clear"
     READONLY = "readonly"
     
-    MODES = [ ON, OFF, UPDATE, CLEAR, READONLY ]
-    HELP = "'on' for standard caching; 'off' to turn off; 'update' to overwrite any existing cache; 'clear' to clear existing caches; 'readonly' to read existing caches but not write new ones"
+    MODES = [ ON, GEN, OFF, UPDATE, CLEAR, READONLY ]
+    HELP = "'on' for standard caching; 'gen' for caching but keep existing incompatible files; 'off' to turn off; 'update' to overwrite any existing cache; 'clear' to clear existing caches; 'readonly' to read existing caches but not write new ones"
     
     def __init__(self, mode : str = None ):
         """
         Encodes standard behaviour of a caching strategy:
 
-                                                    on    off     update   clear   readonly
-            load upon start from disk if exists     x     -       -        -       x
-            write updates to disk                   x     -       x        -       -
-            delete existing object upon start       -     -       x        x       -
+                                                    on    gen    off     update   clear   readonly
+            load upon start from disk if exists     x     x     -       -        -       x
+            write updates to disk                   x     x     -       x        -       -
+            delete existing object upon start       -     -     -       -        x       -
+            delete existing object if incompatible  x     -     -       x        x       -
             
         Parameters
         ----------
@@ -341,9 +344,10 @@ class CacheMode(object):
         self.mode = mode.mode if isinstance(mode, CacheMode) else str(mode)
         if not self.mode in self.MODES:
             raise KeyError( self.mode, "Caching mode must be 'on', 'off', 'update', 'clear', or 'readonly'. Found " + self.mode )
-        self._read   = self.mode in [self.ON, self.READONLY]
-        self._write  = self.mode in [self.ON, self.UPDATE]
+        self._read   = self.mode in [self.ON, self.READONLY, self.GEN]
+        self._write  = self.mode in [self.ON, self.UPDATE, self.GEN]
         self._delete = self.mode in [self.UPDATE, self.CLEAR]
+        self._del_in = self.mode in [self.UPDATE, self.CLEAR, self.GEN]
         
     @property
     def read(self) -> bool:
@@ -359,7 +363,12 @@ class CacheMode(object):
     def delete(self) -> bool:
         """ Whether to delete existing data """
         return self._delete
-
+    
+    @property
+    def del_incomp(self) -> bool:
+        """ Whether to delete existing data if it is not compatible """
+        return self._del_in
+    
     def __str__(self) -> str:# NOQA
         return self.mode
     def __repr__(self) -> str:# NOQA
@@ -379,6 +388,11 @@ class CacheMode(object):
     def is_on(self) -> bool:
         """ Whether this cache mode is ON """
         return self.mode == self.ON
+
+    @property
+    def is_gen(self) -> bool:
+        """ Whether this cache mode is GEN """
+        return self.mode == self.GEN
 
     @property
     def is_update(self) -> bool:

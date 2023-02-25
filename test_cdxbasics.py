@@ -439,6 +439,7 @@ class CDXBasicsTest(unittest.TestCase):
         
         on = CacheMode("on")
         of = CacheMode("off")
+        gn = CacheMode("gen")
         cl = CacheMode("clear")
         up = CacheMode("update")
         ro = CacheMode("readonly")
@@ -446,17 +447,19 @@ class CDXBasicsTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             _ = CacheMode("OFF")
         
-        allc = [on, of, cl, up, ro]
+        allc = [on, gn, of, cl, up, ro]
         
-        self.assertEqual( [ x.is_on for x in allc ], [True, False, False, False, False ] )
-        self.assertEqual( [ x.is_off for x in allc ], [False, True, False, False, False ] )
-        self.assertEqual( [ x.is_clear for x in allc ], [False, False, True, False, False ] )
-        self.assertEqual( [ x.is_update for x in allc ], [False, False, False, True, False ] )
-        self.assertEqual( [ x.is_readonly for x in allc ], [False, False, False, False, True ] )
+        self.assertEqual( [ x.is_on for x in allc ], [True, False, False, False, False, False ] )
+        self.assertEqual( [ x.is_gen for x in allc ], [False, True, False, False, False, False ] )
+        self.assertEqual( [ x.is_off for x in allc ], [False, False, True, False, False, False ] )
+        self.assertEqual( [ x.is_clear for x in allc ], [False, False, False, True, False, False ] )
+        self.assertEqual( [ x.is_update for x in allc ], [False, False, False, False, True, False ] )
+        self.assertEqual( [ x.is_readonly for x in allc ], [False, False, False, False, False, True ] )
         
-        self.assertEqual( [ x.read for x in allc ],  [True, False, False, False, True] )
-        self.assertEqual( [ x.write for x in allc ], [True, False, False, True, False] )
-        self.assertEqual( [ x.delete for x in allc ], [False, False, True, True, False ] )
+        self.assertEqual( [ x.read for x in allc ],  [True, True, False, False, False, True] )
+        self.assertEqual( [ x.write for x in allc ], [True, True, False, False, True, False] )
+        self.assertEqual( [ x.delete for x in allc ], [False, False, False, True, True, False ] )
+        self.assertEqual( [ x.del_incomp for x in allc ], [False, True, False, True, True, False ] )
         
 
 # testing our auto-caching
@@ -554,12 +557,35 @@ class CDXCConfigTest(unittest.TestCase):
         _ = sub("x", 1)
         config.done() # fine now
 
-        # test set        
+        # test list (_Enum)        
         config = Config(t="a", q="q")
         _ = config("t", "b", ['a', 'b', 'c'] )
         self.assertEqual(_, 'a')
         with self.assertRaises(Exception):
-            _ = config("q", "b", ['a', 'b', 'c'] )   # exception: not in set
+            _ = config("q", "b", ['a', 'b', 'c'] )   # exception: 'q' not in set
+
+        # test tuple (_Alt)
+        config = Config(t="a")
+        _ = config("t", "b", (None, str) )
+        self.assertEqual(_, 'a')
+        config = Config(t=None)
+        _ = config("t", "b", (None, str) )
+        self.assertEqual(_, None)
+        config = Config()
+        _ = config("t", "b", (None, ['a','b']) )
+        self.assertEqual(_, 'b')
+        config = Config(t=2)
+        _ = config("t", 1, (Int>=1, Int<=1) )
+        self.assertEqual(_, 2)
+        config = Config()
+        _ = config("t", 3, (Int>=1, Int<=1) )
+        self.assertEqual(_, 3)
+        with self.assertRaises(Exception):
+            config = Config()
+            _ = config("t", 0, (Int>=1, Int<=-1) )
+        with self.assertRaises(Exception):
+            config = Config(t=0)
+            _ = config("t", 3, (Int>=1, Int<=-1) )
 
         # combined conditons
         config = Config(x=1., y=1.)
