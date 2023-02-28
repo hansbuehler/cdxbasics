@@ -438,8 +438,8 @@ class CDXBasicsTest(unittest.TestCase):
     def test_cache_mode(self):
         
         on = CacheMode("on")
-        of = CacheMode("off")
         gn = CacheMode("gen")
+        of = CacheMode("off")
         cl = CacheMode("clear")
         up = CacheMode("update")
         ro = CacheMode("readonly")
@@ -459,7 +459,7 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual( [ x.read for x in allc ],  [True, True, False, False, False, True] )
         self.assertEqual( [ x.write for x in allc ], [True, True, False, False, True, False] )
         self.assertEqual( [ x.delete for x in allc ], [False, False, False, True, True, False ] )
-        self.assertEqual( [ x.del_incomp for x in allc ], [False, True, False, True, True, False ] )
+        self.assertEqual( [ x.del_incomp for x in allc ], [True, False, False, True, True, False ] )
         
 
 # testing our auto-caching
