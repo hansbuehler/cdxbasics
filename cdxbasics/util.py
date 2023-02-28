@@ -347,7 +347,7 @@ class CacheMode(object):
         self._read   = self.mode in [self.ON, self.READONLY, self.GEN]
         self._write  = self.mode in [self.ON, self.UPDATE, self.GEN]
         self._delete = self.mode in [self.UPDATE, self.CLEAR]
-        self._del_in = self.mode in [self.UPDATE, self.CLEAR, self.GEN]
+        self._del_in = self.mode in [self.UPDATE, self.CLEAR, self.ON]
         
     @property
     def read(self) -> bool:
