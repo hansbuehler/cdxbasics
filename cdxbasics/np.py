@@ -6,10 +6,10 @@ Hans Buehler 2023
 from .util import fmt
 from .logger import Logger
 import numpy as np
+import math as math
 _log = Logger(__file__)
 
-
-# -------------------------------------------------
+# ------------------------------------------------
 # Basic arithmetics for non-uniform distributions
 # -------------------------------------------------
 
