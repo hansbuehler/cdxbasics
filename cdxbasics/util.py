@@ -439,49 +439,58 @@ def bind( F, **kwargs ):
 
 Generic = PrettyDict
 
+# =============================================================================
+# Some formatting
+# =============================================================================
 
-"""
-class Object(object):
-    def __init__(self):
-        self.x = [ 1,2,3. ]
-        self.y = { 'a':1, 'b':2 }
-        self.z = PrettyDict(c=3,d=4)
-        self.r = set([65,6234,1231,123123,12312]) 
-        self.t = (1,2,"test")
-                    
-        def ff():
-            pass
-        
-        self.ff = ff
-        self.gg = lambda x : x*x
-        
-        if not np is None and not pd is None:
-            self.a = np.array([1,2,3])
-            self.b = np.zeros((3,4,2))
-            self.c = pd.DataFrame({'a':np.array([1,2,3]),'b':np.array([10,20,30]),'c':np.array([100,200,300]),  })
-            
-            u = uniqueHash(self.b) # numpy
-            assert u=="863f748c37fa0aa44bc1c4a5f8093244", u
-            u = uniqueHash(self.c) # panda frame
-            assert u=="61af55defe5d0d51d5cad16c944460c9", u
-    
-    def f(self):
-        pass
-    
-    @staticmethod
-    def g(self):
-        pass
-    
-    @property
-    def h(self):
-        return self.x
+def fmt_seconds( seconds : int ) -> str:
+    """ Print nice format string for seconds """
+    if seconds < 60:
+        return "%lds" % seconds
+    if seconds < 60*60:
+        return "%ld:%02ld" % (seconds//60, seconds%60)
+    return "%ld:%02ld:%02ld" % (seconds//60//60, (seconds//60)%60, seconds%60)    
 
-x = np.array([1,2,3,4.])
-u = uniqueHash(x)
-assert u == "d819f0b72b849d66112e139fa3b7c9f1", u
+def fmt_list( lst, none="-" ) -> str:
+    """ Returns a nicely formatted list of string with commas """
+    if lst is None:
+        return none
+    if len(lst) == 0:
+        return none
+    if len(lst) == 1:
+        return str(lst[0])
+    if len(lst) == 2:
+        return str(lst[0]) + " and " + str(lst[1])
+    s = ""
+    for k in lst[:-1]:
+        s += str(k) + ", "
+    return s[:-2] + " and " + str(lst[-1])
     
-o = Object()
-u = uniqueHash(o)
-assert u == "6e29f83d29e8432cf46e34c47d605e89", u
-"""
+def fmt_big_number( number : int ) -> str:
+    """ Return a nicely formatted big number string """
+    if number >= 10**10:
+        number = number//(10**9)
+        number = round(number,2)
+        return "%gG" % number
+    if number >= 10**7:
+        number = number//(10**6)
+        number = round(number,2)
+        return "%gM" % number
+    if number >= 10**4:
+        number = number/(10**3)
+        number = round(number,2)
+        return "%gK" % number
+    return str(number)
 
+def fmt_datetime(dt : datetime.datetime) -> str:
+    """ Returns string for 'dt' """
+    if isinstance(dt, datetime.datetime):
+        return "%04ld-%02ld-%02ld %02ld:%02ld:%02ld" % ( dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second )
+    if isinstance(dt, datetime.date):
+        return "%04ld-%02ld-%02ld" % ( dt.year, dt.month, dt.day )
+    assert isinstance(dt, datetime.time), "'dt' must be datetime, date, or time. Found %s" % type(dt)
+    return "%02ld:%02ld:%02ld" % ( dt.hour, dt.minute, dt.second )
+
+def fmt_now() -> str:
+    """ Returns string for 'now' """
+    return fmt_datetime(datetime.datetime.now())
