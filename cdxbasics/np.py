@@ -77,7 +77,7 @@ def mean_bins( x : np.ndarray, bins : int, axis : int = None, P : np.ndarray = N
     return np.asarray( mean( P[ixs[i]:ixs[i+1]], x[ixs[i]:ixs[i+1]], axis=axis ) for i in range(len(ixs)-1))
 
     
-def mean_std_bins( x : np.ndarray, bins : int, saxis : int = None, P : np.ndarray = None ) -> np.ndarray:
+def mean_std_bins( x : np.ndarray, bins : int, axis : int = None, P : np.ndarray = None ) -> np.ndarray:
     """
     Return a vector of 'bins' means of x.
     Bins the vector 'x' into 'bins' bins, then computes the mean of each bin, and returns the resulting vector of length 'bins'.
