@@ -11,16 +11,35 @@ class Deferred(object):
     Defer an action such as function calls, item access, and attribute access to a later stage.
     This is used in dynaplot:
     
-        fig = figure()
-        ax  = fig.add_subplot()
+        fig = figure()                # the DynanicFig returned by figure() is derived from Deferred
+        ax  = fig.add_subplot()       # Deferred call for add_subplot()
         lns = ax.plot( x, y )[0]      # This is a deferred call: plot() and then [] are iteratively deferred.
         fig.render()                  # renders the figure and executes first plot() then [0]
         lns.set_ydata( y2 )           # we can now access the resulting Line2D object via the Deferred wrapper
         fig.render()                  # update graph
         
-    Typically, a code user would derive from this class and initialize __init__
-    with only the first 'info' argument giving their class a good name for error
-    messages.
+    Typically, a code user would create a class which can defer actions by deriving from this class.
+    For example assume there is a class A which we want to defer.
+    
+    class DeferredA( Deferred ):    
+        def __init__( self ):
+            Deferred.__init__( info = "A" )
+            self.a = None
+        def create( self, *kargs_A, **kwargs_A ):
+            a = A( *kargs_A, **kwargs_A )
+            self._dereference( a )
+            
+        
+    
+    deferred_A = DeferredA()
+    fx = deferred_A.call_a_function( x )    # will defer call to 'call_a_function'
+    ix = deferred_A[0]                      # will defer index access
+    cl = deferred_A("hello")                # will defer __call__
+    
+    deferred_A.create( 1, x=2 )             # actually create A
+                                            # This will trigger execution of all deferred actions
+                                            # in order.
+    
     See cdxbasics.dynaplot.DynamicFig as an example.
     """
     
@@ -42,7 +61,7 @@ class Deferred(object):
         Parameters
         ----------
             info : str
-                Description of the parent for error messages.
+                Description of the underlying deferred parent operation/class for error messages.
             typ : int
                 one of the TYPE_ values describing the type of action to be deferred.
             ref : 
