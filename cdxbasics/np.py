@@ -3,7 +3,6 @@ Numpy stats with a distribution function
 Hans Buehler 2023
 """
 
-from .util import fmt
 from .logger import Logger
 import numpy as np
 import math as math
@@ -15,7 +14,6 @@ _log = Logger(__file__)
 
 def _prep_P_and_X( P : np.ndarray, x : np.ndarray, axis : int ) -> tuple:
     """ Converts P and x in compatible shapes """
-    
     P = np.asarray(P)
     x = np.asarray(x)
     if not axis is None:
@@ -29,14 +27,14 @@ def _prep_P_and_X( P : np.ndarray, x : np.ndarray, axis : int ) -> tuple:
         axis = -1
         _log.verify( len(P) == len(x), "'P' must have the same length as 'x'. Found %ld and %ld, respectively", len(P), len(x))
     _log.verify( np.min(P) >= 0., "P cannot have negative members. Found element %g", np.min(P))
-    return P, X, axis
+    return P, x, axis
 
 
 def mean( P : np.ndarray, x : np.ndarray, axis : int = None ) -> np.ndarray: 
     """ Compute the mean of x with a distribution P along 'axis """
     if P is None:
         return np.mean( x, axis=axis )
-    P, x, axis = _prep_P_and_X( p, x, axis )
+    P, x, axis = _prep_P_and_X( P, x, axis )
     sumP       = np.sum(P)
     _log.verify( sumP > 0., "sum(P) must be positive; found %g", sumP )
     return np.sum( P * x, axis=axis ) / sumP
@@ -48,7 +46,7 @@ def var( P : np.ndarray, x : np.ndarray, axis : int = None ) -> np.ndarray:
     """
     if P is None:
         return np.var( x, axis=axis )
-    P, x, axis = _prep_P_and_X( p, x, axis )
+    P, x, axis = _prep_P_and_X( P, x, axis )
     m = mean(P,x,axis)
     return np.sum( P * (( x - m ) ** 2) , axis=axis ) / np.sum(P)
         
@@ -65,7 +63,6 @@ def err( P : np.ndarray, x : np.ndarray, axis : int = None ) -> np.ndarray:
     return e
 """
 def percentile( P : np.ndarray, x : np.ndarray, percentiles : np.ndarray, axis : int = -1 ) -> np.ndarray:
-    """ Computes the percentile for 'x' with distribution 'P' """
     x = np.asarray(x)
     _log.verify( len(x.shape) == 1, "Only vectors are supported: 'x' has shape %s", x.shape)    
     if P is None:
@@ -117,7 +114,6 @@ def mean_bins( x : np.ndarray, bins : int, axis : int = None, P : np.ndarray = N
     -------
         Numpy array of length bins
     """
-    
     ixs = np.linspace(0, len(x), bins+1, endpoint=True, dtype=np.int32) 
     if P is None:
         return np.asarray( np.mean( x[ixs[i]:ixs[i+1]], axis=axis ) for i in range(len(ixs)-1))
@@ -149,7 +145,6 @@ def mean_std_bins( x : np.ndarray, bins : int, axis : int = None, P : np.ndarray
     -------
         Tuple of numpy arrays of length bins
     """
-    
     ixs = np.linspace(0, len(x), bins+1, endpoint=True, dtype=np.int32) 
     if P is None:
         means = np.asarray( np.mean( x[ixs[i]:ixs[i+1]], axis=axis) for i in range(len(ixs)-1))
