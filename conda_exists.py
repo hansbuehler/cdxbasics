@@ -1,5 +1,5 @@
 """
-Produce message with cdxbasics code
+Determine whether cdxbasics is installed
 """
 
 try:

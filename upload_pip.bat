@@ -1,5 +1,4 @@
 #@echo off
-REM before using this script, update the version string in setup.py and __init__.py
 
 echo =====================================================================================
 echo PIP build
