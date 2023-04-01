@@ -130,6 +130,73 @@ def write(text : str,*args,**kwargs) -> str:
     """ Prints a fmt() string without EOL, e.g. uses print(fmt(..),end='') """
     print(_fmt(text,args,kwargs),end='')
 
+
+def fmt_seconds( seconds : int ) -> str:
+    """ Print nice format string for seconds """
+    if seconds < 60:
+        return "%lds" % seconds
+    if seconds < 60*60:
+        return "%ld:%02ld" % (seconds//60, seconds%60)
+    return "%ld:%02ld:%02ld" % (seconds//60//60, (seconds//60)%60, seconds%60)
+
+def fmt_list( lst, none="-" ) -> str:
+    """ Returns a nicely formatted list of string with commas """
+    if lst is None:
+        return none
+    if len(lst) == 0:
+        return none
+    if len(lst) == 1:
+        return str(lst[0])
+    if len(lst) == 2:
+        return str(lst[0]) + " and " + str(lst[1])
+    s = ""
+    for k in lst[:-1]:
+        s += str(k) + ", "
+    return s[:-2] + " and " + str(lst[-1])
+
+def fmt_big_number( number : int, fmt_computer = False ) -> str:
+    """
+    Return a formatted big number string, e.g. 12.35M instead of all digits.
+
+    Parameters
+    ----------
+        number : int
+        fmt_computer : bool
+            If False, return 'B' for billions. If True, return 'G'
+    Returns
+    -------
+        String number
+    """
+    if number >= 10**10:
+        number = number/(10**9)
+        number = round(number,2)
+        return "%g%s" % (number, "G" if fmt_computer else "B")
+    if number >= 10**7:
+        number = number/(10**6)
+        number = round(number,2)
+        return "%gM" % number
+    if number >= 10**4:
+        number = number/(10**3)
+        number = round(number,2)
+        return "%gK" % number
+    return str(number)
+
+def fmt_datetime(dt : datetime.datetime) -> str:
+    """
+    Returns string for 'dt' of the form YYYY-MM-DD HH:MM:SS" if 'dt' is a datetime,
+    or a the respective version for time or date.
+    """
+    if isinstance(dt, datetime.datetime):
+        return "%04ld-%02ld-%02ld %02ld:%02ld:%02ld" % ( dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second )
+    if isinstance(dt, datetime.date):
+        return "%04ld-%02ld-%02ld" % ( dt.year, dt.month, dt.day )
+    assert isinstance(dt, datetime.time), "'dt' must be datetime, date, or time. Found %s" % type(dt)
+    return "%02ld:%02ld:%02ld" % ( dt.hour, dt.minute, dt.second )
+
+def fmt_now() -> str:
+    """ Returns string for 'now' """
+    return fmt_datetime(datetime.datetime.now())
+
 # =============================================================================
 # Conversion of arbitrary python elements into re-usable versions
 # =============================================================================
@@ -139,7 +206,7 @@ def plain( inn, sorted = False ):
     Converts a python structure into a simple atomic/list/dictionary collection such
     that it can be read without the specific imports used inside this program.
     or example, objects are converted into dictionaries of their data fields.
-    
+
     Hans Buehler, Dec 2013
     """
     # basics
@@ -188,27 +255,57 @@ def _compress_function_code( f ):
         assert len(src) > 0, "No source code ??"
         l = src[0]
         i = l.lower().find("lambda ")
-        src[0] = l[i+len("lambda "):]        
+        src[0] = l[i+len("lambda "):]
     src = [ l.replace("\t"," ").replace(" ","").replace("\n","") for l in src ]
     return src
 
-def uniqueHashExt( length, parse_functions = False ):
-    """ Returns a function which generates hashes of length 'length', or of standard length if length is None """
+def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscore : str = "none" ):
+    """
+    Returns a function which generates hashes of length 'length', or of standard length if length is None
+
+    Parameters
+    ----------
+        length : int
+            Intended length of the hash function.
+        parse_functions : bool
+            If True, then the function will attempt to generate
+            unique hashes for function and property objects
+            using _compress_function_code
+        parse_underscore : bool
+            How to handle dictionary and object members starting with '_'
+                'none' : ignore members starting with '_' (the default)
+                'protected' : ignore members starting with '__', but not with '_'
+                'private' : do not ignore any members starting with '__'
+
+    Returns
+    -------
+        hash function with signature (*args, **kwargs).
+        All arguments passed will be used to generate the hash key.
+
+    """
+    parse_underscore = str(parse_underscore)
+    if parse_underscore == "none":
+        pi = 0
+    elif parse_underscore == "protect":
+        pi = 1
+    else:
+        assert parse_underscore == "private", "'parse_underscore' must be 'none', 'private', or 'protected'. Found '%s'" % parse_underscore
+        pi = 2
+
     def unique_hash(*args, **kwargs) -> str:
-        """ 
+        """
         Generates a hash key for any collection of python objects.
         Typical use is for key'ing data vs a unique configuation.
-        
+
         The function
             1) uses the repr() function to feed objects to the hash algorithm.
                that means is only distinguishes floats up to str conversion precision
             2) keys of dictionaries, and sets are sorted to ensure equality of hashes
                accross different memory setups of strings
-            3) Members with leading '_' are ignored
-            4) Functions and properties are ignored
-        
-        Hans Buehler 2017
-        """    
+            3) Members with leading '_' are ignored (*)
+            4) Functions and properties are ignored (*)
+        (*) you can create a hash function with different behaviour by using uniqueHashExt()
+        """
         m = hashlib.md5() if length is None else hashlib.shake_128()
         def update(s):
             s_ =  repr(s).encode('utf-8')
@@ -220,7 +317,7 @@ def uniqueHashExt( length, parse_functions = False ):
             # by default do not handle functions.
             if isFunction(inn) or isinstance(inn,property):
                 if parse_functions: update( _compress_function_code(inn) )
-                return 
+                return
             # basic elements
             if isAtomic(inn):
                 update(inn)
@@ -242,7 +339,9 @@ def uniqueHashExt( length, parse_functions = False ):
                 assert not isinstance(inn, list)
                 inn_ = sorted(inn.keys())
                 for k in inn_:
-                    if k[:1] == '_':
+                    if pi == 0 and k[:1] == '_':
+                        continue
+                    if pi == 1 and k[:1] == '__':
                         continue
                     update(k)
                     visit(inn[k])
@@ -251,50 +350,82 @@ def uniqueHashExt( length, parse_functions = False ):
             if isinstance(inn, Collection):
                 assert not isinstance(inn, dict)
                 for k in inn:
-                    if isinstance(k,str) and k[:1] == "_":
-                        continue
+                    if isinstance(k,str):
+                        if pi == 0 and k[:1] == '_':
+                            continue
+                        if pi == 1 and k[:1] == '__':
+                            continue
                     visit(k)
                 return
-            # objects: treat like dictionaries        
+            # objects: treat like dictionaries
             inn_ = getattr(inn,"__dict__",None)
             if inn_ is None:
-                raise TypeError(fmt("Cannot handle type %s", type(inn)))        
+                raise TypeError(fmt("Cannot handle type %s: it does not have __dict__", type(inn).__name__))
             assert isinstance(inn_,Mapping)
             visit(inn_)
-            
+
         visit(args)
         visit(kwargs)
         return m.hexdigest() if length is None else m.hexdigest(length//2)
-    unique_hash.name = "uniqueHash(%s,%s)" % (str(length),str(parse_functions))
+    unique_hash.name = "uniqueHash(%s,%s,%s)" % (str(length),str(parse_functions),str(parse_underscore))
     return unique_hash
 
 def uniqueHash(*args, **kwargs) -> str:
-    """ 
+    """
     Generates a hash key for any collection of python objects.
     Typical use is for key'ing data vs a unique configuation.
-    
+
     The function
         1) uses the repr() function to feed objects to the hash algorithm.
            that means is only distinguishes floats up to str conversion precision
         2) keys of dictionaries, and sets are sorted to ensure equality of hashes
            accross different memory setups of strings
-        3) Members with leading '_' are ignored
-        4) Functions and properties are ignored
-    
-    Hans Buehler 2017
-    """    
+        3) Members with leading '_' are ignored (*)
+        4) Functions and properties are ignored (*)
+        (*) you can create a hash function with different behaviour by using uniqueHashExt()
+    """
     return uniqueHashExt(None)(*args,**kwargs)
 
 def uniqueHash32( *args, **argv ) -> str:
-    """ Compute a unique ID of length 32 for the provided arguments """
+    """
+    Compute a unique ID of length 32 for the provided arguments.
+    The function
+        1) uses the repr() function to feed objects to the hash algorithm.
+           that means is only distinguishes floats up to str conversion precision
+        2) keys of dictionaries, and sets are sorted to ensure equality of hashes
+           accross different memory setups of strings
+        3) Members with leading '_' are ignored (*)
+        4) Functions and properties are ignored (*)
+        (*) you can create a hash function with different behaviour by using uniqueHashExt()
+    """
     return uniqueHashExt(32)(*args,**argv)
 
 def uniqueHash48( *args, **argv ) -> str:
-    """ Compute a unique ID of length 48 for the provided arguments """
+    """
+    Compute a unique ID of length 48 for the provided arguments.
+    The function
+        1) uses the repr() function to feed objects to the hash algorithm.
+           that means is only distinguishes floats up to str conversion precision
+        2) keys of dictionaries, and sets are sorted to ensure equality of hashes
+           accross different memory setups of strings
+        3) Members with leading '_' are ignored (*)
+        4) Functions and properties are ignored (*)
+        (*) you can create a hash function with different behaviour by using uniqueHashExt()
+    """
     return uniqueHashExt(48)(*args,**argv)
 
 def uniqueHash64( *args, **argv ) -> str:
-    """ Compute a unique ID of length 64 for the provided arguments """
+    """
+    Compute a unique ID of length 64 for the provided arguments.
+    The function
+        1) uses the repr() function to feed objects to the hash algorithm.
+           that means is only distinguishes floats up to str conversion precision
+        2) keys of dictionaries, and sets are sorted to ensure equality of hashes
+           accross different memory setups of strings
+        3) Members with leading '_' are ignored (*)
+        4) Functions and properties are ignored (*)
+        (*) you can create a hash function with different behaviour by using uniqueHashExt()
+    """
     return uniqueHashExt(64)(*args,**argv)
 
 # =============================================================================
@@ -305,26 +436,26 @@ class CacheMode(object):
     """
     CacheMode
     A class which encodes standard behaviour of a caching strategy:
-    
+
                                                 on    gen    off     update   clear   readonly
-        load upon start from disk if exists     x     x     -       -        -       x
+        load cache from disk if exists          x     x     -       -        -       x
         write updates to disk                   x     x     -       x        -       -
-        delete existing object upon start       -     -     -       -        x       -
+        delete existing object                  -     -     -       -        x       -
         delete existing object if incompatible  x     -     -       x        x       -
-        
+
     See cdxbasics.subdir for functions to manage files.
     """
-    
+
     ON = "on"
     GEN = "gen"
     OFF = "off"
     UPDATE = "update"
     CLEAR = "clear"
     READONLY = "readonly"
-    
+
     MODES = [ ON, GEN, OFF, UPDATE, CLEAR, READONLY ]
     HELP = "'on' for standard caching; 'gen' for caching but keep existing incompatible files; 'off' to turn off; 'update' to overwrite any existing cache; 'clear' to clear existing caches; 'readonly' to read existing caches but not write new ones"
-    
+
     def __init__(self, mode : str = None ):
         """
         Encodes standard behaviour of a caching strategy:
@@ -334,7 +465,7 @@ class CacheMode(object):
             write updates to disk                   x     x     -       x        -       -
             delete existing object upon start       -     -     -       -        x       -
             delete existing object if incompatible  x     -     -       x        x       -
-            
+
         Parameters
         ----------
             mode : str
@@ -348,37 +479,37 @@ class CacheMode(object):
         self._write  = self.mode in [self.ON, self.UPDATE, self.GEN]
         self._delete = self.mode in [self.UPDATE, self.CLEAR]
         self._del_in = self.mode in [self.UPDATE, self.CLEAR, self.ON]
-        
+
     @property
     def read(self) -> bool:
         """ Whether to load any existing data when starting """
         return self._read
-    
+
     @property
     def write(self) -> bool:
         """ Whether to write cache data to disk """
         return self._write
-    
+
     @property
     def delete(self) -> bool:
         """ Whether to delete existing data """
         return self._delete
-    
+
     @property
     def del_incomp(self) -> bool:
         """ Whether to delete existing data if it is not compatible """
         return self._del_in
-    
+
     def __str__(self) -> str:# NOQA
         return self.mode
     def __repr__(self) -> str:# NOQA
         return self.mode
-        
+
     def __eq__(self, other) -> bool:# NOQA
         return self.mode == other
     def __neq__(self, other) -> bool:# NOQA
         return self.mode != other
-    
+
     @property
     def is_off(self) -> bool:
         """ Whether this cache mode is OFF """
@@ -414,7 +545,7 @@ class CacheMode(object):
 # =============================================================================
 
 def bind( F, **kwargs ):
-    """ 
+    """
     Binds default named arguments to F.
     For example
         def F(x,y):
@@ -440,57 +571,24 @@ def bind( F, **kwargs ):
 Generic = PrettyDict
 
 # =============================================================================
-# Some formatting
+# Misc Jupyter
 # =============================================================================
 
-def fmt_seconds( seconds : int ) -> str:
-    """ Print nice format string for seconds """
-    if seconds < 60:
-        return "%lds" % seconds
-    if seconds < 60*60:
-        return "%ld:%02ld" % (seconds//60, seconds%60)
-    return "%ld:%02ld:%02ld" % (seconds//60//60, (seconds//60)%60, seconds%60)    
-
-def fmt_list( lst, none="-" ) -> str:
-    """ Returns a nicely formatted list of string with commas """
-    if lst is None:
-        return none
-    if len(lst) == 0:
-        return none
-    if len(lst) == 1:
-        return str(lst[0])
-    if len(lst) == 2:
-        return str(lst[0]) + " and " + str(lst[1])
-    s = ""
-    for k in lst[:-1]:
-        s += str(k) + ", "
-    return s[:-2] + " and " + str(lst[-1])
-    
-def fmt_big_number( number : int ) -> str:
-    """ Return a nicely formatted big number string """
-    if number >= 10**10:
-        number = number//(10**9)
-        number = round(number,2)
-        return "%gG" % number
-    if number >= 10**7:
-        number = number//(10**6)
-        number = round(number,2)
-        return "%gM" % number
-    if number >= 10**4:
-        number = number/(10**3)
-        number = round(number,2)
-        return "%gK" % number
-    return str(number)
-
-def fmt_datetime(dt : datetime.datetime) -> str:
-    """ Returns string for 'dt' """
-    if isinstance(dt, datetime.datetime):
-        return "%04ld-%02ld-%02ld %02ld:%02ld:%02ld" % ( dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second )
-    if isinstance(dt, datetime.date):
-        return "%04ld-%02ld-%02ld" % ( dt.year, dt.month, dt.day )
-    assert isinstance(dt, datetime.time), "'dt' must be datetime, date, or time. Found %s" % type(dt)
-    return "%02ld:%02ld:%02ld" % ( dt.hour, dt.minute, dt.second )
-
-def fmt_now() -> str:
-    """ Returns string for 'now' """
-    return fmt_datetime(datetime.datetime.now())
+def is_jupyter():
+    """
+    Whether the current IPython session is a Jupyter session.
+    This is not terribly reliable.
+    Feedback welcome
+    """
+    try:
+        import IPython as IPython
+        ipy = IPython.get_ipython()
+        if "IPKernelApp" in ipy.config:
+            return True
+        elif "InlineBackend" in ipy.config:
+            return True
+    except ModuleNotFoundError:
+        pass
+    except NameError:
+        pass
+    return False
