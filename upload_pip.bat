@@ -9,9 +9,9 @@ REM https://packaging.python.org/tutorials/packaging-projects/
 cd C:\Users\hansb\iCloudDrive\Python3\packages\cdxbasics
 if exist dist rmdir /Q /S dist
 mkdir dist
-rmdir /Q /S dist
 python setup.py sdist bdist_wheel
 python -m twine upload dist/*
+rmdir /Q /S dist
 
 echo =====================================================================================
 echo Conda install: uninstall; build; install
@@ -48,7 +48,7 @@ echo Attempting conda install
 call conda install -y cdxbasics -c hansbuehler
 echo Deleting conda environment
 call conda activate base
-call conda remove -n cdxbasics_upload --all
+call conda remove -y -n cdxbasics_upload --all
 
 echo =====================================================================================
 echo GIT upload
