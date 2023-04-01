@@ -9,9 +9,9 @@ REM https://packaging.python.org/tutorials/packaging-projects/
 cd C:\Users\hansb\iCloudDrive\Python3\packages\cdxbasics
 if exist dist rmdir /Q /S dist
 mkdir dist
+rmdir /Q /S dist
 python setup.py sdist bdist_wheel
 python -m twine upload dist/*
-rmdir /Q /S dist
 
 echo =====================================================================================
 echo Conda install: uninstall; build; install
@@ -20,6 +20,9 @@ echo ===========================================================================
 REM https://docs.conda.io/projects/conda-build/en/latest/user-guide/tutorials/build-pkgs-skeleton.html#troubleshooting
 if exist conda rmdir /Q /S conda
 mkdir conda
+call conda create -y -n cdxbasics_upload
+call conda activate cdxbasics_upload
+call conda install -y "python>=3.9"
 copy conda_exists.py conda
 copy conda_modify_yaml.py conda
 cd conda
@@ -43,6 +46,9 @@ cd ..
 rmdir /Q /S conda
 echo Attempting conda install
 call conda install -y cdxbasics -c hansbuehler
+echo Deleting conda environment
+call conda activate base
+call conda remove -n cdxbasics_upload --all
 
 echo =====================================================================================
 echo GIT upload

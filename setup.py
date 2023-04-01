@@ -42,7 +42,7 @@ setuptools.setup(
 # however, there is no actual dependency on them. The code itself
 # will roll over if either is not present.
     install_requires=[
-         'numpy>=1.23','pandas>=1.5.3', 'matplotlib>=3.7', 'sortedcontainers>=2.4'
+         'numpy', 'pandas', 'matplotlib', 'sortedcontainers'
      ],
     classifiers=[
         "Programming Language :: Python :: 3",
