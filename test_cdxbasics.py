@@ -7,11 +7,14 @@ Created on Tue Apr 14 21:24:52 2020
 import unittest
 import pickle
 import cdxbasics.util as util
-import cdxbasics.config as config 
+import cdxbasics.np as cdxnp
+import cdxbasics.config as config
 import cdxbasics.kwargs as mdl_kwargs
 import cdxbasics.subdir as mdl_subdir
 import cdxbasics.logger as mdl_logger
 import cdxbasics.prettydict as prettydict
+import datetime as datetime
+import numpy as np
 if False:
     import importlib as imp
     imp.reload(mdl_kwargs)
@@ -50,7 +53,7 @@ mdl_subdir._log.setLevel(Logger.CRITICAL+1)   # no logging in testing
 class CDXBasicsTest(unittest.TestCase):
 
     def test_dctkwargs(self):
- 
+
         def f1(**kwargs):
             kwargs = dctkwargs(kwargs)
             a = kwargs('a',1)      # with default
@@ -58,25 +61,25 @@ class CDXBasicsTest(unittest.TestCase):
             c = kwargs.get('c',3)  # with default
             kwargs.done()
             return (a,b,c)
-    
+
         self.assertEqual((-1,-2,-3), f1(a=-1,b=-2,c=-3))
         self.assertEqual((+1,-2,+3), f1(b=-2))
         with self.assertRaises(KeyError):
             f1() # missing b
-        
+
     def test_Generic(self):
         # PrettyDict is now PrettyDict
         self.assertEqual( Generic, PrettyDict )
-        
+
     def test_PrettyDict(self):
-        
+
         g1 = PrettyDict(a=1)
         g1.b = 2
         g1['c'] = 3
         self.assertEqual(g1.a, 1)
         self.assertEqual(g1.b, 2)
         self.assertEqual(g1.c, 3)
-        
+
         with self.assertRaises(KeyError):
             _ = g1.d
 
@@ -88,35 +91,35 @@ class CDXBasicsTest(unittest.TestCase):
             _ = g1.e
         with self.assertRaises(KeyError):
             _ = g1.f
-        
+
         self.assertEqual(g1.get('c',4),3)
         self.assertEqual(g1.get('d',4),4)
         self.assertEqual(g1('c'),3)
         self.assertEqual(g1('c',4),3)
         self.assertEqual(g1('d',4),4)
-        
+
         g1 = PrettyDict(g1)
         self.assertEqual(g1.a, 1)
         self.assertEqual(g1.b, 2)
         self.assertEqual(g1.c, 3)
-        
+
         g1.update({ 'd':4 })
         self.assertEqual(g1.d, 4)
         g1.update(PrettyDict(e=5))
         self.assertEqual(g1.e, 5)
-        
+
         g1.update({ 'd':4 },d=3)
         self.assertEqual(g1.d, 3)
-        
-        # functions        
+
+        # functions
         def F(self,x):
             self.x = x
-        
+
         g = util.PrettyDict()
         g.F = F
         g.F(2)
         self.assertEqual(g.x,2)
-        
+
         g2 = util.PrettyDict()
         g2.F = g.F
         g2.F(3)
@@ -125,23 +128,23 @@ class CDXBasicsTest(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             def G():
-                return 1        
-            g.G = G        
-            g.G()    
-            
-        # __ does not work        
+                return 1
+            g.G = G
+            g.G()
+
+        # __ does not work
         g = PrettyDict()
         g.__x = 1
         g._y = 2
-        self.assertEqual(g.__x,1)    # works as usual 
+        self.assertEqual(g.__x,1)    # works as usual
         self.assertEqual(g['_y'],2)  # protected works as for all python objects
         with self.assertRaises(KeyError):
             _ = g['__x']   # does not work: cannot use private members as dictionary elements
         self.assertEqual( getattr(g, "__z", None), None )
         with self.assertRaises(AttributeError):
             getattr(g, "__z",)
-            
-            
+
+
         # ordered dict
         g1 = PrettyOrderedDict(a=1)
         g1.b = 2
@@ -149,14 +152,14 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual(g1.a, 1)
         self.assertEqual(g1.b, 2)
         self.assertEqual(g1.c, 3)
-        
+
         with self.assertRaises(KeyError):
             _ = g1.d
 
         g = PrettyOrderedDict()
         g.__x = 1
         g._y = 2
-        self.assertEqual(g.__x,1)    # works as usual 
+        self.assertEqual(g.__x,1)    # works as usual
         self.assertEqual(g['_y'],2)  # protected works as for all python objects
         with self.assertRaises(KeyError):
             _ = g['__x']   # does not work: cannot use private members as dictionary elements
@@ -171,23 +174,23 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual(g1.a, 1)
         self.assertEqual(g1.b, 2)
         self.assertEqual(g1.c, 3)
-        
+
         with self.assertRaises(KeyError):
             _ = g1.d
 
         g = PrettySortedDict()
         g.__x = 1
         g._y = 2
-        self.assertEqual(g.__x,1)    # works as usual 
+        self.assertEqual(g.__x,1)    # works as usual
         with self.assertRaises(KeyError):
             _ = g['__x']   # does not work: cannot use private members as dictionary elements
         with self.assertRaises(KeyError):
             _ = g['_y']   # does not work: cannot use protected members as dictionary elements
         with self.assertRaises(AttributeError):
             _ = g.__z      # must throw attribute errors otherwise various class handling processes get confused
-    
+
     def test_basics(self):
-        
+
         import datetime as datetime
         class O(object):
             def __init__(self):
@@ -197,7 +200,7 @@ class CDXBasicsTest(unittest.TestCase):
             @property
             def gr(self):
                 return 1
-        
+
         self.assertEqual( util.isAtomic(True), True )
         self.assertEqual( util.isAtomic('Test'), True )
         self.assertEqual( util.isAtomic(1.0), True )
@@ -221,7 +224,7 @@ class CDXBasicsTest(unittest.TestCase):
 
         def f(x):
             pass
-        
+
         self.assertTrue( util.isFunction(f) )
         self.assertTrue( util.isFunction(O.fx) )
         self.assertTrue( util.isFunction(O().fx) )
@@ -233,7 +236,7 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertFalse( util.isFunction(1) )
         self.assertFalse( util.isFunction("str") )
         self.assertFalse( util.isFunction(1.0) )
-        
+
     def test_fmt(self):
         self.assertEqual(fmt("number %d %d",1,2),"number 1 2")
         self.assertEqual(fmt("number %(two)d %(one)d",one=1,two=2),"number 2 1")
@@ -243,54 +246,54 @@ class CDXBasicsTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             fmt("number %d %d",1)
         with self.assertRaises(TypeError):
-            fmt("number %d %d",1,2,3)        
-        
+            fmt("number %d %d",1,2,3)
+
     def test_uniqueHash_plain(self):
-        
+
         tst = self
         class Object(object):
             def __init__(self):
                 self.x = [ 1,2,3. ]
                 self.y = { 'a':1, 'b':2 }
                 self.z = PrettyDict(c=3,d=4)
-                self.r = set([65,6234,1231,123123,12312]) 
+                self.r = set([65,6234,1231,123123,12312])
                 self.t = (1,2,"test")
-                            
+
                 def ff():
                     pass
-                
+
                 self.ff = ff
                 self.gg = lambda x : x*x
-                
+
                 if not np is None and not pd is None:
                     self.a = np.array([1,2,3])
                     self.b = np.zeros((3,4,2))
                     self.c = pd.DataFrame({'a':np.array([1,2,3]),'b':np.array([10,20,30]),'c':np.array([100,200,300]),  })
-                    
+
                     u = uniqueHash(self.b) # numpy
                     tst.assertEqual( u, "863f748c37fa0aa44bc1c4a5f8093244" )
                     u = uniqueHash(self.c) # panda frame
                     tst.assertEqual( u, "61af55defe5d0d51d5cad16c944460c9" )
-            
+
             def f(self):
                 pass
-            
+
             @staticmethod
             def g(self):
                 pass
-            
+
             @property
             def h(self):
                 return self.x
-        
+
         x = np.array([1,2,3,4.])
         u = uniqueHash(x)
         self.assertEqual( u, "d819f0b72b849d66112e139fa3b7c9f1" )
-            
+
         o2 = [ np.float32(0), np.float64(0), np.int32(0), np.int64(0) ]
         u = uniqueHash(o2)
         self.assertEqual( u, "818745c4d2c2ac8393b1d9571dc0d1bc" )
-            
+
         o = Object()
         u = uniqueHash(o)
         self.assertEqual( u, "b6dd9dd20b081fc257295a9d0f6ed6f4" )
@@ -300,7 +303,7 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual( u, "872bd1c11bbcfc0c1c4e583ffb9935b20b3fa73668accd0f" )
         u = uniqueHash64(o)
         self.assertEqual( u, "872bd1c11bbcfc0c1c4e583ffb9935b20b3fa73668accd0f9ea2c2c22d03ba8e" )
-        
+
         # test functions
         f1 = lambda x : x*x
         f2 = lambda x : x*x
@@ -313,19 +316,19 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual(u1,u0)
         self.assertEqual(u2,u0)
         self.assertEqual(u3,u0)
-        
+
         raw1 = _compress_function_code(f1)
         raw2 = _compress_function_code(f2)
         raw3 = _compress_function_code(f3)
         self.assertEqual(raw1,raw2)
         self.assertNotEqual(raw1,raw3)
-        
+
         u1 = uniqueHashExt(32,True)(f1)
         u2 = uniqueHashExt(32,True)(f2)
         u3 = uniqueHashExt(32,True)(f3)
         self.assertEqual(u1,u2)
         self.assertNotEqual(u1,u3)
-                
+
         # plain
         p = util.plain(o)
         p = str(p).replace(' ','').replace('\n','')
@@ -334,9 +337,9 @@ class CDXBasicsTest(unittest.TestCase):
         else:
             tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234]}"
         self.assertEqual(p,tst)
-        
+
     def test_subdir(self):
-        
+
         sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", eraseEverything=True )
         sub.x = 1
         sub['y'] = 2
@@ -346,12 +349,12 @@ class CDXBasicsTest(unittest.TestCase):
 
         lst = str(sorted(sub.keys()))
         self.assertEqual(lst, "['a', 'b', 'l', 'x', 'y', 'z']")
-        
+
         # test naming
         self.assertEqual( str(sub), sub.path + ";*" + sub.ext )
         self.assertEqual( repr(sub), "SubDir(" + sub.path + ";*" + sub.ext + ")" )
 
-        # read them all back        
+        # read them all back
         self.assertEqual(sub.x,1)
         self.assertEqual(sub.y,2)
         self.assertEqual(sub.z,3)
@@ -370,7 +373,7 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual(sub.read('u',None),None)
         self.assertEqual(sub('x',None),1)
         self.assertEqual(sub('u',None),None)
-        
+
         # missing objects
         with self.assertRaises(AttributeError):
             print(sub.x2)
@@ -378,8 +381,8 @@ class CDXBasicsTest(unittest.TestCase):
             print(sub['x2'])
         with self.assertRaises(KeyError):
             print(sub.read('x2',raiseOnError=True))
-        
-        # delete & confirm they are gone    
+
+        # delete & confirm they are gone
         del sub.x
         del sub['y']
         sub.delete('z')
@@ -389,7 +392,7 @@ class CDXBasicsTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             sub.delete('x',raiseOnError=True)
 
-        # sub dirs     
+        # sub dirs
         sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", eraseEverything=True )
         s1 = sub("subDir1")
         s2 = sub("subDir2/")
@@ -411,7 +414,7 @@ class CDXBasicsTest(unittest.TestCase):
         sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", eraseEverything=True )
         sub.x = 1
         sub[['y','z']] = [2,3]
-        
+
         self.assertEqual(sub[['x','y','z']], [1,2,3])
         with self.assertRaises(KeyError):
             self.assertEqual(sub[['x','y','z','r']], [1,2,3,None])
@@ -425,18 +428,18 @@ class CDXBasicsTest(unittest.TestCase):
         with self.assertRaises(LogException):
             sub.write(['x','y'],[1,2,3])
         sub.eraseEverything()
-        
+
         # test setting ext
         sub1 = "!/.tmp_test_for_cdxbasics.subdir"
         fd1  = SubDir(sub1).path
         sub  = SubDir("!/.tmp_test_for_cdxbasics.subdir/test;*.bin", eraseEverything=True )
-        self.assertEqual(sub.path, fd1+"test/")        
+        self.assertEqual(sub.path, fd1+"test/")
         fn   = sub.fullKeyName("file")
         self.assertEqual(fn,fd1+"test/file.bin")
         sub.eraseEverything()
-        
+
     def test_cache_mode(self):
-        
+
         on = CacheMode("on")
         gn = CacheMode("gen")
         of = CacheMode("off")
@@ -446,21 +449,21 @@ class CDXBasicsTest(unittest.TestCase):
 
         with self.assertRaises(KeyError):
             _ = CacheMode("OFF")
-        
+
         allc = [on, gn, of, cl, up, ro]
-        
+
         self.assertEqual( [ x.is_on for x in allc ], [True, False, False, False, False, False ] )
         self.assertEqual( [ x.is_gen for x in allc ], [False, True, False, False, False, False ] )
         self.assertEqual( [ x.is_off for x in allc ], [False, False, True, False, False, False ] )
         self.assertEqual( [ x.is_clear for x in allc ], [False, False, False, True, False, False ] )
         self.assertEqual( [ x.is_update for x in allc ], [False, False, False, False, True, False ] )
         self.assertEqual( [ x.is_readonly for x in allc ], [False, False, False, False, False, True ] )
-        
+
         self.assertEqual( [ x.read for x in allc ],  [True, True, False, False, False, True] )
         self.assertEqual( [ x.write for x in allc ], [True, True, False, False, True, False] )
         self.assertEqual( [ x.delete for x in allc ], [False, False, False, True, True, False ] )
         self.assertEqual( [ x.del_incomp for x in allc ], [True, False, False, True, True, False ] )
-        
+
 
 # testing our auto-caching
 # need to auto-clean up
@@ -469,20 +472,20 @@ class CDXBasicsCacheTest(unittest.TestCase):
 
     cacheRoot = SubDir("!/test_caching", eraseEverything=True)
 
-    @cacheRoot.cache     
+    @cacheRoot.cache
     def f(self, x, y):
         return x*y
 
     @staticmethod
-    @cacheRoot.cache     
+    @cacheRoot.cache
     def g(x, y):
         return x*y
-    
+
     def __del__(self):
         CDXBasicsCacheTest.cacheRoot.eraseEverything(keepDirectory=False)
-    
+
     def test_cache(self):
-        
+
         x = 1
         y = 2
         _ = self.f(x,y)
@@ -497,32 +500,34 @@ class CDXBasicsCacheTest(unittest.TestCase):
         self.assertFalse( self.f.cached )
         _ = self.f(x,y)
         self.assertTrue( self.f.cached )
+        _ = self.f(x,y, cacheVersion="2.00.00", cacheMode="readonly")
+        self.assertFalse( self.f.cached )
         _ = self.f(x,y,cacheMode='clear')
         self.assertFalse( self.f.cached )
-        
+
         _ = CDXBasicsCacheTest.g(x,y)
         self.assertFalse( self.g.cached )
         self.assertNotEqual( self.g.cacheArgKey, key1 )
-        
+
         CDXBasicsCacheTest.cacheRoot.eraseEverything()
-        
+
 # testing config
 
 class CDXCConfigTest(unittest.TestCase):
 
     def test_config(self):
-        
+
         config = Config(x=0., z=-1.)
         x = config("x", 10., float, "test x")
         self.assertEqual( x, 0. )
         y = config("y", 10., float, "test y")
         self.assertEqual( y, 10. )
-        
+
         with self.assertRaises(Exception):
             # 'z' was not read
             config.done()
 
-        # calling twice with different values  
+        # calling twice with different values
         config = Config(x=0.)
         x = config("x", 1., float, "test x")
         x = config("x", 1., float, "test x")   # ok: same parameters
@@ -531,25 +536,25 @@ class CDXCConfigTest(unittest.TestCase):
         with self.assertRaises(Exception):
             x = config("x", 2., float, "test x") # not ok: different default
         config.done()
-        
+
         # test sub configs
         config = Config()
         config.x = 1
         config.a = "a"
         config.sub.x = 2.
-        
+
         self.assertEqual(1., config("x", 0., float, "x"))
         self.assertEqual("a", config("a", None, str, "a"))
         self.assertEqual(2, config.sub("x", 0, int, "x"))
         self.assertTrue( isinstance( config.sub, Config ) )
         config.done()
-        
+
         # test detach
         config = Config()
         config.sub.x = 1
         with self.assertRaises(Exception):
             config.done() # 'sub.x' not read
-            
+
         config = Config()
         config.sub.x = 1
         sub = config.sub.detach()
@@ -557,7 +562,7 @@ class CDXCConfigTest(unittest.TestCase):
         _ = sub("x", 1)
         config.done() # fine now
 
-        # test list (_Enum)        
+        # test list (_Enum)
         config = Config(t="a", q="q")
         _ = config("t", "b", ['a', 'b', 'c'] )
         self.assertEqual(_, 'a')
@@ -589,12 +594,12 @@ class CDXCConfigTest(unittest.TestCase):
 
         # combined conditons
         config = Config(x=1., y=1.)
-        
+
         x = config("x", 1., ( Float>=0.) & (Float<=1.), "test x")
         with self.assertRaises(Exception):
             # test that violated condition is caught
             y = config("y", 1., ( Float>=0.) & (Float<1.), "test y")
-        
+
         config = Config(x=1., y=1.)
         with self.assertRaises(NotImplementedError):
             # left hand must be > or >=
@@ -602,7 +607,7 @@ class CDXCConfigTest(unittest.TestCase):
         config = Config(x=1., y=1.)
         with self.assertRaises(NotImplementedError):
             # right hand must be < or <=
-            y = config("y", 1., ( Float>=0.) & (Float>1.), "test x")        
+            y = config("y", 1., ( Float>=0.) & (Float>1.), "test x")
 
         # test int
         config = Config(x=1)
@@ -610,27 +615,27 @@ class CDXCConfigTest(unittest.TestCase):
         config = Config(x=1)
         with self.assertRaises(NotImplementedError):
             # cannot mix types
-            x = config("x", 1., ( Float>=0.) & (Int<=1), "test x")  
-        
+            x = config("x", 1., ( Float>=0.) & (Int<=1), "test x")
+
         # test conversion to dictionaries
-        
+
         config = Config()
         config.x = 1
         config.y = 2
         config.sub.x = 10
         config.sub.y = 20
         inp_dict = config.input_dict()
- 
+
         test = PrettyDict()
         test.x = 1
         test.y = 2
         test.sub = PrettyDict()
         test.sub.x = 10
         test.sub.y = 20
-        
-        self.assertEqual( test, inp_dict) 
 
-        """            
+        self.assertEqual( test, inp_dict)
+
+        """
         test = PrettyDict()
         test.x = config("x", 1)
         test.y = config("y", 22)
@@ -639,10 +644,10 @@ class CDXCConfigTest(unittest.TestCase):
         test.sub.x = config.sub("x", 10)
         test.sub.y = config.sub("y", 222)
         test.sub.z = config.sub("z", 333)
-        usd_dict = config.usage_dict()        
+        usd_dict = config.usage_dict()
         self.assertEqual( usd_dict, test )
         """
-        
+
         # test str and repr
 
         config = Config()
@@ -650,17 +655,17 @@ class CDXCConfigTest(unittest.TestCase):
         config.y = 2
         config.sub.x = 10
         config.sub.y = 20
-        
+
         self.assertEqual( str(config), "{'x': 1, 'y': 2, 'sub': {'x': 10, 'y': 20}}")
         self.assertEqual( repr(config), "Config( **{'x': 1, 'y': 2, 'sub': {'x': 10, 'y': 20}} )")
-        
+
         # test recorded usage
-        
+
         config = Config()
         config.x = 1
         config.sub.a = 1
         config.det.o = 1
-        
+
         _ = config("x", 11)
         _ = config("y", 22)
         _ = config.sub("a", 11)
@@ -668,16 +673,16 @@ class CDXCConfigTest(unittest.TestCase):
         det = config.det.detach() # shares the same recorder !
         _ = det("o", 11)
         _ = det("p", 22)
-        
+
         self.assertEqual( config.get_recorded("x"), 1)
         self.assertEqual( config.get_recorded("y"), 22)
         self.assertEqual( config.sub.get_recorded("a"), 1)
         self.assertEqual( config.sub.get_recorded("b"), 22)
         self.assertEqual( config.det.get_recorded("o"), 1)
         self.assertEqual( config.det.get_recorded("p"), 22)
-        
+
         # unique ID
-        
+
         config = Config()
         # world
         config.world.samples = 10000
@@ -688,7 +693,7 @@ class CDXCConfigTest(unittest.TestCase):
         config.world.cost_s = 0.
         # gym
         config.gym.objective.utility = "cvar"
-        config.gym.objective.lmbda = 1.  
+        config.gym.objective.lmbda = 1.
         config.gym.agent.network.depth = 6
         config.gym.agent.network.width = 40
         config.gym.agent.network.activation = "softplus"
@@ -702,9 +707,9 @@ class CDXCConfigTest(unittest.TestCase):
         config.trainer.visual.time_refresh = 10
         config.trainer.visual.confidence_pcnt_lo = 0.25
         config.trainer.visual.confidence_pcnt_hi = 0.75
-        
+
         id1 = config.unique_id()
-        
+
         config = Config()
         # world
         config.world.samples = 10000
@@ -715,7 +720,7 @@ class CDXCConfigTest(unittest.TestCase):
         config.world.cost_s = 0.
         # gym
         config.gym.objective.utility = "cvar"
-        config.gym.objective.lmbda = 1.  
+        config.gym.objective.lmbda = 1.
         config.gym.agent.network.depth = 5   # <====== changed this
         config.gym.agent.network.width = 40
         config.gym.agent.network.activation = "softplus"
@@ -729,7 +734,7 @@ class CDXCConfigTest(unittest.TestCase):
         config.trainer.visual.time_refresh = 10
         config.trainer.visual.confidence_pcnt_lo = 0.25
         config.trainer.visual.confidence_pcnt_hi = 0.75
-        
+
         id2 = config.unique_id()
         self.assertNotEqual(id1,id2)
 
@@ -740,16 +745,65 @@ class CDXCConfigTest(unittest.TestCase):
         id3 = config.unique_id()
         print(config)
         self.assertEqual(id2,id3)
-        
+
         # pickle test
-        
+
         binary   = pickle.dumps(config)
         restored = pickle.loads(binary)
         idrest   = restored.unique_id()
         self.assertEqual(idrest,id2)
-        
-        
+
+    def test_fmt_marcos(self):
+
+        self.assertEqual( util.fmt_seconds(10), "10s" )
+        self.assertEqual( util.fmt_seconds(61), "1:01" )
+        self.assertEqual( util.fmt_seconds(12+60*2+60*60*3), "3:02:12" )
+        self.assertEqual( util.fmt_seconds(12+60*2+60*60*100), "100:02:12" )
+
+        self.assertEqual( util.fmt_list(None), "-" )
+        self.assertEqual( util.fmt_list(None, none="n/a"), "n/a" )
+        self.assertEqual( util.fmt_list(["a"]), "a" )
+        self.assertEqual( util.fmt_list(["a","b"]), "a and b" )
+        self.assertEqual( util.fmt_list(["a","b", "c"]), "a, b and c" )
+
+        self.assertEqual( util.fmt_big_number(1), "1" )
+        self.assertEqual( util.fmt_big_number(123), "123" )
+        self.assertEqual( util.fmt_big_number(1234), "1234" )
+        self.assertEqual( util.fmt_big_number(123456), "123.46K" )
+        self.assertEqual( util.fmt_big_number(1234567), "1234.57K" )
+        self.assertEqual( util.fmt_big_number(12345678), "12.35M" )
+        self.assertEqual( util.fmt_big_number(123456789), "123.46M" )
+        self.assertEqual( util.fmt_big_number(1234567890), "1234.57M" )
+        self.assertEqual( util.fmt_big_number(12345678900), "12.35B" )
+        self.assertEqual( util.fmt_big_number(1234567890000), "1234.57B" )
+        self.assertEqual( util.fmt_big_number(1234567890000,True), "1234.57G" )
+
+        DD = datetime.date
+        DT = datetime.datetime
+        TT = datetime.time
+        self.assertEqual( util.fmt_datetime(DD(2023,3,18)), "2023-03-18" )
+        self.assertEqual( util.fmt_datetime(DT(2023,3,18)), "2023-03-18 00:00:00" )
+        self.assertEqual( util.fmt_datetime(DT(2023,3,18,1,2,3)), "2023-03-18 01:02:03" )
+        self.assertEqual( util.fmt_datetime(TT(1,2,3)), "01:02:03" )
+
+    def test_np(self):
+
+        P = np.exp( np.linspace(-10.,-1.,10) )
+        X = np.sin( np.linspace(-1,+1,10) )
+
+        self.assertAlmostEqual( cdxnp.mean(P, X), 0.7503180149251274 )
+        self.assertAlmostEqual( cdxnp.mean(None, X), 0. )
+        self.assertAlmostEqual( cdxnp.var(P, X), 0.02698584874615149 )
+        self.assertAlmostEqual( cdxnp.var(None, X), 0.3195943287456196 )
+        self.assertAlmostEqual( cdxnp.std(P, X), 0.16427370071363065 )
+        self.assertAlmostEqual( cdxnp.std(None, X), 0.5653267451179181  )
+        self.assertAlmostEqual( cdxnp.err(P, X), 0.051947905391990054 )
+        self.assertAlmostEqual( cdxnp.err(None, X), 0.17877201367820958 )
+
+
+
 if __name__ == '__main__':
     unittest.main()
 
 
+,

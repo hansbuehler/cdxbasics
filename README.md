@@ -605,6 +605,112 @@ Other file and directoru deletion methods:
 * `deleteAllContent`: delete all files with our extension, and all sub directories.
 * `eraseEverything`: delete everything
 
+## util
+
+A collection of utility functions.
+
+### uniqueHash
+
+    uniqueHash( *kargs, **kwargs )
+    uniqueHash32( *kargs, **kwargs )
+    uniqueHash48( *kargs, **kwargs )
+    uniqueHash64( *kargs, **kwargs )
+
+Each of these functions returns a unique hash key for the arguments provided for the respective function. The functions *32,*48,*64 return hashes of the respective length, while `uniqueHash` returns the hashes of standard length. These functions will make an effort to robustify the hashes against Python particulars: for example, dictionaries are hashed with sorted keys. 
+
+**These functions will ignore all dictionary or object members starting with "`_`".** They also will by default not hash _functions_ or _properties_. 
+This is sometimes undesitable, for example when functions are configuration elements:
+
+    config = Config()
+    config.f = lambda x : x**2
+
+
+
+To change this behavuour, use `uniqueHashExt( length : int, parse_functions : bool = False, parse_underscore : str = "nonee")` which returns a hash function of desired lengths with the option to parse elements starting with "`_`" as well.
+
+### CacheMode
+
+A simple enum-type class to help implement a standard caching pattern.
+It implements the following decision matrix
+
+|                                        |on    |gen   |off     |update   |clear   |readonly|
+|----------------------------------------|------|------|--------|---------|--------|--------|
+|load cache from disk if exists          |x     |x     |-       |-        |-       |x|
+|write updates to disk                   |x     |x     |-       |x        |-       |-|
+|delete existing object                  |-     |-     |-       |-        |x       |-|
+|delete existing object if incompatible  |x     |-     |-       |x        |x       |-|
+
+Typically, the user is allowed to set the desired `CacheMode` using a `Config` element. The corresponding `CacheMode` object then implements the properties `read`, `write`, `delete` and `del_incomp`.
+
+Prototype code is to be implemented as follows:
+
+    def compute_cached( ..., cache_mode, cache_dir ):
+
+        unique_id = unqiueHash48( ... )   # compute a unique hash for the object
+
+        # delete existing cache if requested
+        if cache_mode.delete:
+            cache_dir.delete(unique_id)
+
+        # attempt to read cache
+        ret = cache_dir.read(unique_id) if cache_mode.read else None
+        
+        # validate cache, e.g. is it of the right version
+        if not ret is None:
+            # validate that 'ret is a valid object
+            if not is_valid(ret):
+                if cache_model.del_incomp:
+                    cache_dir.delete(unqiue_id)
+                ret = None
+
+        # compute new object if need be        
+        if ret is None:
+            # compute new object
+            ret = ...
+
+        # write new object to disk
+        if cache_mode.write:
+            cache_dir.write(unique_id, ret)
+
+        return ret
+
+### Misc
+
+* `fmt()`: C++ style format function.
+* `plain()`: converts most combinations of standards elements or objects into plain list/dict structures.
+* `isAtomic()`: whether something is string, float, int, bool or date.
+* `isFloat()`: whether something is a float, including a numpy float.
+* `isFunction()`: whether something is some function.
+* `bind()`: simple shortcut to bind function parameters, e.g.
+
+        def f(a, b, c):
+            pass
+
+        f_a = bind(f, a=1)
+
+
+* `fmt_list()` returns a nicely formatted list, e.g. `fmt_list([1,2,3])` returns `1, 2 or 3`.
+* `fmt_seconds()` returns string for seconds, e.g. `fmt_seconds(10)` returns `10s` while `fmt_seconds(61)` returns `1:00`.
+* `fmt_big_number()` converts a large integer into an abbreviated string with `K`, `M`, `B` (or `G`) for example `fmt_big_number(12345)` returns `12.35K`. You can change from the default `B` for billions to `G` by using the `fmt_computer` keyword.
+* `fmt_datetime()` returns a nicely formatted daytime code in natural order e.g. YYYY-MM-DD HH:SS. It returns the respective simplification if just a `date` or `time` is passed instead of a `datetime`.
+ 
+* `is_jupyter()` tries to assess whether the current environment is a jupyer IPython environment.
+
+## np
+
+A small number of statistical numpy functions which take a weight vector (distribution) into account, namely
+
+* `mean(P,x,axis)` computes the mean of `x` using the distribution `P`. If `P` is None, it returns `numpy.mean(x,axis)`.
+* `var(P,x,axis)` computes the variance of `x` using the distribution `P`. If `P` is None, it returns `numpy.var(x,axis)`.
+* `std(P,x,axis)` computes the standard deviation of `x` using the distribution `P`. If `P` is None, it returns `numpy.std(x,axis)`.
+* `err(P,x,axis)` computes the standard error of `x` using the distribution `P`. If `P` is None, it returns `numpy.std(x,axis)/sqrt(x.shape[axis])`.
+
+Two further functions are used to compute binned statistics:
+
+* `mean_bins(x,bins,axis,P)` computes the means of `x` over equidistant `bins` using the distribition `P`.
+* `mean_std_bins(x,bins,axis,P)` computes the means and standard deviations of `x` over equidistant `bins` using the distribition `P`.
+
+    
 
 ## verbose
 
@@ -682,19 +788,4 @@ The purpose of initializing functions usually with `quiet` is that they can be u
 ## util
 
 Some basic utilities to make live easier.
-
-* `CacheMode` is a standardized pattern for caching data. See `subdir`.
-* `fmt()`: C++ style format function.
-* `uniqueHash()`: runs a standard hash over most combinations of standard elements or objects;
-`uniqueHash32()`, `uniqueHash48()`, and `uniqueHash64()` return hash values of at most length 32, 48, or 64.
-* `plain()`: converts most combinations of standards elements or objects into plain list/dict structures.
-* `isAtomic()`: whether something is string, float, int, bool or date.
-* `isFloat()`: whether something is a float, including a numpy float.
-* `isFunction()`: whether something is some function.
-* `bind()`: simple shortcut to bind function parameters, e.g.
-
-        def f(a, b, c):
-            pass
-
-        f_a = bind(f, a=1)
 
