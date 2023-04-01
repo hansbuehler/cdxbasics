@@ -785,7 +785,3 @@ Returns
 
 The purpose of initializing functions usually with `quiet` is that they can be used accross different contexts without printing anything by default.
 
-## util
-
-Some basic utilities to make live easier.
-
