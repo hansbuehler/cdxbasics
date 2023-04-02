@@ -8,11 +8,11 @@ REM https://packaging.python.org/tutorials/packaging-projects/
 cd C:\Users\hansb\iCloudDrive\Python3\packages\cdxbasics
 if exist dist rmdir /Q /S dist
 mkdir dist
-conda activate -n base
-conda install twine -y
-python pip_modify_setup.py 
-python setup.py sdist bdist_wheel
-python -m twine upload dist\*
+call conda activate base
+call conda install twine -y
+call python pip_modify_setup.py 
+call python setup.py sdist bdist_wheel
+call python -m twine upload dist\*
 rmdir /Q /S dist
 
 echo =====================================================================================
