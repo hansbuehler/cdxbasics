@@ -179,7 +179,7 @@ Create sub configurations with member notation
         
     config.network.depth         = 10
     config.network.activation    = 'relu'
-    config.network.width         = 100   # (intentional typo)
+    config.network.width         = 100
 
 This is equivalent to 
 
@@ -190,7 +190,11 @@ This is equivalent to
 
 #### Reading a config
 
-When reading a config, the recommended pattern involves providing a default value, its cast-type (and possibly simple restrictions; see below), and a help text. The latter is used by the function  `usage_report()` which therefore provides live documentation of the code which uses the config object.
+When reading the value of a `key` from  config, `config.__call__()` uses a default value, and a cast type. It first attempts to find `key` in the `config`.
+* If `key` is found, it casts the value provided for `key` using the `cast` type and returned.
+* If `key` is not found, then the default value will be cast using `cast` type and returned.
+
+The function also takes a `help` text which allows providing live information on what variable are read from the config. The latter is used by the function  `usage_report()` which therefore provides live documentation of the code which uses the config object.
 
     class Network(object):
         def __init__( self, config ):
@@ -223,15 +227,29 @@ We can impose simple restrictions to any values read from a config. To this end,
 
 One-sided restriction:
 
+    # example enforcing simple conditions
     self.width = network('width', 100, Int>3, "Width for the network")
 
 Restrictions on both sides of a scalar:
 
+    # example encorcing two-sided conditions
     self.percentage = network('percentage', 0.5, ( Float >= 0. ) & ( Float <= 1.), "A percentage")
 
 Enforce the value being a member of a list:
 
+    # example ensuring a returned type is from a list
     self.ntype = network('ntype', 'fastforward', ['fastforward','recurrent','lstm'], "Type of network")
+
+We can allow a returned value to be one of several casting types by using tuples. The most common use case is that `None` is a valid value for a config, too. For example, assume that the `name` of the network model should be a string or `None`. This is implemented as
+
+    # example allowing either None or a string
+    self.keras_name = network('name', None, (None, str), "Keras name of the network model")
+
+We can combine conditional expressions with the tuple notation:
+
+    # example allowing either None or a positive int
+    self.batch_size = network('batch_size', None, (None, Int>0), "Batch size or None for TensorFlow's default 32", help_cast="Positive integer, or None")
+
 
 #### Ensuring that we had no typos & that all provided data is meaningful
 
@@ -451,12 +469,8 @@ Our pattern assumes that each calcuation is determined by a number of parameters
     from cdxbasics.subdir import SubDir, CacheMode, uniqueFileName48
 
     def function_with_caching( config ):
-        # split configuration between function data (which alter the result of the calculatio), and caching data (which does not affect the function calculation)
-        config_my_function = config.function  # parameters for the function
-        config_caching     = config.caching   # parameters for caching
-
         # determine caching strategy
-        cache_mode = config_caching("mode", CacheMode.ON, CacheMode.MODES, "Caching strategy: " + CacheMode.HELP)
+        cache_mode = config.caching("mode", CacheMode.ON, CacheMode.MODES, "Caching strategy: " + CacheMode.HELP)
         cache_dir  = config.caching("directory", "caching", str, "Caching directory")
         cache_file = uniqueFileName48( config_my_function.unique_id() ) # get unique file name
 

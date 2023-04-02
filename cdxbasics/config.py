@@ -46,20 +46,29 @@ def _cast_name( cast : type ) -> str:
 
 class _Simple(_Cast):# NOQA
 
-    def __init__(self, cast : type, config_name : str, key_name : str  ):
+    def __init__(self, cast : type, config_name : str, key_name : str, none_is_any : bool ):
         """ Simple atomic caster """
         if not cast is None:
             _log.verify( not isinstance(cast, str), "Error in definition for key '%s' in config '%s': 'cast' must be a type. Found a string. Most likely this happened because a help string was defined as position argument, but no 'cast' type. In this case, use 'help=' to specify the help text.", key_name, config_name )
             _log.verify( not isinstance(cast, _Cast), "Internal error in definition for key '%s' in config '%s': 'cast' should not be derived from _Cast. Object is %s", key_name, config_name, str(cast) )
             _log.verify( isinstance( cast, type ), "Error in definition for key '%s' in config '%s': 'cast' must be a type. Found %s", key_name, config_name, str(cast) )
-        self.cast = cast
+        self.cast        = cast
+        self.none_is_any = none_is_any
+        _log.verify( not none_is_any is None or not cast is None, "Must set 'none_is_any' to bool value if cast is 'None'.")
 
     def __call__(self, value, config_name : str, key_name : str ):
         """ Cast 'value' to the proper type """
-        return self.cast(value) if not self.cast is None else value
+        if self.cast is None:
+            if value is None or self.none_is_any:
+                return value
+            if not value is None:
+                raise TypeError("None expected, found %s", type(value).__name__)
+        return self.cast(value)
 
     def __str__(self) -> str:
         """ Returns readable string """
+        if self.cast is None:
+            return "any" if self.none_is_any else "None"
         return _cast_name(self.cast)
 
 # ================================
@@ -175,7 +184,7 @@ class _CastCond(_Cast): # NOQA
         return _Condition( self.cast, 'lt', self.cast(other) )
     def __call__(self, value, config_name : str, key_name : str ):
         """ This gets called if the type was used without operators """
-        cast = _Simple(self.cast, config_name, key_name)
+        cast = _Simple(self.cast, config_name, key_name,none_is_any=None )
         return cast(value, config_name, key_name)
     def __str__(self) -> str:
         """ This gets called if the type was used without operators """
@@ -202,12 +211,13 @@ class _Enum(_Cast):
         """ Initializes an enumerator casting type. """
         self.enum = list(enum)
         _log.verify( len(self.enum) > 0, "Error in config '%s': 'cast' for key '%s' is an empty list. Lists are used for enumerator types, hence passing empty list is not defined", config_name, key_name )
-        self.cast = _Simple( type(self.enum[0]), config_name, key_name )
+        _log.verify( not self.enum[0] is None, "Error in config '%s': 'cast' for key '%s' is an list, with first element 'None'. Lists are used for enumerator types, and the first element defines their underlying type. Hence you cannot use 'None'. (Did you want to use alternative notation with tuples?)", config_name, key_name )
+        self.cast = _Simple( type(self.enum[0]), config_name, key_name, none_is_any=None )
         for i in range(1,len(self.enum)):
             try:
                 self.enum[i] = self.cast( self.enum[i], config_name, key_name )
             except:
-                _log.throw( "Error in config '%s': 'key '%s' members of the list are not of consistent type. Found %s for the first element which does match the type %s of the %ldth element",\
+                _log.throw( "Error in config '%s', key '%s': members of the list are not of consistent type. Found %s for the first element which does match the type %s of the %ldth element",\
                         config_name, key_name, self.cast, _cast_name(type(self.enum[i])), i )
 
     def __call__( self, value, config_name, key_name ):
@@ -244,6 +254,7 @@ class _Enum(_Cast):
 class _Alt(_Cast):
     """
     Initialize a casting compund "alternative" type, e.g. it the variable may contain several types, each of which is acceptable.
+    None here means that 'None' is an accepted value.
     This is invokved when a tuple is passed, e.g
 
         config("spread", None, ( None, float ), "Float or None")
@@ -253,18 +264,19 @@ class _Alt(_Cast):
     def __init__(self, casts : list, config_name : str, key_name : str ):
         """ Initialize a compound cast """
         _log.verify( len(casts) > 0, "Error in config '%s': 'cast' for key '%s' is an empty tuple. Tupeks are used for aleternative types, hence passing empty tuple is not defined", config_name, key_name )
-        self.casts = [ _create_caster(cast, config_name, key_name) for cast in casts ]
+        self.casts = [ _create_caster(cast, config_name, key_name, none_is_any = False) for cast in casts ]
 
     def __call__( self, value, config_name : str, key_name : str ):
         """ Cast 'value' to the proper type """
         e0   = None
         done = True
         for cast in self.casts:
+            # None means that value == None is acceptable
             try:
                 return cast(value, config_name, key_name )
             except Exception as e:
                 e0 = e if e0 is None else e0
-        _log.throw("Error in config '%s': value for key '%s' %s. Found %s", config_name, key_name, self.err_str,str(value))
+        _log.throw("Error in config '%s': value for key '%s' %s. Found '%s' of type '%s'", config_name, key_name, self.err_str,str(value), type(value).__name__)
 
     def test(self, value):
         """ Test whether 'value' satisfies the condition """
@@ -273,7 +285,7 @@ class _Alt(_Cast):
     @property
     def err_str(self):
         """ Returns readable string """
-        return "must be one of the following types: " + self.__str__
+        return "must be one of the following types: " + self.__str__()
 
     def __str__(self):
         """ Returns readable string """
@@ -283,7 +295,11 @@ class _Alt(_Cast):
         s += str(self.casts[-1])
         return s
 
-def _create_caster( cast : type, name : str, key : str ):
+# ================================
+# Manage casting
+# ================================
+
+def _create_caster( cast : type, name : str, key : str, none_is_any : bool ):
     """
     Implements casting.
 
@@ -293,7 +309,7 @@ def _create_caster( cast : type, name : str, key : str ):
         cast : cast input to call() from the user, or None.
         name : name of the config
         key  : name of the key being access
-        user___str__ : string the user provided for casting help, or None
+        none_is_any :If True, then None means that any type is accepted. If False, the None means that only None is accepted.
 
     Returns
     -------
@@ -307,7 +323,7 @@ def _create_caster( cast : type, name : str, key : str ):
         return _Alt( cast, name, key )
     elif isinstance(cast,_Cast):
         return cast
-    return _Simple( cast, name, key )
+    return _Simple( cast, name, key, none_is_any=none_is_any )
 
 # ==============================================================================
 #
@@ -707,10 +723,13 @@ class Config(OrderedDict):
             default : optional
                 Default value. Set to 'no_default' to avoid defaulting. In this case the argument is mandatory.
             cast : object, optional
-                If not None, will attempt to cast the value provided with the provided value.
+                If None, any value will be acceptable.
+                If not None, the function will attempt to cast the value provided with the provided value.
                 E.g. if cast = int, then it will run int(x)
-                This function now also allows passing a list or tupel, in which case it is assumed that
-                the 'key' must be from this list.
+                This function now also allows passing the following complex arguemts:
+                    * A list, in which case it is assumed that the 'key' must be from this list. The type of the first element of the list will be used to cast values
+                    * Int or Float which allow defining constrained integers and floating numbers.
+                    * A tuple of types, in which case any of the types is acceptable. A None here means that the value 'None' is acceptable (it does not mean that any value is acceptable)
             help : str, optional
                 If provied adds a help text when self documentation is used.
             help_default : str, optional
@@ -741,7 +760,7 @@ class Config(OrderedDict):
             value = OrderedDict.get(self,key)
 
         # casting
-        caster = _create_caster( cast, self._name, key )
+        caster = _create_caster( cast, self._name, key, none_is_any = True )
         value  = caster( value, self._name, key )
 
         # mark key as read, and record call
@@ -782,10 +801,12 @@ class Config(OrderedDict):
                     self._recorder[record_key] = record
                 else:
                     # Both current and past were bona fide uses. Ensure that their usage is consistent.
-                    _log.verify( exst_value['default'] == default,  "Config %s was read twice for key %s (%s) with different default values %s and %s", self._name, key, record_key, exst_value['default'], default )
-                    _log.verify( exst_value['help_default'] == help_default, "Config %s was read twice for key %s (%s) with different 'help_default' values %s and %s", self._name, key, record_key, exst_value['help_default'], help_default )
-                    _log.verify( exst_value['help'] == help, "Config %s was read twice for key %s (%s) with different 'help' values %s and %s", self._name, key, record_key, exst_value['help'], help )
-                    _log.verify( exst_value['help_cast'] == help_cast, "Config %s was read twice for key %s (%s) with different 'help_cast' values %s and %s", self._name, key, record_key, exst_value['help_cast'], help_cast )
+                    if default != no_default and 'default' in exst_value:
+                        _log.verify( exst_value['default'] == default,  "Config %s was read twice for key %s (%s) with different default values '%s' and '%s'", self._name, key, record_key, exst_value['default'], default )
+
+                    _log.verify( exst_value['help_default'] == help_default, "Config %s was read twice for key %s (%s) with different 'help_default' values '%s' and '%s'", self._name, key, record_key, exst_value['help_default'], help_default )
+                    _log.verify( exst_value['help'] == help, "Config %s was read twice for key %s (%s) with different 'help' values '%s' and '%s'", self._name, key, record_key, exst_value['help'], help )
+                    _log.verify( exst_value['help_cast'] == help_cast, "Config %s was read twice for key %s (%s) with different 'help_cast' values '%s' and '%s'", self._name, key, record_key, exst_value['help_cast'], help_cast )
         # done
         return value
 
@@ -974,16 +995,31 @@ class Config(OrderedDict):
             inputs[c] = self._children[c].input_dict()
         return inputs
 
-    def unique_id(self, length = None, parse_functions = False ) -> str:
+    def unique_id(self, length : int = None, parse_functions : bool = False, parse_underscore : str = "none" ) -> str:
         """
         Returns an MDH5 hash key for this object, based on its provided inputs /not/ based on its usage
         ** WARNING **
-        This function ignores
-         1) Config keys or children with leading '_'s
+        By default function ignores
+         1) Config keys or children with leading '_'s unless 'parse_underscore' is set to 'protected' or 'private'.
          2) Functions and properties unless parse_functions is True
             In the latter case function code will be used to distinguish
             functions assigned to the config.
         See util.unqiueHashExt() for further information.
+
+        Parameters
+        -----------
+            length : int
+                Desired length of the ID to be returned. Default is default hash size.
+            parse_functions : bool
+                If True, then function code will be parsed to hash functions. False means functions are not hashed
+            parse_underscore : str
+                If 'none' then any keys or sub-configs with leading '_' will be ignored.
+                If 'protected' then any keys or sub-configs with leading '__' will be ignored.
+                If 'private' then no keys or sub-configs will be ignored based on leading '_'s
+
+        Returbs
+        -------
+            String ID
         """
         inputs = {}
         for key in self:

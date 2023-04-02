@@ -576,6 +576,10 @@ class CDXCConfigTest(unittest.TestCase):
         config = Config(t=None)
         _ = config("t", "b", (None, str) )
         self.assertEqual(_, None)
+        with self.assertRaises(Exception):
+            config = Config(t="a")
+            _ = config("t", 1, (None, int) )
+        self.assertEqual(_, None)
         config = Config()
         _ = config("t", "b", (None, ['a','b']) )
         self.assertEqual(_, 'b')
