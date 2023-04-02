@@ -462,7 +462,7 @@ A few tools to handle file i/o in a transparent way, focusing on caching data. T
 
 #### Key pattern:
 
-Our pattern assumes that each calcuation is determined by a number of parameters for which we can compute a unique (file) ID for caching results. Unique file IDs can be computed using `uniqueFileName48()`. Here is an example:
+Our pattern assumes that each calcuation is determined by a number of parameters for which we can compute a unique (file) ID for caching results. Unique file IDs can be computed using `uniqueFileName48()`. Here is an example which assumes that `None` is not a valid return value for the underlying function code:
 
 
     from cdxbasics.config import Config
@@ -472,55 +472,28 @@ Our pattern assumes that each calcuation is determined by a number of parameters
         # determine caching strategy
         cache_mode = config.caching("mode", CacheMode.ON, CacheMode.MODES, "Caching strategy: " + CacheMode.HELP)
         cache_dir  = config.caching("directory", "caching", str, "Caching directory")
-        cache_file = uniqueFileName48( config_my_function.unique_id() ) # get unique file name
+        cache_id   = config.function.unique_id(length=48)
 
         # check whether we should delete any existing files
         if cache_mode.delete:
-            cache_dir.delete(cache_file)
+            cache_dir.delete(cache_id)
 
         # read existing file, if desired and possible
-        data_of_my_function = cache_dir.read(cache_file) if cache_mode.read else None
+        data_of_my_function = cache_dir.read(cache_id) if cache_mode.read else None
 
         # check whether we need to compute some data
-        if not data_of_my_function is None:
+        if data_of_my_function is None:
             ....
-            data_of_my_function = ....
+            data_of_my_function = .... use config.function for settings
             ....
 
         # write back to disk
         if cache_node.write:
-            cache_dir.write(cache_file, data_of_my_function)
+            cache_dir.write(cache_id, data_of_my_function)
 
         return data_of_my_function
 
-The above can be made more concise as follows
-
-    from cdxbasics.config import Config
-    from cdxbasics.subdir import SubDir, CacheMode, uniqueFileName48
-
-    def function_with_caching( config ):
-        # split configuration between function data (which alter the result of the calculatio), and caching data (which does not affect the function calculation)
-        config_my_function = config.function  # parameters for the function
-        config_caching     = config.caching   # parameters for caching
-
-        # determine caching strategy
-        cache_mode = config_caching("mode", CacheMode.ON, CacheMode.MODES, "Caching strategy: " + CacheMode.HELP)
-        cache_dir  = config.caching("directory", "caching", str, "Caching directory")
-        cache_file = uniqueFileName48( config_my_function.unique_id() ) # get unique file name
-
-        # check whether we should delete any existing files
-        data_of_my_function = cache_dir.cache_read( cache_mode, cache_file, default=None )
-
-        # check whether we need to compute some data
-        if not data_of_my_function is None:
-            ....
-            data_of_my_function = ....
-            ....
-
-        # write back to disk
-        cache_dir.cache_write(cache_mode, cache_file, data_of_my_function)
-
-        return data_of_my_function
+See also the example for `CacheMode` below.
 
 
 #### Creating directories
