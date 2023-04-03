@@ -36,4 +36,5 @@ jobs:
         pip install numpy
         pip install pandas
         pip install sortedcontainers
+        pip install psutil
         pytest
