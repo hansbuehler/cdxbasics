@@ -663,8 +663,8 @@ Prototype code is to be implemented as follows:
 
 ### WriteLine
 
-A simple utility function to manage printing in a given line with carriage returns (`\r`).
-Essentially, it keeps track of what was printed so far at the current line. If a `\r` is encountered it will clear the rest of the line to avoid having residual text from the previous line.
+A simple utility class to manage printing in a given line with carriage returns (`\r`).
+Essentially, it keeps track of the length what was printed so far at the current line. If a `\r` is encountered it will clear the rest of the line to avoid having residual text from the previous line.
 
 Example 1 (how to use \r and \n)
 
@@ -695,9 +695,7 @@ Example 2 (line length is getting shorter)
 
         def f(a, b, c):
             pass
-
         f_a = bind(f, a=1)
-
 
 * `fmt_list()` returns a nicely formatted list, e.g. `fmt_list([1,2,3])` returns `1, 2 or 3`.
 * `fmt_seconds()` returns string for seconds, e.g. `fmt_seconds(10)` returns `10s` while `fmt_seconds(61)` returns `1:00`.
@@ -705,6 +703,7 @@ Example 2 (line length is getting shorter)
 * `fmt_datetime()` returns a nicely formatted daytime code in natural order e.g. YYYY-MM-DD HH:SS. It returns the respective simplification if just a `date` or `time` is passed instead of a `datetime`.
  
 * `is_jupyter()` tries to assess whether the current environment is a jupyer IPython environment.
+This is experimental as it appears there is no safe way to do this. The current implemenentation checks whether the command which started the current process contains the string `jupyter`.
 
 ## np
 
