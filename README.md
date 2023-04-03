@@ -661,6 +661,29 @@ Prototype code is to be implemented as follows:
 
         return ret
 
+### WriteLine
+
+A simple utility function to manage printing in a given line with carriage returns (`\r`).
+Essentially, it keeps track of what was printed so far at the current line. If a `\r` is encountered it will clear the rest of the line to avoid having residual text from the previous line.
+
+Example 1 (how to use \r and \n)
+
+    write = WriteLine("Initializing...")
+    import time
+    for i in range(10):
+        time.sleep(1)
+        write("\rRunning %g%% ...", round(float(i+1)/float(10)*100,0))
+    write(" done.\nProcess finished.\n")
+
+Example 2 (line length is getting shorter)
+
+    write = WriteLine("Initializing...")
+    import time
+    for i in range(10):
+        time.sleep(1)
+        write("\r" + ("#" * (9-i)))
+    write("\rProcess finished.\n")
+
 ### Misc
 
 * `fmt()`: C++ style format function.
@@ -701,7 +724,18 @@ Two further functions are used to compute binned statistics:
 
 ## verbose
 
-Utility class for printing 'verbose' information, with indentation.
+**The `verbose` interface has changed in 0.2.36**
+
+This module provides the `Context` utility class for printing 'verbose' information, with indentation depending on the detail level.
+
+The basic idea is that the root context has level 0, with increasing levels for sub-contexts. When printing information, we can (a) limit printing up to a given level and (b) automatically indent the output to reflect the current level of detail.
+
+* Create a `Context` model, and define its verbosity in its constructor, e.g. `all`, `none` or a number. A negative number means that no outout will be generated (`quiet`), while `None` means all output will be printed (`all`). Sub-contexts inherent verbosity from their parents.
+* To write a text at current level to `stdout` use `write()`.
+* To write a text at a sub-level use `report()`. You can also use the overloaded call operator.
+* To create a sub-context, either call `sub()` or use the overloaded call operator.
+
+Here is an example:
 
     from cdxbasics.verbose import Context, quiet
 
@@ -716,57 +750,71 @@ Utility class for printing 'verbose' information, with indentation.
         context.report( 1, "Intermediate step 1" )
         context.report( 1, "Intermediate step 2\nwith newlines" )
         # ... do something
-        f_sub( context=context(1) )
+        f_sub( context=context(1) ) # call function f_sub with a sub-context
         # ... do something
         context.write( "Final step" )
 
     print("Verbose=1")
-    context = Context(verbose=1)
+    context = Context(1)
     f_main(context)
 
     print("\nVerbose=2")
-    context = Context(verbose=2)
+    context = Context(2)
     f_main(context)
 
     print("\nVerbose='all'")
-    context = Context(verbose='all')
+    context = Context('all')
     f_main(context)
 
     print("\nVerbose='quiet'")
-    context = Context(verbose='quiet')
+    context = Context('quiet')
     f_main(context)
 
 Returns
 
     Verbose=1
-    01:   First step
-    01:   Final step
+    00: First step
+    01:   Intermediate step 1
+    01:   Intermediate step 2
+    01:   with newlines
+    01:   Entering loop
+    00: Final step
 
     Verbose=2
-    01:   First step
-    02:     Intermediate step 1
-    02:     Intermediate step 2
-    02:     with newlines
-    02:     Entering loop
-    01:   Final step
+    00: First step
+    01:   Intermediate step 1
+    01:   Intermediate step 2
+    01:   with newlines
+    01:   Entering loop
+    02:     Number 0
+    02:     Number 1
+    02:     Number 2
+    02:     Number 3
+    02:     Number 4
+    02:     Number 5
+    02:     Number 6
+    02:     Number 7
+    02:     Number 8
+    02:     Number 9
+    00: Final step
 
     Verbose='all'
-    01:   First step
-    02:     Intermediate step 1
-    02:     Intermediate step 2
-    02:     with newlines
-    02:     Entering loop
-    03:       Number 0  
-    03:       Number 1
-    03:       Number 2
-    03:       Number 3
-    03:       Number 4
-    03:       Number 5
-    03:       Number 6
-    03:       Number 7
-    03:       Number 8
-    03:       Number 9
-    01:   Final step
+    00: First step
+    01:   Intermediate step 1
+    01:   Intermediate step 2
+    01:   with newlines
+    01:   Entering loop
+    02:     Number 0
+    02:     Number 1
+    02:     Number 2
+    02:     Number 3
+    02:     Number 4
+    02:     Number 5
+    02:     Number 6
+    02:     Number 7
+    02:     Number 8
+    02:     Number 9
+    00: Final step
 
     Verbose='quiet'
 

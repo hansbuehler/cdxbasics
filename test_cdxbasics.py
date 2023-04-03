@@ -13,6 +13,7 @@ import cdxbasics.kwargs as mdl_kwargs
 import cdxbasics.subdir as mdl_subdir
 import cdxbasics.logger as mdl_logger
 import cdxbasics.prettydict as prettydict
+import cdxbasics.verbose as verbose
 import datetime as datetime
 import numpy as np
 if False:
@@ -804,7 +805,41 @@ class CDXCConfigTest(unittest.TestCase):
         self.assertAlmostEqual( cdxnp.err(P, X), 0.051947905391990054 )
         self.assertAlmostEqual( cdxnp.err(None, X), 0.17877201367820958 )
 
+    def test_verbose(self):
 
+        quiet = verbose.quiet
+        Context = verbose.Context
+
+        def f_sub( num=10, context = quiet ):
+            context.report(0, "Entering loop")
+            for i in range(num):
+                context.report(1, "Number %ld", i)
+
+        def f_main( context = quiet ):
+            context.write( "First step" )
+            # ... do something
+            context.report( 1, "Intermediate step 1" )
+            context.report( 1, "Intermediate step 2\nwith newlines" )
+            # ... do something
+            f_sub( context=context(1) )
+            # ... do something
+            context.write( "Final step" )
+
+        print("Verbose=1")
+        context = Context(1)
+        f_main(context)
+
+        print("\nVerbose=2")
+        context = Context(2)
+        f_main(context)
+
+        print("\nVerbose='all'")
+        context = Context('all')
+        f_main(context)
+
+        print("\nVerbose='quiet'")
+        context = Context('quiet')
+        f_main(context)
 
 if __name__ == '__main__':
     unittest.main()

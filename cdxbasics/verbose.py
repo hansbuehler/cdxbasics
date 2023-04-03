@@ -166,12 +166,32 @@ class Context(object):
 
         sub = Context(self.verbose)
         assert sub.verbose == self.verbose, "Internal error"
-        sub.level       = self.level + 1
+        sub.level       = self.level + add_level
         sub.indent      = self.indent
         sub.fmt_level   = self.fmt_level
+        return sub
 
+    def __call__(self, add_level : int = 1, message : str = None, *args, **kwargs ):
+        """
+        Create a sub context at level 'sub_level'. The latter defaults to self.default_sub
 
-    __call__ = sub
+        Parameters
+        ----------
+            add_level : int
+                Level of the sub context with respect to self. Set to 0 for the same level.
+            message, fmt, args:
+                If message is not None, call report() at _current_ level, not the newly
+                created sub level
+
+        Returns
+        -------
+            Context
+                Sub context with level = self.level + sub_level
+        """
+        if message is None:
+            assert len(args) == 0 and len(kwargs) == 0, "Internal error: no 'message' is provided."
+            return self.sub(add_level)
+        self.report( add_level, message, *args, **kwargs )
 
     @property
     def as_verbose(self):
