@@ -11,6 +11,7 @@ import inspect as inspect
 import psutil as psutil
 from collections.abc import Mapping, Collection
 from .prettydict import PrettyDict
+import sys as sys
 
 # support for numpy and pandas is optional for this module
 # At the moment both are listed as dependencies in setup.py to ensure
