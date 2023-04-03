@@ -8,6 +8,7 @@ import types as types
 from functools import wraps
 import hashlib as hashlib
 import inspect as inspect
+import psutil as psutil
 from collections.abc import Mapping, Collection
 from .prettydict import PrettyDict
 
@@ -196,6 +197,92 @@ def fmt_datetime(dt : datetime.datetime) -> str:
 def fmt_now() -> str:
     """ Returns string for 'now' """
     return fmt_datetime(datetime.datetime.now())
+
+class WriteLine(object):
+    """
+    Class to manage the current text output line.
+    This class is a thin wrapper around print(text + '\r', end='') or IPython.display.display()
+    to ensure the current line is cleared correctly when replaced with the next line.
+
+    Example 1 (how to use \r and \n)
+        write = WriteLine("Initializing...")
+        import time
+        for i in range(10):
+            time.sleep(1)
+            write("\rRunning %g%% ...", round(float(i+1)/float(10)*100,0))
+        write(" done.\nProcess finished.\n")
+
+    Example 2 (line length is getting shorter)
+        write = WriteLine("Initializing...")
+        import time
+        for i in range(10):
+            time.sleep(1)
+            write("\r" + ("#" * (9-i)))
+        write("\rProcess finished.\n")
+    """
+
+    def __init__(self, text : str = "", *kargs, **kwargs):
+        """
+        Creates a new WriteLine object which manages the current print output line.
+        Subsequent calls to __call__() will replace the text in the current line using `\r` in text mode, or a display() object in jupyter
+
+        Parameters
+        ----------
+            text : str
+                Classic formatting text. 'text' may not contain newlines (\n) except at the end.
+            kargs, kwargs:
+                Formatting arguments.
+        """
+        self._last_len        = 0
+        if text != "":
+            self(text,*kargs,**kwargs)
+
+    def __call__(self, text : str, *kargs, **kwargs ):
+        """
+        Print lines of text.
+        The last line of 'text' becomes the current line and will be overwritten by the next line.
+
+        Parameters
+        ----------
+            text : str
+                Classic formatting text. 'text' may not contain newlines (\n) except at the end.
+            kargs, kwargs:
+                Formatting arguments.
+        """
+        text  = _fmt(text,kargs,kwargs)
+        lines = text.split("\n")
+        assert len(lines) > 0, "Internal error"
+
+        for line in lines[:-1]:
+            self._write_line(line)
+            self.cr()
+        if len(lines[-1]) > 0:
+            self._write_line(lines[-1])
+        sys.stdout.flush()
+
+    def cr(self):
+        """ Creates a new line. """
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+        self._last_len    = 0
+
+    def _write_line(self, line):
+        """ Write a line; no newlines """
+        assert not '\n' in line, "Error: found newline in '%s'" % line
+        if line == "":
+            return
+        i    = line.rfind('\r')
+        if i == -1:
+            # no `\r': append text to current line
+            sys.stdout.write(line)
+            self._last_len += len(line)
+        else:
+            # found '\r': clear previous line and print new line
+            line = line[i+1:]
+            if len(line) < self._last_len:
+                sys.stdout.write("\r" + (" " * self._last_len)) # clear current line
+            sys.stdout.write("\r" + line)
+            self._last_len = len(line)
 
 # =============================================================================
 # Conversion of arbitrary python elements into re-usable versions
@@ -576,19 +663,8 @@ Generic = PrettyDict
 
 def is_jupyter():
     """
-    Whether the current IPython session is a Jupyter session.
-    This is not terribly reliable.
-    Feedback welcome
+    Wheher we operate in a jupter session
+    Somewhat unreliable function. Use with care
     """
-    try:
-        import IPython as IPython
-        ipy = IPython.get_ipython()
-        if "IPKernelApp" in ipy.config:
-            return True
-        elif "InlineBackend" in ipy.config:
-            return True
-    except ModuleNotFoundError:
-        pass
-    except NameError:
-        pass
-    return False
+    parent_process = psutil.Process().parent().cmdline()[-1]
+    return  'jupyter' in parent_process

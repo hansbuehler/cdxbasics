@@ -1076,12 +1076,16 @@ class Config(OrderedDict):
         for (k,d) in zip(keys,data):
             self[k] = d
 
+empty = Config()       # empty config as default value for function arguments
+Config.empty = empty
+
 def to_config( kwargs, config_name = "kwargs"):
     """
     Makes sure an object is a config, and otherwise tries to convert it into one
     Classic use case is to transform 'kwargs' to a Config
     """
     return kwargs if isinstance(kwargs,Config) else Config( kwargs,config_name=config_name )
+
 
 def __test_pickle():
     import pickle
