@@ -624,7 +624,7 @@ class Config(OrderedDict):
             assert new_recorder == "copy", "Invalid value for 'new_recorder': %s" % new_recorder
             config._recorder.update( self._recorder )
 
-        config._children         = { _: self._children[_]._detach(mark_self_done=mark_self_done, new_recorder=new_recorder) for _ in self._children }
+        config._children         = { _: self._children[_]._detach(mark_self_done=mark_self_done, copy_done=copy_done, new_recorder=new_recorder) for _ in self._children }
         config._children         = OrderedDict( config._children )
 
         if mark_self_done:

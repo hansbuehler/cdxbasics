@@ -845,6 +845,7 @@ class CDXCConfigTest(unittest.TestCase):
         """ testing detach/copy/clean_cooy """
 
         config = Config(a=1,b=2)
+        config.child.x = 1
         _ = config("a", 2)
         c1 = config.detach()
         with self.assertRaises(Exception):
@@ -854,6 +855,7 @@ class CDXCConfigTest(unittest.TestCase):
             _ = config("b", 2)  # different default
 
         config = Config(a=1,b=2)
+        config.child.x = 1
         _ = config("a", 2)
         c1 = config.copy()
         with self.assertRaises(Exception):
@@ -862,6 +864,7 @@ class CDXCConfigTest(unittest.TestCase):
         _ = config("b", 2)  # different default - ok
 
         config = Config(a=1,b=2)
+        config.child.x = 1
         _ = config("a", 2)
         c1 = config.clean_copy()
         _ = c1("a", 1)  # different default - ok
