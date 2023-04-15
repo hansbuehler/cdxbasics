@@ -208,7 +208,7 @@ In above example any data provided for they keywords `weigths` will be cast usin
 Further parameters of `()` are the help text, plus ability to provide text versions of the default with `help_default` (e.g. if the default value is complex), and the cast operator with `help_cast` (again if the
 respective operation is complex).
 
-__Important__: the `()` operator does not have a default value unless specified. If no default value is specified, then an error is generated.
+__Important__: the `()` operator does not have a default value unless specified. If no default value is specified, and the key is not found, then a KeyError is generated.
 
 You can read sub-configurations with the previsouly introduced member notation:
 
@@ -316,7 +316,10 @@ produces
     # 
     config['features'] = ['time', 'spot'] #  Default: 2
 
-#### Detaching child configs
+You can check the status of the use of the config by using the `not_done` property.
+
+
+#### Detaching child configs and other Copy operations
 
 You can also detach a child config, which allows you to store it for later use without triggering `done()` errors:
     
@@ -333,9 +336,9 @@ You can also detach a child config, which allows you to store it for later use w
 
             self.config_training.done()
 
-Use `copy()` to make a bona fide copy of a child, without marking the source child as 'done'. `copy()` will return a config which shares the same status as the source object. If you want an "unused" copy, use `clean_copy()`.
+Use `copy()` to make a bona fide copy of a child, without marking the source child as 'done'. `copy()` will return a config which shares the same status as the source object. If you want an "unused" copy, use `clean_copy()`. A virtual clone is created via `clone()`. A cloned config stores information on usage in the same place for the original object. Thiis is also the semantic of the copy constructor.
 
-#### Self-recording all available configs
+#### Self-recording all available configuration parameters
 
 Once your program ran, you can read the summary of all values, their defaults, and their help texts.
 

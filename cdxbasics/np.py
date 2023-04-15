@@ -6,7 +6,22 @@ Hans Buehler 2023
 from .logger import Logger
 import numpy as np
 import math as math
+from collections.abc import Mapping
 _log = Logger(__file__)
+
+# ------------------------------------------------
+# Basic help
+# -------------------------------------------------
+
+def assert_iter_not_is_nan( d : dict, name = "" ):
+    """ iteratively verify that 'd' does not contain Nan """
+    for k in d:
+        v = d[k]
+        n = name + "." + k if name != "" else k
+        if isinstance( v, Mapping ):
+            assert_iter_not_is_nan( v, n )
+        else:
+            assert np.sum(np.isnan(v)) == 0, "Internal numerical error for %s: %g" % (n,v)
 
 # ------------------------------------------------
 # Basic arithmetics for non-uniform distributions

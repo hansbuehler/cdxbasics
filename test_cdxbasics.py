@@ -743,8 +743,8 @@ class CDXCConfigTest(unittest.TestCase):
         config.sub.x = 10
         config.sub.y = 20
 
-        self.assertEqual( str(config), "{'x': 1, 'y': 2, 'sub': {'x': 10, 'y': 20}}")
-        self.assertEqual( repr(config), "Config( **{'x': 1, 'y': 2, 'sub': {'x': 10, 'y': 20}} )")
+        self.assertEqual( str(config), "config{'x': 1, 'y': 2, 'sub': {'x': 10, 'y': 20}}")
+        self.assertEqual( repr(config), "Config( **{'x': 1, 'y': 2, 'sub': {'x': 10, 'y': 20}}, config_name='config' )")
 
         # test recorded usage
 

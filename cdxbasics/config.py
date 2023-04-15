@@ -49,9 +49,9 @@ class _Simple(_Cast):# NOQA
     def __init__(self, cast : type, config_name : str, key_name : str, none_is_any : bool ):
         """ Simple atomic caster """
         if not cast is None:
-            _log.verify( not isinstance(cast, str), "Error in definition for key '%s' in config '%s': 'cast' must be a type. Found a string. Most likely this happened because a help string was defined as position argument, but no 'cast' type. In this case, use 'help=' to specify the help text.", key_name, config_name )
+            _log.verify( not isinstance(cast, str), "Error in definition for key '%s' in config '%s': 'cast' must be a type. Found a string. Most likely this happened because a help string was defined as positional argument, but no 'cast' type was specified. In this case, use 'help=' to specify the help text.", key_name, config_name )
             _log.verify( not isinstance(cast, _Cast), "Internal error in definition for key '%s' in config '%s': 'cast' should not be derived from _Cast. Object is %s", key_name, config_name, str(cast) )
-            _log.verify( isinstance( cast, type ), "Error in definition for key '%s' in config '%s': 'cast' must be a type. Found %s", key_name, config_name, str(cast) )
+            # we now support casting with functions and other objects._log.verify( isinstance( cast, type ), "Error in definition for key '%s' in config '%s': 'cast' must be a type. Found %s", key_name, config_name, str(cast) )
         self.cast        = cast
         self.none_is_any = none_is_any
         _log.verify( not none_is_any is None or not cast is None, "Must set 'none_is_any' to bool value if cast is 'None'.")
@@ -393,7 +393,8 @@ class Config(OrderedDict):
             Qualified name of the config, useful for error messages
         children : dict
             Children of this config
-        as_
+        not_done : dict
+            A dictionary of keywords and children which were not read yet.
         recorder : dict
             Records usage of the object and its children.
 
@@ -435,8 +436,8 @@ class Config(OrderedDict):
             *args : list
                 List of dictionaries to update() for.
                 If the first element is a config, and no other parameters
-                are passed, then this object will be copy of that config
-                with the same semantics as clean_copy()
+                are passed, then this object will be full copy of that config.
+                It shares all usage recording.
             config_name : str, optional
                 Name of the configuration for report_usage. Default is 'config'
             **kwargs : dict
@@ -445,10 +446,10 @@ class Config(OrderedDict):
         """
         if len(args) == 1 and isinstance(args[0], Config) and config_name is None and len(kwargs) == 0:
             source               = args[0]
-            self._done           = set( source._done )
+            self._done           = source._done
             self._name           = source._name
-            self._recorder       = SortedDict()
-            self._children       = OrderedDict( { _: source._children[_].detach(mark_self_done=False, new_recorder=self._recorder) for _ in source._children } )
+            self._recorder       = source._recorder
+            self._children       = source._children
             self.update(source)
             return
 
@@ -474,14 +475,13 @@ class Config(OrderedDict):
 
     def __str__(self) -> str:
         """ Print myself as dictionary """
-        d = self.as_dict(mark_done=False)
-        s = str(self.as_dict(mark_done=False))
+        s = self.config_name + str(self.as_dict(mark_done=False))
         return s
 
     def __repr__(self) -> str:
         """ Print myself as reconstructable object """
-        s = self.__str__()
-        s = "Config( **" + self.__str__() + " )"
+        s = repr(self.as_dict(mark_done=False))
+        s = "Config( **" + s + ", config_name='" + self.config_name + "' )"
         return s
 
     def as_dict(self, mark_done : bool = True ) -> dict:
@@ -549,11 +549,12 @@ class Config(OrderedDict):
     def reset(self):
         """
         Reset all usage information
+
         Use reset_done() to only reset the information whether a key was used, but to keep information on previously used default values.
         This avoids inconsistency in default values between function calls.
         """
-        self._done      = set()
-        self._recorder  = SortedDict()
+        self._done.clear()
+        self._recorder.clear()
 
     def reset_done(self):
         """
@@ -561,11 +562,11 @@ class Config(OrderedDict):
         This function does not reset the recording of previous uses of each key. This ensures consistency of default values between uses of keys.
         Use reset() to reset both 'done' and create a new recorder.
         """
-        self._done = set()
+        self._done.clear()
 
     def mark_done(self, include_children : bool = True ):
         """ Mark all members as being read. Once called calling done() will no longer trigger an error """
-        self._done = set( self )
+        self._done.update( self )
         if include_children:
             for c in self._childen:
                 c.mark_done(include_children=include_children)
@@ -725,6 +726,13 @@ class Config(OrderedDict):
         """
         return self._detach( mark_self_done=False, copy_done=False, new_recorder="clean" )
 
+    def clone(self):
+        """
+        Return a copy of 'self' which shars all usage tracking with 'self'.
+        """
+        return Config(self)
+
+
     def update( self, other=None, **kwargs ):
         """
         Overwrite values of 'self' new values.
@@ -845,7 +853,6 @@ class Config(OrderedDict):
         # avoid recording
         if not record:
             return value
-
         # record?
         record_key    = self.record_key( key ) # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
         help          = str(help) if not help is None and len(help) > 0 else ""
@@ -968,6 +975,7 @@ class Config(OrderedDict):
         Assign value like self[key] = value
         If 'value' is a config, then the config will be assigned as child.
         Its recorder and name will be overwritten.
+        This behaviour does not happen if self[key] = value is used.
         """
         if key[0] == "_" or key in self.__dict__:
             OrderedDict.__setattr__(self, key, value )
@@ -1094,6 +1102,16 @@ class Config(OrderedDict):
             report += i + "\n"
         return report
 
+    @property
+    def not_done(self) -> dict:
+        """ Returns a dictionary of keys which were not read yet """
+        h = { key : False for key in self if not key in self._done }
+        for c in self._children:
+            ch = c.not_done
+            if len(ch) > 0:
+                h[c] = ch
+        return h
+
     def input_dict(self, ignore_underscore = True ) -> dict:
         """ Returns a (pretty) dictionary of all inputs into this config. """
         inputs = pdct()
@@ -1196,12 +1214,15 @@ class Config(OrderedDict):
         for (k,d) in zip(keys,data):
             self[k] = d
 
-empty = Config()       # empty config as default value for function arguments
-Config.empty = empty
+    # casting
+    # -------
 
-def to_config( kwargs, config_name = "kwargs"):
-    """
-    Makes sure an object is a config, and otherwise tries to convert it into one
-    Classic use case is to transform 'kwargs' to a Config
-    """
-    return kwargs if isinstance(kwargs,Config) else Config( kwargs,config_name=config_name )
+    @staticmethod
+    def to_config( kwargs, config_name = "kwargs"):
+        """
+        Makes sure an object is a config, and otherwise tries to convert it into one
+        Classic use case is to transform 'kwargs' to a Config
+        """
+        return kwargs if isinstance(kwargs,Config) else Config( kwargs,config_name=config_name )
+
+to_config = Config.to_config
