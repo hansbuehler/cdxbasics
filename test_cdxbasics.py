@@ -465,6 +465,88 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual( [ x.delete for x in allc ], [False, False, False, True, True, False ] )
         self.assertEqual( [ x.del_incomp for x in allc ], [True, False, False, True, True, False ] )
 
+    def test_fmt_marcos(self):
+
+        self.assertEqual( util.fmt_seconds(10), "10s" )
+        self.assertEqual( util.fmt_seconds(61), "1:01" )
+        self.assertEqual( util.fmt_seconds(12+60*2+60*60*3), "3:02:12" )
+        self.assertEqual( util.fmt_seconds(12+60*2+60*60*100), "100:02:12" )
+
+        self.assertEqual( util.fmt_list(None), "-" )
+        self.assertEqual( util.fmt_list(None, none="n/a"), "n/a" )
+        self.assertEqual( util.fmt_list(["a"]), "a" )
+        self.assertEqual( util.fmt_list(["a","b"]), "a and b" )
+        self.assertEqual( util.fmt_list(["a","b", "c"]), "a, b and c" )
+
+        self.assertEqual( util.fmt_big_number(1), "1" )
+        self.assertEqual( util.fmt_big_number(123), "123" )
+        self.assertEqual( util.fmt_big_number(1234), "1234" )
+        self.assertEqual( util.fmt_big_number(123456), "123.46K" )
+        self.assertEqual( util.fmt_big_number(1234567), "1234.57K" )
+        self.assertEqual( util.fmt_big_number(12345678), "12.35M" )
+        self.assertEqual( util.fmt_big_number(123456789), "123.46M" )
+        self.assertEqual( util.fmt_big_number(1234567890), "1234.57M" )
+        self.assertEqual( util.fmt_big_number(12345678900), "12.35B" )
+        self.assertEqual( util.fmt_big_number(1234567890000), "1234.57B" )
+        self.assertEqual( util.fmt_big_number(1234567890000,True), "1234.57G" )
+
+        DD = datetime.date
+        DT = datetime.datetime
+        TT = datetime.time
+        self.assertEqual( util.fmt_datetime(DD(2023,3,18)), "2023-03-18" )
+        self.assertEqual( util.fmt_datetime(DT(2023,3,18)), "2023-03-18 00:00:00" )
+        self.assertEqual( util.fmt_datetime(DT(2023,3,18,1,2,3)), "2023-03-18 01:02:03" )
+        self.assertEqual( util.fmt_datetime(TT(1,2,3)), "01:02:03" )
+
+    def test_np(self):
+
+        P = np.exp( np.linspace(-10.,-1.,10) )
+        X = np.sin( np.linspace(-1,+1,10) )
+
+        self.assertAlmostEqual( cdxnp.mean(P, X), 0.7503180149251274 )
+        self.assertAlmostEqual( cdxnp.mean(None, X), 0. )
+        self.assertAlmostEqual( cdxnp.var(P, X), 0.02698584874615149 )
+        self.assertAlmostEqual( cdxnp.var(None, X), 0.3195943287456196 )
+        self.assertAlmostEqual( cdxnp.std(P, X), 0.16427370071363065 )
+        self.assertAlmostEqual( cdxnp.std(None, X), 0.5653267451179181  )
+        self.assertAlmostEqual( cdxnp.err(P, X), 0.051947905391990054 )
+        self.assertAlmostEqual( cdxnp.err(None, X), 0.17877201367820958 )
+
+    def test_verbose(self):
+
+        quiet = verbose.quiet
+        Context = verbose.Context
+
+        def f_sub( num=10, context = quiet ):
+            context.report(0, "Entering loop")
+            for i in range(num):
+                context.report(1, "Number %ld", i)
+
+        def f_main( context = quiet ):
+            context.write( "First step" )
+            # ... do something
+            context.report( 1, "Intermediate step 1" )
+            context.report( 1, "Intermediate step 2\nwith newlines" )
+            # ... do something
+            f_sub( context=context(1) )
+            # ... do something
+            context.write( "Final step" )
+
+        print("Verbose=1")
+        context = Context(1)
+        f_main(context)
+
+        print("\nVerbose=2")
+        context = Context(2)
+        f_main(context)
+
+        print("\nVerbose='all'")
+        context = Context('all')
+        f_main(context)
+
+        print("\nVerbose='quiet'")
+        context = Context('quiet')
+        f_main(context)
 
 # testing our auto-caching
 # need to auto-clean up
@@ -758,88 +840,33 @@ class CDXCConfigTest(unittest.TestCase):
         idrest   = restored.unique_id()
         self.assertEqual(idrest,id2)
 
-    def test_fmt_marcos(self):
 
-        self.assertEqual( util.fmt_seconds(10), "10s" )
-        self.assertEqual( util.fmt_seconds(61), "1:01" )
-        self.assertEqual( util.fmt_seconds(12+60*2+60*60*3), "3:02:12" )
-        self.assertEqual( util.fmt_seconds(12+60*2+60*60*100), "100:02:12" )
+    def test_detach(self):
+        """ testing detach/copy/clean_cooy """
 
-        self.assertEqual( util.fmt_list(None), "-" )
-        self.assertEqual( util.fmt_list(None, none="n/a"), "n/a" )
-        self.assertEqual( util.fmt_list(["a"]), "a" )
-        self.assertEqual( util.fmt_list(["a","b"]), "a and b" )
-        self.assertEqual( util.fmt_list(["a","b", "c"]), "a, b and c" )
+        config = Config(a=1,b=2)
+        _ = config("a", 2)
+        c1 = config.detach()
+        with self.assertRaises(Exception):
+            _ = c1("a", 1)  # different default
+        _ = c1("b", 3)
+        with self.assertRaises(Exception):
+            _ = config("b", 2)  # different default
 
-        self.assertEqual( util.fmt_big_number(1), "1" )
-        self.assertEqual( util.fmt_big_number(123), "123" )
-        self.assertEqual( util.fmt_big_number(1234), "1234" )
-        self.assertEqual( util.fmt_big_number(123456), "123.46K" )
-        self.assertEqual( util.fmt_big_number(1234567), "1234.57K" )
-        self.assertEqual( util.fmt_big_number(12345678), "12.35M" )
-        self.assertEqual( util.fmt_big_number(123456789), "123.46M" )
-        self.assertEqual( util.fmt_big_number(1234567890), "1234.57M" )
-        self.assertEqual( util.fmt_big_number(12345678900), "12.35B" )
-        self.assertEqual( util.fmt_big_number(1234567890000), "1234.57B" )
-        self.assertEqual( util.fmt_big_number(1234567890000,True), "1234.57G" )
+        config = Config(a=1,b=2)
+        _ = config("a", 2)
+        c1 = config.copy()
+        with self.assertRaises(Exception):
+            _ = c1("a", 1)  # different default
+        _ = c1("b", 3)
+        _ = config("b", 2)  # different default - ok
 
-        DD = datetime.date
-        DT = datetime.datetime
-        TT = datetime.time
-        self.assertEqual( util.fmt_datetime(DD(2023,3,18)), "2023-03-18" )
-        self.assertEqual( util.fmt_datetime(DT(2023,3,18)), "2023-03-18 00:00:00" )
-        self.assertEqual( util.fmt_datetime(DT(2023,3,18,1,2,3)), "2023-03-18 01:02:03" )
-        self.assertEqual( util.fmt_datetime(TT(1,2,3)), "01:02:03" )
-
-    def test_np(self):
-
-        P = np.exp( np.linspace(-10.,-1.,10) )
-        X = np.sin( np.linspace(-1,+1,10) )
-
-        self.assertAlmostEqual( cdxnp.mean(P, X), 0.7503180149251274 )
-        self.assertAlmostEqual( cdxnp.mean(None, X), 0. )
-        self.assertAlmostEqual( cdxnp.var(P, X), 0.02698584874615149 )
-        self.assertAlmostEqual( cdxnp.var(None, X), 0.3195943287456196 )
-        self.assertAlmostEqual( cdxnp.std(P, X), 0.16427370071363065 )
-        self.assertAlmostEqual( cdxnp.std(None, X), 0.5653267451179181  )
-        self.assertAlmostEqual( cdxnp.err(P, X), 0.051947905391990054 )
-        self.assertAlmostEqual( cdxnp.err(None, X), 0.17877201367820958 )
-
-    def test_verbose(self):
-
-        quiet = verbose.quiet
-        Context = verbose.Context
-
-        def f_sub( num=10, context = quiet ):
-            context.report(0, "Entering loop")
-            for i in range(num):
-                context.report(1, "Number %ld", i)
-
-        def f_main( context = quiet ):
-            context.write( "First step" )
-            # ... do something
-            context.report( 1, "Intermediate step 1" )
-            context.report( 1, "Intermediate step 2\nwith newlines" )
-            # ... do something
-            f_sub( context=context(1) )
-            # ... do something
-            context.write( "Final step" )
-
-        print("Verbose=1")
-        context = Context(1)
-        f_main(context)
-
-        print("\nVerbose=2")
-        context = Context(2)
-        f_main(context)
-
-        print("\nVerbose='all'")
-        context = Context('all')
-        f_main(context)
-
-        print("\nVerbose='quiet'")
-        context = Context('quiet')
-        f_main(context)
+        config = Config(a=1,b=2)
+        _ = config("a", 2)
+        c1 = config.clean_copy()
+        _ = c1("a", 1)  # different default - ok
+        _ = c1("b", 3)
+        _ = config("b", 2)  # different default - ok
 
 if __name__ == '__main__':
     unittest.main()
