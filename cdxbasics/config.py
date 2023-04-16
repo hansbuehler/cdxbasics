@@ -497,10 +497,10 @@ class Config(OrderedDict):
             Dict of dict's
         """
         d = { key : self.get(key) if mark_done else self.get_raw(key) for key in self }
-        for n in self._children:
+        for n, c in self._children.items():
             if n == '_ipython_canary_method_should_not_exist_':
                 continue
-            c = self._children[n].as_dict(mark_done)
+            c = c.as_dict(mark_done)
             _log.verify( not n in d, "Cannot convert config to dictionary: found both a regular value, and a child with name '%s'", n)
             d[n] = c
         return d
@@ -540,8 +540,8 @@ class Config(OrderedDict):
                                         self._name, list(rest), \
                                         self.usage_report(filter_path=self._name ) )
         if include_children:
-            for config in self._children:
-                self._children[config].done(include_children=include_children,mark_done=False)
+            for _, c in self._children.items():
+                c.done(include_children=include_children,mark_done=False)
         if mark_done:
             self.mark_done(include_children=include_children)
         return
@@ -625,7 +625,7 @@ class Config(OrderedDict):
             assert new_recorder == "copy", "Invalid value for 'new_recorder': %s" % new_recorder
             config._recorder.update( self._recorder )
 
-        config._children         = { _: self._children[_]._detach(mark_self_done=mark_self_done, copy_done=copy_done, new_recorder=new_recorder) for _ in self._children }
+        config._children         = { k: c._detach(mark_self_done=mark_self_done, copy_done=copy_done, new_recorder=new_recorder) for k, c in self._children.items() }
         config._children         = OrderedDict( config._children )
 
         if mark_self_done:
@@ -759,8 +759,8 @@ class Config(OrderedDict):
                     config._recorder = recorder
                     for c in config._children:
                         set_recorder( config._children[c], recorder )
-                for sub in other._children:
-                    child = other._children[sub].clean_copy()
+                for sub, child in other._children:
+                    child = child.clean_copy()
                     set_recorder(child, self._recorder)
                     self._children[sub]= child
                 # copy elements from other.
@@ -1034,8 +1034,7 @@ class Config(OrderedDict):
         rep_here      = ""
         reported      = ""
 
-        for key in self._recorder:
-            record       =  self._recorder[key]
+        for key, record in self._recorder.items():
             value        =  record['value']
             help         =  record['help']
             help_default =  record['help_default']
@@ -1075,8 +1074,7 @@ class Config(OrderedDict):
         repr() correctly.
         """
         report = ""
-        for key in self._recorder:
-            record       =  self._recorder[key]
+        for key, record in self._recorder.items():
             value        =  record['value']
             report       += key + " = " + repr(value) + "\n"
         return report
@@ -1092,8 +1090,8 @@ class Config(OrderedDict):
                 value      = self.get_raw(key)
                 report_key = self._name + "['" + key + "'] = %s" % str(value)
                 inputs.append( report_key )
-            for c in self._children:
-                ireport(self._children[c], inputs)
+            for _, c in self._children.items():
+                ireport(c, inputs)
         ireport(self, inputs)
 
         inputs = sorted(inputs)
@@ -1106,10 +1104,10 @@ class Config(OrderedDict):
     def not_done(self) -> dict:
         """ Returns a dictionary of keys which were not read yet """
         h = { key : False for key in self if not key in self._done }
-        for c in self._children:
+        for k,c in self._children.items():
             ch = c.not_done
             if len(ch) > 0:
-                h[c] = ch
+                h[k] = ch
         return h
 
     def input_dict(self, ignore_underscore = True ) -> dict:
@@ -1119,10 +1117,10 @@ class Config(OrderedDict):
             if ignore_underscore and key[:1] == "_":
                 continue
             inputs[key] = self.get_raw(key)
-        for c in self._children:
-            if ignore_underscore and c[:1] == "_":
+        for k,c in self._children.items():
+            if ignore_underscore and k[:1] == "_":
                 continue
-            inputs[c] = self._children[c].input_dict()
+            inputs[k] = c.input_dict()
         return inputs
 
     def unique_id(self, length : int = None, parse_functions : bool = False, parse_underscore : str = "none" ) -> str:
@@ -1156,11 +1154,11 @@ class Config(OrderedDict):
             if key[:1] == "_":
                 continue
             inputs[key] = self.get_raw(key)
-        for c in self._children:
+        for c, child in self._children.items():
             if c[:1] == "_":
                 continue
             # collect ID for the child
-            child_data = self._children[c].unique_id()
+            child_data = child.unique_id()
             # we only register children if they have keys.
             # this way we do not trigger a change in ID simply due to a failed read access.
             if child_data != "":
