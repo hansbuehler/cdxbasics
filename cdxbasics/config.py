@@ -972,19 +972,26 @@ class Config(OrderedDict):
 
     def __setattr__(self, key, value):
         """
-        Assign value like self[key] = value
-        If 'value' is a config, then the config will be assigned as child.
-        Its recorder and name will be overwritten.
-        This behaviour does not happen if self[key] = value is used.
+        Assign value.
+        If 'value' is a config, then a copy of config will be assigned as a child.
+        The copied value and its children will share the 'recorder' with self.
+        """
+        self.__setitem__(key,value)
+
+    def __setitem__(self, key, value):
+        """
+        Assign value.
+        If 'value' is a config, then a copy of config will be assigned as a child.
+        The copied value and its children will share the 'recorder' with self.
         """
         if key[0] == "_" or key in self.__dict__:
             OrderedDict.__setattr__(self, key, value )
         elif isinstance( value, Config ):
+            value                    = value._detach( mark_self_done=False, copy_done=True, new_recorder=self._recorder )
             value._name              = self._name + "." + key
-            value._recorder          = self._recorder
             self._children[key]      = value
         else:
-            self[key] = value
+            OrderedDict.__setitem__(self, key, value)
 
     # Recorder
     # --------
