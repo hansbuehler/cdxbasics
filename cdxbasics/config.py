@@ -757,9 +757,9 @@ class Config(OrderedDict):
                 # and reset recorder to ours.
                 def set_recorder(config, recorder):
                     config._recorder = recorder
-                    for c in config._children:
-                        set_recorder( config._children[c], recorder )
-                for sub, child in other._children:
+                    for _,c in config._children.items():
+                        set_recorder( c, recorder )
+                for sub, child in other._children.items():
                     child = child.clean_copy()
                     set_recorder(child, self._recorder)
                     self._children[sub]= child
