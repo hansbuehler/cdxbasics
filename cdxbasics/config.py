@@ -568,7 +568,7 @@ class Config(OrderedDict):
         """ Mark all members as being read. Once called calling done() will no longer trigger an error """
         self._done.update( self )
         if include_children:
-            for c in self._children.items():
+            for _, c in self._children.items():
                 c.mark_done(include_children=include_children)
 
     def __getattr__(self, key : str):
