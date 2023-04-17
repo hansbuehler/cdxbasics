@@ -973,22 +973,30 @@ class Config(OrderedDict):
     def __setattr__(self, key, value):
         """
         Assign value.
-        If 'value' is a config, then a copy of config will be assigned as a child.
-        The copied value and its children will share the 'recorder' with self.
+        If 'value' is a config, then the assigned config's recorder will be set to
+        the current recorder, and the 'done' information will be reset.
         """
         self.__setitem__(key,value)
 
     def __setitem__(self, key, value):
         """
         Assign value.
-        If 'value' is a config, then a copy of config will be assigned as a child.
-        The copied value and its children will share the 'recorder' with self.
+        If 'value' is a config, then the assigned config's recorder will be set to
+        the current recorder, and the 'done' information will be reset.
         """
         if key[0] == "_" or key in self.__dict__:
             OrderedDict.__setattr__(self, key, value )
         elif isinstance( value, Config ):
-            value                    = value._detach( mark_self_done=False, copy_done=True, new_recorder=self._recorder )
-            value._name              = self._name + "." + key
+            _log.warn_if( len(value._recorder) > 0, "Warning: when assigning a Config to another Config, all existing usage will be reset. The 'recorder' of the assignee will be set ot the recorder of the receiving Config" )
+            value._name  = self._name + "." + key
+            def update_recorder( config ):
+                config._recorder = self._recorder
+                config._done.clear()
+                for k, c in config._children.items():
+                    c._name     = config._name + "." + k
+                    c._recorder = self._recorder
+                    update_recorder(c._children)
+            update_recorder(value)
             self._children[key]      = value
         else:
             OrderedDict.__setitem__(self, key, value)
