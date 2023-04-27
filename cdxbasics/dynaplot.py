@@ -32,11 +32,12 @@ class DynamicAx(Deferred):
         fig.render()                  # update graph
     """
     
-    def __init__(self, row : int, col : int, kwargs : dict):
+    def __init__(self, row : int, col : int, title : str, kwargs : dict):
         """ Creates internal object which defers the creation of various graphics to a later point """ 
         Deferred.__init__(self,"axes(%ld,%ld)" % (row, col))
         self.row    = row
         self.col    = col
+        self.title  = title
         self.plots  = {}
         self.kwargs = kwargs
         self.ax     = None
@@ -45,7 +46,9 @@ class DynamicAx(Deferred):
         """ Creates the plot by calling all 'caught' functions calls in sequece """        
         assert self.ax is None, "Internal error; function called twice?"
         num     = 1 + self.col + self.row*cols
-        self.ax = fig.add_subplot( rows, cols, num, **self.kwargs )        
+        self.ax = fig.add_subplot( rows, cols, num, **self.kwargs )   
+        if not self.title is None:
+            self.ax.set_title(self.title)
         self._dereference( self.ax )
             
 class DynamicFig(Deferred):
@@ -120,7 +123,7 @@ class DynamicFig(Deferred):
         """ Ensure the figure is closed """
         self.close()        
 
-    def add_subplot(self, new_row : bool = False, **kwargs) -> DynamicAx:
+    def add_subplot(self, new_row : bool = False, title : str = None, **kwargs) -> DynamicAx:
         """
         Add a subplot.
         This function will return a wrapper which defers the creation of the actual sub plot
@@ -134,12 +137,13 @@ class DynamicFig(Deferred):
         """
         _log.verify( not self.closed, "Cannot call add_subplot() after close() was called")        
         _log.verify( self.fig is None, "Cannot call add_subplot() after render() was called")
+        _log.verify( isinstance(new_row, bool), "Parameter 'new_row' should be a bool, but found type %s. Did you misspell the function call?", type(new_row).__name__ )
         if (self.this_col >= self.col_nums) or ( new_row and not self.this_col == 0 ):
             self.this_col = 0
             self.this_row = self.this_row + 1
         if self.max_col < self.this_col:
             self.max_col = self.this_col
-        ax = DynamicAx( self.this_row, self.this_col, dict(kwargs) )        
+        ax = DynamicAx( self.this_row, self.this_col, title, dict(kwargs) )        
         self.axes.append(ax)
         self.this_col += 1
         return ax
