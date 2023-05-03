@@ -46,6 +46,8 @@ def _cast_name( cast : type ) -> str:
 
 class _Simple(_Cast):# NOQA
 
+    STR_NONE_CAST = "any"
+
     def __init__(self, cast : type, config_name : str, key_name : str, none_is_any : bool ):
         """ Simple atomic caster """
         if not cast is None:
@@ -68,7 +70,7 @@ class _Simple(_Cast):# NOQA
     def __str__(self) -> str:
         """ Returns readable string """
         if self.cast is None:
-            return "any" if self.none_is_any else "None"
+            return self.STR_NONE_CAST if self.none_is_any else "None"
         return _cast_name(self.cast)
 
 # ================================
@@ -914,8 +916,8 @@ class Config(OrderedDict):
             else:
                 exst_value['help'] = help
 
-        if help_cast != "":
-            if exst_value['help_cast'] != "":
+        if help_cast != "" and help_cast != _Simple.STR_NONE_CAST:
+            if exst_value['help_cast'] != "" and exst_value['help_cast'] != _Simple.STR_NONE_CAST:
                 _log.verify( exst_value['help_cast'] == help_cast, "Key '%s' of config '%s' (%s) was read twice with different 'help_cast' texts '%s' and '%s'", key, self._name, record_key, exst_value['help_cast'], help_cast )
             else:
                 exst_value['help_cast'] = help_cast
