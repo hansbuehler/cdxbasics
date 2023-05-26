@@ -156,6 +156,18 @@ def fmt_list( lst, none="-" ) -> str:
         s += str(k) + ", "
     return s[:-2] + " and " + str(lst[-1])
 
+def fmt_dict(x, sort=False):
+    """ Return a readable representation of a dictionary """
+    keys = x
+    if sort:
+        keys = list(x)
+        sorted(keys)
+    s = ""
+    for k in keys:
+        q = k + ": " + str(x[k])
+        s = q if s=="" else (s + ", " + q)
+    return s
+
 def fmt_big_number( number : int, fmt_computer = False ) -> str:
     """
     Return a formatted big number string, e.g. 12.35M instead of all digits.
