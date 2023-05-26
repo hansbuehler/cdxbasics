@@ -28,8 +28,6 @@ class Deferred(object):
         def create( self, *kargs_A, **kwargs_A ):
             a = A( *kargs_A, **kwargs_A )
             self._dereference( a )
-            
-        
     
     deferred_A = DeferredA()
     fx = deferred_A.call_a_function( x )    # will defer call to 'call_a_function'
@@ -81,7 +79,7 @@ class Deferred(object):
         elif typ == Deferred.TYPE_ATTR:
             self._ref = str(ref)
         else:
-            _log.verify( ref is None, "'ref' must be none for TYPE_NONE")
+            _log.verify( ref is None, "'ref' must be none for TYPE_SELF")
             self._ref = None
         
         self._type   = typ
@@ -100,7 +98,7 @@ class Deferred(object):
         """ Whether the action has been executed """
         return len(self._live) > 0
         
-    def _dereference(self, owner ):
+    def _dereference(self, owner):
         """
         Execute deferred action with 'owner' as the object the action is to be performed upon.
         If the current type is TYPE_SELF then the '_result' is simply 'owner'
