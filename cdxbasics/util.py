@@ -12,6 +12,7 @@ import psutil as psutil
 from collections.abc import Mapping, Collection
 from .prettydict import PrettyDict
 import sys as sys
+import time as time
 
 # support for numpy and pandas is optional for this module
 # At the moment both are listed as dependencies in setup.py to ensure
@@ -681,3 +682,74 @@ def is_jupyter():
     """
     parent_process = psutil.Process().parent().cmdline()[-1]
     return  'jupyter' in parent_process
+
+# =============================================================================
+# Misc Jupyter
+# =============================================================================
+
+class TrackTiming(object):
+    """
+    Simplistic class to track the time it takes to run sequential tasks.
+    Usage:
+
+        timer = TrackTiming()   # clock starts
+
+        # do job 1
+        timer += "Job 1 done"
+
+        # do job 2
+        timer += "Job 2 done"
+
+        print( timer.summary() )
+    """
+
+    def __init__(self):
+        """ Initialize a new tracked timer """
+        self.reset_all()
+
+    def reset_all(self):
+        """ Reset timer, and clear all tracked items """
+        self._tracked = []
+        self._current = time.time()
+
+    def reset_timer(self):
+        """ Reset the timer to current time """
+        self._current = time.time()
+
+    def track(self, text, *args, **kwargs ):
+        """ Track 'text', formatted with 'args' and 'kwargs' """
+        text = _fmt(text,args,kwargs)
+        self += text
+
+    def __iadd__(self, text : str):
+        """ Track 'text' """
+        text  = str(text)
+        now   = time.time()
+        self._tracked.append( (text, now - self._current) )
+        self._current = now
+        return self
+
+    @property
+    def tracked(self) -> list:
+        """ Return list of tracked texts. The list contains tuples (text, time_in_seconds) """
+        return self._tracked
+
+    def summary(self, format : str = "%(text)s: %(fmt_seconds)s", jn_fmt : str = ", " ) -> str:
+        """
+        Generate summary string by applying some formatting
+
+        Parameters
+        ----------
+            format : str
+                Format string. Arguments are 'text', 'seconds' (as int) and 'fmt_seconds' (as text, see fmt_seconds())
+            jn_fmt : str
+                String to be used between two texts
+        Returns
+        -------
+            The combined summary string
+        """
+        s = ""
+        for tr in self._tracked:
+            tr_txt = format % dict( text=tr[0], seconds=tr[1], fmt_seconds=fmt_seconds(tr[1]))
+            s      = tr_txt if s=="" else s+jn_fmt+tr_txt
+        return s

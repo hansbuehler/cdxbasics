@@ -390,8 +390,8 @@ class SubDir(object):
             try:
                 os.remove(fullFileName)
                 _log.warning("Cannot read %s; file deleted (full path %s)",key,fullFileName)
-            except Exception:
-                _log.warning("Cannot read %s; attempt to delete file failed (full path %s)",key,fullFileName)
+            except Exception as e:
+                _log.warning("Cannot read %s; attempt to delete file failed (full path %s): %s",key,fullFileName,str(e))
         if raiseOnError:
             raise KeyError(key)
         return default
@@ -507,7 +507,6 @@ class SubDir(object):
             except Exception as e:
                 os.remove(fullTmpFile)
                 raise e
-
 
     def write( self, key, obj ):
         """
@@ -715,7 +714,11 @@ class SubDir(object):
         return True
 
     def getCreationTime( self, key ):
-        """ Returns the creation time of 'key', or None if file was not found """
+        """
+        Returns the creation time of 'key', or None if file was not found.
+        Works with key as list.
+        See comments on os.path.getctime() for compatibility
+        """
         # vector version
         if not isinstance(key,str):
             _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
@@ -728,6 +731,44 @@ class SubDir(object):
         if not os.path.exists(fullFileName):
             return None
         return datetime.datetime.fromtimestamp(os.path.getctime(fullFileName))
+
+    def getLastModificationTime( self, key ):
+        """
+        Returns the last modification time of 'key', or None if file was not found.
+        Works with key as list.
+        See comments on os.path.getmtime() for compatibility
+        """
+        # vector version11
+        if not isinstance(key,str):
+            _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
+            return [ self.getLastModificationTime(k) for k in key ]
+        # empty directory
+        if self._path is None:
+            return None
+        # single key
+        fullFileName = self.fullKeyName(key)
+        if not os.path.exists(fullFileName):
+            return None
+        return datetime.datetime.fromtimestamp(os.path.getmtime(fullFileName))
+
+    def getLastAccessTime( self, key ):
+        """
+        Returns the last access time of 'key', or None if file was not found.
+        Works with key as list.
+        See comments on os.path.getatime() for compatibility
+        """
+        # vector version
+        if not isinstance(key,str):
+            _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
+            return [ self.getLastAccessTime(k) for k in key ]
+        # empty directory
+        if self._path is None:
+            return None
+        # single key
+        fullFileName = self.fullKeyName(key)
+        if not os.path.exists(fullFileName):
+            return None
+        return datetime.datetime.fromtimestamp(os.path.getatime(fullFileName))
 
     # -- dict-like interface --
 
