@@ -13,6 +13,8 @@ _log = Logger(__file__)
 
 import os
 import os.path
+import uuid
+import threading
 from functools import wraps
 import pickle
 import tempfile
@@ -478,8 +480,34 @@ class SubDir(object):
         _log.verify(len(key) > 0, "'key '%s' refers to a directory, not a file", key)
         if len(sub) > 0:
             return SubDir(self,sub)._write(writer,key,obj)
+
+        # write to temp file
+        # then rename into target file
+        # this reduces collision when i/o operations
+        # are slow
         fullFileName = self.fullKeyName(key)
-        writer( key, fullFileName, obj )
+        tmp_file     = uniqueHash48( [ key, uuid.getnode(), os.getpid(), threading.get_ident(), datetime.datetime.now() ] )
+        tmp_i        = 0
+        fullTmpFile  = self.fullKeyName(tmp_file) + ".tmp"
+        while os.path.exists(fullTmpFile):
+            fullTmpFile = self.fullKeyName(tmp_file) + "." + str(tmp_i) + ".tmp"
+            tmp_i       += 1
+            if tmp_i >= 10:
+                raise RuntimeError("Failed to generate temporary file for writing '%s': too many temporary files found. For example, this file already exists: '%s'" % ( fullFileName, fullTmpFile ) )
+
+        writer( key, fullTmpFile, obj )
+        import time
+        time.sleep(1)
+
+        if os.path.exists(fullTmpFile):
+            try:
+                if os.path.exists(fullFileName):
+                    os.remove(fullFileName)
+                os.rename(fullTmpFile, fullFileName)
+            except Exception as e:
+                os.remove(fullTmpFile)
+                raise e
+
 
     def write( self, key, obj ):
         """

@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from IPython import display
 import io as io
+import types as types
 from .deferred import Deferred
 from .logger import Logger
 _log = Logger(__file__)
@@ -49,6 +50,27 @@ class DynamicAx(Deferred):
         self.ax = fig.add_subplot( rows, cols, num, **self.kwargs )   
         if not self.title is None:
             self.ax.set_title(self.title)
+            
+        # handle common functions which expect 'axis' as argument
+        # Handle sharex() and sharey() for the moment.
+        ref_ax    = self.ax
+        ax_sharex = ref_ax.sharex
+        def sharex(self, other): 
+            if isinstance(other, DynamicAx):
+                _log.verify( not other.ax is None, "Cannot sharex() with provided axis: 'other' has not been created yet. That usually means that you have mixed up the order of the plots")
+                other = other.ax
+            return ax_sharex(other)
+        ref_ax.sharex = types.MethodType(sharex,ref_ax)
+
+        ax_sharey = ref_ax.sharey
+        def sharey(self, other): 
+            if isinstance(other, DynamicAx):
+                _log.verify( not other.ax is None, "Cannot sharey() with provided axis: 'other' has not been created yet. That usually means that you have mixed up the order of the plots")
+                other = other.ax
+            return ax_sharey(other)
+        ref_ax.sharey = types.MethodType(sharey,ref_ax)
+
+        # call all deferred functions
         self._dereference( self.ax )
             
 class DynamicFig(Deferred):
