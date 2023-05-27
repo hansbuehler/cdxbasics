@@ -570,6 +570,8 @@ To write several files at once, write
 
     subdir.write(["file1", "file"], [data1, data2])
 
+Note that when writing to an object, `subdir` will first write to a temporary file, and then rename this file into the target file name. The temporary file name is a `util.uniqueHash48` generated from the target file name, current time, process and thread ID, as well as the machines's UUID. This is done to reduce collisions between processes/machines accessing the same files. It does not remove collision risk entirely, though.
+
 ##### Test existence of files
 
 To test existence of 'file' in a directory, use one of
