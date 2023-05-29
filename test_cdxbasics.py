@@ -55,10 +55,11 @@ class CDXBasicsTest(unittest.TestCase):
 
     def test_dctkwargs(self):
 
+        BACKWARD_COMPATIBLE_ITEM_ACCESS = config
         def f1(**kwargs):
             kwargs = dctkwargs(kwargs)
             a = kwargs('a',1)      # with default
-            b = kwargs['b']        # no default; must exist
+            b = kwargs('b')        # no default; must exist
             c = kwargs.get('c',3)  # with default
             kwargs.done()
             return (a,b,c)
@@ -620,6 +621,34 @@ class CDXCConfigTest(unittest.TestCase):
             x = config("x", 2., float, "test x") # not ok: different default
         config.done()
 
+        # test usage per access method:
+        #   __call__('a')
+        #   get('a')
+        #   get_default('a', ...)
+        # all register usage;
+        #   get_raw('a')
+        #   ['a']
+        # do not.
+        config = Config(a=1)
+        _ = config.get("a")
+        self.assertTrue( not 'a' in config.not_done )
+        config = Config(a=1)
+        _ = config.get_default("a", 0)
+        self.assertTrue( not 'a' in config.not_done )
+        config = Config(a=1)
+        _ = config("a")
+        self.assertTrue( not 'a' in config.not_done )
+        config = Config(a=1)
+        _ = config("a", 0)
+        self.assertTrue( not 'a' in config.not_done )
+
+        config = Config(a=1)
+        _ = config.get_raw('a')
+        self.assertTrue( 'a' in config.not_done )
+        config = Config(a=1)
+        _ = config['a']
+        self.assertTrue( 'a' in config.not_done )
+
         # test sub configs
         config = Config()
         config.x = 1
@@ -704,8 +733,23 @@ class CDXCConfigTest(unittest.TestCase):
             # cannot mix types
             x = config("x", 1., ( Float>=0.) & (Int<=1), "test x")
 
-        # test conversion to dictionaries
+        # test deleting children
+        config = Config()
+        config.a.x = 1
+        config.b.x = 2
+        config.c.x = 3
+        config.delete_children( 'a' )
+        l = sorted( config.children )
+        self.assertEqual(l, ['b', 'c'])
+        config = Config()
+        config.a.x = 1
+        config.b.x = 2
+        config.c.x = 3
+        config.delete_children( ['a','b'] )
+        l = sorted( config.children )
+        self.assertEqual(l, ['c'])
 
+        # test conversion to dictionaries
         config = Config()
         config.x = 1
         config.y = 2

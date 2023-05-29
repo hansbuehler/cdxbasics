@@ -7,7 +7,7 @@ Hans Buehler 2022
 from collections import OrderedDict
 from collections.abc import Mapping
 from sortedcontainers import SortedDict
-from .util import uniqueHashExt
+from .util import uniqueHashExt, fmt_list
 from .prettydict import PrettyDict as pdct
 from .logger import Logger
 _log = Logger(__file__)
@@ -16,6 +16,989 @@ class _ID(object):
     pass
 
 no_default = _ID()    # creates a unique object which can be used to detect if a default value was provided
+
+# ==============================================================================
+#
+# Actual Config class
+#
+# ==============================================================================
+
+BACKWARD_COMPATIBLE_ITEM_ACCESS = False
+
+class Config(OrderedDict):
+    """
+    A simple Config class.
+    Main features
+
+    Write
+        Set data as usual:
+
+            config = Config()
+            config['features']  = [ 'time', 'spot' ]
+            config['weights']   = [ 1, 2, 3 ]
+
+        Use member notation
+
+            config.network.samples    = 10000
+            config.network.activation = 'relu'
+
+    Read
+        def read_config( confg ):
+
+            features = config("features", [], list )          # reads features and returns a list
+            weights  = config("weights", [], np.ndarray )     # reads features and returns a nump array
+
+            network  = config.network
+            samples  = network('samples', 10000)              # networks samples
+            config.done()                                     # returns an error as we haven't read 'network.activitation'
+
+    Detaching child configs
+    You can also detach a child config, which allows you to store it for later
+    use without triggering done() errors for its parent.
+
+        def read_config( confg ):
+
+            features = config("features", [], list )          # reads features and returns a list
+            weights  = config("weights", [], np.ndarray )     # reads features and returns a nump array
+
+            network  = config.network.detach()
+            samples  = network('samples', 10000)              # networks samples
+            config.done()                                     # no error as 'network' was detached
+            network.done()                                    # error as network.activation was not read
+
+    Self-recording "help"
+    When reading a value, specify an optional help text:
+
+        def read_config( confg ):
+
+            features = config("features", [], list, help="Defines the features" )
+            weights  = config("weights", [], np.ndarray, help="Network weights" )
+
+            network  = config.network
+            samples  = network('samples', 10000, int, help="Number of samples")
+            activt   = network('activation', "relu", str, help="Activation function")
+            config.done()
+
+            config.usage_report()   # prints help
+
+    Attributes
+    ----------
+        config_name : str
+            Qualified name of the config, useful for error messages
+        children : dict
+            Children of this config
+        not_done : dict
+            A dictionary of keywords and children which were not read yet.
+        recorder : dict
+            Records usage of the object and its children.
+
+    Methods
+    -------
+        done()
+            Checks that all arguments passed to the config, and its children have been read.
+            If not, a warning will be produced. This helps catching typos.
+            The function will the call mark_done() on itself and all children
+            such that subsequent calls to done() to not produce error messages
+
+        mark_done()
+            Marks all elements of this config and all children as 'read' (done).
+            Any elements not read explicitly will not be recorded for usage_report
+
+        reset_done()
+            Removes all usage information for all members of this config and its children.
+            Note: this does not affected recorded previous usage.
+
+        detach()
+            Create a copy of the current object; set it as 'done'; and return it.
+            The copy keeps the reference to the usage recorder.
+            This is used to defer using children of configs to a later stage.
+            See examples above
+
+        copy()
+            Returns a blank copy of the current config, with a new recorder.
+
+        as_dict()
+            Converts object into a dict of dict's.
+    """
+
+    def __init__(self, *args, config_name : str = None, **kwargs):
+        """
+        See help(Config) for a description of this class.
+
+        Parameters
+        ----------
+            *args : list
+                List of dictionaries to update() for.
+                If the first element is a config, and no other parameters
+                are passed, then this object will be full copy of that config.
+                It shares all usage recording.
+            config_name : str, optional
+                Name of the configuration for report_usage. Default is 'config'
+            **kwargs : dict
+                Used to initialize the config, e.g.
+                Config(a=1, b=2)
+        """
+        if len(args) == 1 and isinstance(args[0], Config) and config_name is None and len(kwargs) == 0:
+            source               = args[0]
+            self._done           = source._done
+            self._name           = source._name
+            self._recorder       = source._recorder
+            self._children       = source._children
+            self.update(source)
+            return
+
+        OrderedDict.__init__(self)
+        self._done           = set()
+        self._name           = config_name if not config_name is None else "config"
+        self._children       = OrderedDict()
+        self._recorder       = SortedDict()
+        self._recorder._name = self._name
+        for k in args:
+            self.update(k)
+        self.update(kwargs)
+
+    # Information
+    # -----------
+
+    @property
+    def config_name(self) -> str:
+        """ Returns the fully qualified name of this config """
+        return self._name
+
+    @property
+    def children(self) -> OrderedDict:
+        """ Returns dictionary of children """
+        return self._children
+
+    def __str__(self) -> str:
+        """ Print myself as dictionary """
+        s = self.config_name + str(self.as_dict(mark_done=False))
+        return s
+
+    def __repr__(self) -> str:
+        """ Print myself as reconstructable object """
+        s = repr(self.as_dict(mark_done=False))
+        s = "Config( **" + s + ", config_name='" + self.config_name + "' )"
+        return s
+
+    @property
+    def is_empty(self) -> bool:
+        """ Checks whether any variables have been set """
+        return len(self) + len(self._children) == 0
+
+    # conversion
+    # ----------
+
+    def as_dict(self, mark_done : bool = True ) -> dict:
+        """
+        Convert into dictionary of dictionaries
+
+        Parameters
+        ----------
+            mark_done : bool
+                If True, then all members of this config will be considered read ('done').
+
+        Returns
+        -------
+            Dict of dict's
+        """
+        d = { key : self.get(key) if mark_done else self.get_raw(key) for key in self }
+        for n, c in self._children.items():
+            if n == '_ipython_canary_method_should_not_exist_':
+                continue
+            c = c.as_dict(mark_done)
+            _log.verify( not n in d, "Cannot convert config to dictionary: found both a regular value, and a child with name '%s'", n)
+            d[n] = c
+        return d
+
+    # handle finishing config use
+    # ---------------------------
+
+    def done(self, include_children : bool = True, mark_done : bool = True ):
+        """
+        Closes the config and checks that no unread parameters remain.
+        By default this function also validates that all child configs were done".
+
+        If you want to make a copy of a child config for later processing use detach() first
+            config = Config()
+            config.a = 1
+            config.child.b = 2
+
+            _ = config.a # read a
+            config.done()   # error because confg.child.b has not been read yet
+
+        Instead use:
+            config = Config()
+            config.a = 1
+            config.child.b = 2
+
+            _ = config.a # read a
+            child = config.child.detach()
+            config.done()   # no error, even though confg.child.b has not been read yet
+        """
+        inputs = set(self)
+        rest   = inputs - self._done
+        if len(rest) > 0:
+            _log.verify( False, "Error closing config '%s': the following config arguments were not read: %s\n\n"\
+                                "Summary of all variables read from this object:\n%s", \
+                                        self._name, list(rest), \
+                                        self.usage_report(filter_path=self._name ) )
+        if include_children:
+            for _, c in self._children.items():
+                c.done(include_children=include_children,mark_done=False)
+        if mark_done:
+            self.mark_done(include_children=include_children)
+        return
+
+    def reset(self):
+        """
+        Reset all usage information
+
+        Use reset_done() to only reset the information whether a key was used, but to keep information on previously used default values.
+        This avoids inconsistency in default values between function calls.
+        """
+        self._done.clear()
+        self._recorder.clear()
+
+    def reset_done(self):
+        """
+        Reset the internal list of keys which are 'done', e.g. read.
+        This function does not reset the recording of previous uses of each key. This ensures consistency of default values between uses of keys.
+        Use reset() to reset both 'done' and create a new recorder.
+        """
+        self._done.clear()
+
+    def mark_done(self, include_children : bool = True ):
+        """ Mark all members as being read. Once called calling done() will no longer trigger an error """
+        self._done.update( self )
+        if include_children:
+            for _, c in self._children.items():
+                c.mark_done(include_children=include_children)
+
+    # making copies
+    # -------------
+
+    def _detach( self,  *, mark_self_done : bool, copy_done : bool, new_recorder ):
+        """
+        Creates a copy of the current config, with a number of options how to share usage information.
+        Use the functions
+            detach()
+            copy()
+            clean_copy()
+        instead.
+
+        Parameters
+        ----------
+            mark_self_done : bool
+                If True mark 'self' as 'read', otherwise not.
+            copy_done : bool
+                If True, create a copy of self._done, else remove all 'done' information
+            new_recorder :
+                <recorder> if a recorder is specified, use it.
+                "clean": use a new, empty recorder
+                "copy": use a new recorder which is a copy of self.recorder
+                "share": share the same recorder
+
+        Returns
+        -------
+            A new config
+        """
+        config = Config()
+        config.update(self)
+        config._done             = set( self._done ) if copy_done else config._done
+        config._name             = self._name
+        if isinstance( new_recorder, SortedDict ):
+            config._recorder     = new_recorder
+        elif new_recorder == "clean":
+            new_recorder         = config._recorder
+        elif new_recorder == "share":
+            config._recorder     = self._recorder
+        else:
+            assert new_recorder == "copy", "Invalid value for 'new_recorder': %s" % new_recorder
+            config._recorder.update( self._recorder )
+
+        config._children         = { k: c._detach(mark_self_done=mark_self_done, copy_done=copy_done, new_recorder=new_recorder) for k, c in self._children.items() }
+        config._children         = OrderedDict( config._children )
+
+        if mark_self_done:
+            self.mark_done()
+        return config
+
+    def detach( self ):
+        """
+        Returns a copy of 'self': the purpose of this function is to defer using a config to a later point, while maintaining consistency of usage.
+
+        - The copy has the same 'done' status at the time of calling detach. It does not share 'done' afterwards since 'self' will be marked as done.
+        - The copy shares the recorded to keep track of consistency of usage
+        - The function flags 'self' as done
+
+        For example:
+
+            class Example(object):
+
+                def __init__( config ):
+
+                    self.a      = config('a', 1, Int>=0, "'a' value")
+                    self.later  = config.later.detach()  # detach sub-config
+                    self._cache = None
+                    config.done()
+
+                def function(self):
+                    if self._cache is None:
+                        self._cache = Cache(self.later)  # deferred use of the self.later config. Cache() calls done() on self.later
+                    return self._cache
+
+        See also the examples in Deep Hedging which make extensive use of this feature.
+        """
+        return self._detach(mark_self_done=True, copy_done=True, new_recorder="share")
+
+    def copy( self ):
+        """
+        Return a copy of 'self': the purpose of this function is to create a copy of the current state of 'self', which is then independent of 'self'
+        -- The copy shares a copy of the 'done' status of 'self'
+        -- The copy has a copy of the usage of 'self', but will not share furhter usage
+        -- 'self' will not be flagged as 'done'
+
+        As an example, this allows using different default values for
+        config members of the same name:
+
+            base = Config()
+            base.a = 1
+            _ = base('a', 1)  # use a
+
+            copy = base.copy() # copy will know 'a' as used with default 1
+
+            _ = base("x", 1)
+            _ = copy("x", 2) # will not fail, as usage tracking is not shared after copy()
+
+            _ = copy('a', 2) # will fail, as default value differs from previous use of 'a' prior to copy()
+        """
+        return self._detach( mark_self_done=False, copy_done=True, new_recorder="copy" )
+
+    def clean_copy( self ):
+        """
+        Return a copy of 'self': the purpose of this function is to create a clean, unused copy of 'self'.
+
+        As an example, this allows using different default values for
+        config members of the same name:
+
+            base = Config()
+            base.a = 1
+            _ = base('a', 1)  # use a
+
+            copy = base.copy() # copy will know 'a' as used with default 1
+
+            _ = base("x", 1)
+            _ = copy("x", 2) # will not fail, as no usage is shared
+
+            _ = copy('a', 2) # will not fail, as no usage is shared
+        """
+        return self._detach( mark_self_done=False, copy_done=False, new_recorder="clean" )
+
+    def clone(self):
+        """
+        Return a copy of 'self' which shares all usage tracking with 'self'.
+        -- The copy shares the 'done' status of 'self'
+        -- The copy shares the 'usage' status of 'self'
+        -- 'self' will not be flagged as 'done'
+        """
+        return Config(self)
+
+    # Read
+    # -----
+
+    def __call__(self, key          : str,
+                       default      = no_default,
+                       cast         : type = None,
+                       help         : str = None,
+                       help_default : str = None,
+                       help_cast    : str = None,
+                       mark_done    : bool = True,
+                       record       : bool = True ):
+        """
+        Reads 'key' from the config. If not found, return 'default' if specified.
+
+            config("key")                      - returns the value for 'key' or if not found raises an exception
+            config("key", 1)                   - returns the value for 'key' or if not found returns 1
+            config("key", 1, int)              - if 'key' is not found, return 1. If it is found cast the result with int().
+            config("key", 1, int, "A number"   - also stores an optional help text.
+                                                 Call usage_report() after the config has been read to a get a full
+                                                 summary of all data requested from this config.
+
+        Parameters
+        ----------
+            key : string
+                Keyword to read
+            default : optional
+                Default value.
+                Set to 'no_default' to avoid defaulting.
+                In this case a KeyError is thrown if 'key' could not be found.
+            cast : object, optional
+                If None, any value will be acceptable.
+                If not None, the function will attempt to cast the value provided with the provided value.
+                E.g. if cast = int, then it will run int(x)
+                This function now also allows passing the following complex arguemts:
+                    * A list, in which case it is assumed that the 'key' must be from this list. The type of the first element of the list will be used to cast values
+                    * Int or Float which allow defining constrained integers and floating numbers.
+                    * A tuple of types, in which case any of the types is acceptable. A None here means that the value 'None' is acceptable (it does not mean that any value is acceptable)
+            help : str, optional
+                If provied adds a help text when self documentation is used.
+            help_default : str, optional
+                If provided, specifies the default value in plain text.
+                If not provided, help_default is equal to the string representation of the default value, if any.
+                Use this for complex default values which are hard to read.
+            help_cast : str, optional
+                If provided, specifies a description of the cast type.
+                If not provided, help_cast is set to the string representation of 'cast', or "None" if 'cast' is None. Complex casts are supported.
+                Use this for complex cast types which are hard to read.
+            mark_done : bool, optional
+                If true, marks the respective element as read.
+            record : bool, optional
+                If True, records usage of the key and validates that previous usage of the key is consistent with
+                the current usage, e.g. that the default values are consistent and that if help was provided it is the same.
+
+        Returns
+        -------
+            Value.
+        """
+        _log.verify( isinstance(key, str), "'key' must be a string. Found type %s. Details: %s", type(key), key)
+        _log.verify( key.find('.') == -1 , "Error in config '%s': key name cannot contain '.'. Found %s", self._name, key )
+
+        # determine raw value
+        if not key in self:
+            if default == no_default:
+                raise KeyError(key, "Error in config '%s': key '%s' not found " % (self._name, key))
+            value = default
+        else:
+            value = OrderedDict.get(self,key)
+
+        # casting
+        caster = _create_caster( cast, self._name, key, none_is_any = True )
+        value  = caster( value, self._name, key )
+
+        # mark key as read
+        if mark_done:
+            self._done.add(key)
+
+        # avoid recording
+        if not record:
+            return value
+        # record?
+        record_key    = self.record_key( key ) # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
+        help          = str(help) if not help is None and len(help) > 0 else ""
+        help          = help[:-1] if help[-1:] == "." else help  # remove trailing '.'
+        help_default  = str(help_default) if not help_default is None else ""
+        help_default  = str(default) if default != no_default and len(help_default) == 0 else help_default
+        help_cast     = str(help_cast) if not help_cast is None else str(caster)
+        _log.verify( default != no_default or help_default == "", "Config %s setup error for key %s: cannot specify 'help_default' if no default is given", self._name, key )
+
+        raw_use       = help == "" and help_cast == "" and help_default == "" # raw_use, e.g. simply get() or []. Including internal use
+
+        exst_value    = self._recorder.get(record_key, None)
+
+        if exst_value is None:
+            # no previous recorded use --> record this one, even if 'raw'
+            record = SortedDict(value=value,
+                                raw_use=raw_use,
+                                help=help,
+                                help_default=help_default,
+                                help_cast=help_cast )
+            if default != no_default:
+                record['default'] = default
+            self._recorder[record_key] = record
+            return value
+
+        if raw_use:
+            # do not compare raw_use with any other use
+            return value
+
+        if exst_value['raw_use']:
+            # previous usesage was 'raw'. Record this new use.
+            record = SortedDict(value=value,
+                                raw_use=raw_use,
+                                help=help,
+                                help_default=help_default,
+                                help_cast=help_cast )
+            if default != no_default:
+                record['default'] = default
+            self._recorder[record_key] = record
+            return value
+
+        # Both current and past were bona fide recorded uses.
+        # Ensure that their usage is consistent.
+        if default != no_default:
+            if 'default' in exst_value:
+                _log.verify( exst_value['default'] == default,  "Key '%s' of config '%s' (%s) was read twice with different default values '%s' and '%s'", key, self._name, record_key, exst_value['default'], default )
+            else:
+                exst_value['default'] = default
+
+        if help_default != "":
+            if exst_value['help_default'] != "":
+                _log.verify( exst_value['help_default'] == help_default, "Key '%s' of config '%s' (%s) was read twice with different 'help_default' texts '%s' and '%s'", key, self._name, record_key, exst_value['help_default'], help_default )
+            else:
+                exst_value['help_default'] = help_default
+
+        if help != "":
+            if exst_value['help'] != "":
+                _log.verify( exst_value['help'] == help, "Key '%s' of config '%s' (%s) was read twice with different 'help' texts '%s' and '%s'", key, self._name, record_key, exst_value['help'], help )
+            else:
+                exst_value['help'] = help
+
+        if help_cast != "" and help_cast != _Simple.STR_NONE_CAST:
+            if exst_value['help_cast'] != "" and exst_value['help_cast'] != _Simple.STR_NONE_CAST:
+                _log.verify( exst_value['help_cast'] == help_cast, "Key '%s' of config '%s' (%s) was read twice with different 'help_cast' texts '%s' and '%s'", key, self._name, record_key, exst_value['help_cast'], help_cast )
+            else:
+                exst_value['help_cast'] = help_cast
+        # done
+        return value
+
+    def __getitem__(self, key : str):
+        """
+        Returns the item for 'key' /without/ recording its usage.
+
+        Warning
+        -------
+        This behaviour had changed in 0.2.49. Before that, this call would record usage.
+        Use BACKWARD_COMPATIBLE_ITEM_ACCESS to turn back to old usage.
+        This reason for this change is that many functions in Python use standard dictionary iteration to access dictionaries.
+        Many such functions are not meant to track as 'read'.
+        """
+        return self(key) if BACKWARD_COMPATIBLE_ITEM_ACCESS else self.get_raw(key)
+
+    def __getattr__(self, key : str):
+        """
+        Returns either the value for 'key', if it exists, or creates on-the-fly a child config
+        with the name 'key' and retruns it
+        """
+        _log.verify( key.find('.') == -1 , "Error in config '%s': key name cannot contain '.'. Found %s", self._name, key )
+        if key in self._children:
+            return self._children[key]
+        _log.verify( key.find(" ") == -1, "Error in config '%s': sub-config names cannot contain spaces. Found %s", self._name, key )
+        config = Config()
+        config._name              = self._name + "." + key
+        config._recorder          = self._recorder
+        self._children[key]       = config
+        return config
+
+
+    def get(self, *kargs, **kwargs ):
+        """
+        Returns self(key, *kargs, **kwargs)
+        Note that if a default is provided, then this function will fail if a previous call has used a different default.
+        If no default is provided, then this function operates silently and will not trigger an error if a previous use provided additional, inconsistent information.
+
+        This behaviour had changed in 0.2.49. Before that, this call was limited to self(key, default).
+        Use BACKWARD_COMPATIBLE_ITEM_ACCESS to turn back to old usage
+        """
+        if not BACKWARD_COMPATIBLE_ITEM_ACCESS:
+            return self(*kargs, **kwargs)
+
+        default  = no_default
+        dontknow = list( set(kwargs) - set(['key', 'default']) )
+        _log.verify( len(dontknow) == 0, "Unknown keywoard arguments: %s", fmt_list(dontknow) )
+        if len(kargs) > 0:
+            key = kargs[0]
+            _log.verify( not 'key' in kwargs, "Argument 'key' used twice: once as positional argument, and as keyword argument")
+
+            if len(kargs) > 1:
+                default = kargs[1]
+                _log.verify( not 'default' in kwargs, "Argument 'default' used twice: once as positional argument, and as keyword argument")
+            else:
+                default = kwargs.get('default', no_default )
+        return self(key=key, default=default)
+
+    def get_default(self, *kargs, **kwargs ):
+        """
+        Returns self(key, *kargs, **kwargs)
+        Note that if a default is provided, then this function will fail if a previous call has used a different default.
+        """
+        return self(*kargs, **kwargs)
+
+    def get_raw(self, key : str, default = no_default ):
+        """
+        Returns self(key, default, mark_done=False, record=False )
+        Reads the respectitve element without marking the element as read, and without recording access to the element.
+        """
+        return self(key, default, mark_done=False, record=False)
+
+    def get_recorded(self, key : str ):
+        """
+        Returns the recorded used value of key, e.g. the value returned when the config was used:
+            If key is part of the input data, return that value
+            If key is not part of the input data, and a default was provided when the config was read, return the default.
+        This function:
+            Throws a KeyError if the key was never read successfully from the config (e.g. it is not used in the calling stack)
+        """
+        _log.verify( key.find('.') == -1 , "Error in config '%s': key name cannot contain '.'. Found %s", self._name, key )
+        record_key    = self._name + "['" + key + "']"    # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
+        record        = self._recorder.get(record_key, None)
+        if record is None:
+            raise KeyError(key)
+        return record['value']
+
+    # Write
+    # -----
+
+    def __setattr__(self, key, value):
+        """
+        Assign value using member notation, i.e. self.key = value
+        Identical to self[key] = value
+        Do not use leading underscores for config variables, see below
+
+        Parameters
+        ----------
+            key : str
+                Key to store. Note that keys with underscores are *not* stored as standard values,
+                but become classic members of the object (self.__dict__)
+            value :
+                If value is a Config object, them its usage information will be reset, and
+                the recorder will be set to the current recorder.
+                This way the following works as expected
+
+                    config = Config()
+                    sub    = Config(a=1)
+                    config.sub = sub
+                    a      = config.sub("a", 0, int, "Test")
+                    config.done() # <- no error is reported, usage_report() is correct
+        """
+        self.__setitem__(key,value)
+
+    def __setitem__(self, key, value):
+        """
+        Assign value using array notation, i.e. self[key] = value
+        Identical to self.key = value
+
+        Parameters
+        ----------
+            key : str
+                Key to store. Note that keys with underscores are *not* stored as standard values,
+                but become classic members of the object (self.__dict__)
+            value :
+                If value is a Config object, them its usage information will be reset, and
+                the recorder will be set to the current recorder.
+                This way the following works as expected
+
+                    config = Config()
+                    sub    = Config(a=1)
+                    config.sub = sub
+                    a      = config.sub("a", 0, int, "Test")
+                    config.done() # <- no error is reported, usage_report() is correct
+        """
+        if key[0] == "_" or key in self.__dict__:
+            OrderedDict.__setattr__(self, key, value )
+        elif isinstance( value, Config ):
+            _log.warn_if( len(value._recorder) > 0, "Warning: when assigning a Config to another Config, all existing usage will be reset. The 'recorder' of the assignee will be set ot the recorder of the receiving Config" )
+            value._name  = self._name + "." + key
+            def update_recorder( config ):
+                config._recorder = self._recorder
+                config._done.clear()
+                for k, c in config._children.items():
+                    c._name     = config._name + "." + k
+                    c._recorder = self._recorder
+                    update_recorder(c._children)
+            update_recorder(value)
+            self._children[key]      = value
+        else:
+            OrderedDict.__setitem__(self, key, value)
+
+    def update( self, other=None, **kwargs ):
+        """
+        Overwrite values of 'self' new values.
+        Accepts the two main formats
+
+            update( dictionary )
+            update( config )
+            update( a=1, b=2 )
+
+        Parameters
+        ----------
+            other : dict, Config, optional
+                Copy all content of 'other' into 'self'.
+                If 'other' is a config: elements will be clean_copy()ed.
+                  'other' will not be marked as 'used'
+            **kwargs
+                Allows assigning specific values.
+        """
+        if not other is None:
+            if BACKWARD_COMPATIBLE_ITEM_ACCESS and isinstance( other, Config ):
+                # copy() children
+                # and reset recorder to ours.
+                def set_recorder(config, recorder):
+                    config._recorder = recorder
+                    for _,c in config._children.items():
+                        set_recorder( c, recorder )
+                for sub, child in other._children.items():
+                    child = child.clean_copy()
+                    set_recorder(child, self._recorder)
+                    self._children[sub]= child
+                # copy elements from other.
+                # we do not mark elements from another config as 'used'
+                for key in other:
+                    self[key] = other.get_raw(key)
+            else:
+                _log.verify( isinstance(other, Mapping), "Cannot update config with an object of type '%s'. Expected 'Mapping' type.", type(other).__name__ )
+                for key in other:
+                    self[key] = other[key]
+
+        OrderedDict.update( self, kwargs )
+
+    # delete
+    # ------
+
+    def delete_children( self, names : list ):
+        """
+        Delete one or several children.
+        This function does not delete 'record' information.
+        """
+        if isinstance(names, str):
+            names = [ names ]
+
+        for name in names:
+            del self._children[name]
+
+    # Usage information & reports
+    # ---------------------------
+
+    @property
+    def recorder(self) -> SortedDict:
+        """ Returns the top level recorder """
+        return self._recorder
+
+    def usage_report(self,    with_values  : bool = True,
+                              with_help    : bool = True,
+                              with_defaults: bool = True,
+                              with_cast    : bool = False,
+                              filter_path  : str  = None ) -> str:
+        """
+        Generate a human readable report of all variables read from this config.
+
+        Parameters
+        ----------
+            with_values : bool, optional
+                Whether to also print values. This can be hard to read
+                if values are complex objects
+
+            with_help: bool, optional
+                Whether to print help
+
+            with_defaults: bool, optional
+                Whether to print default values
+
+            with_cast: bool, optional
+                Whether to print types
+
+            filter_path : str, optional
+                If provided, will match all children names vs this string.
+                Most useful with filter_path = self._name
+
+        Returns
+        -------
+            str
+                Report.
+        """
+        with_values   = bool(with_values)
+        with_help     = bool(with_help)
+        with_defaults = bool(with_defaults)
+        with_cast     = bool(with_cast)
+        l             = len(filter_path) if not filter_path is None else 0
+        rep_here      = ""
+        reported      = ""
+
+        for key, record in self._recorder.items():
+            value        =  record['value']
+            help         =  record['help']
+            help_default =  record['help_default']
+            help_cast    =  record['help_cast']
+            report       =  key + " = " + str(value) if with_values else key
+
+            do_help      =  with_help and help != ""
+            do_cast      =  with_cast and help_cast != ""
+            do_defaults  =  with_defaults and help_default != ""
+
+            if do_help or do_cast or do_defaults:
+                report += " # "
+                if do_cast:
+                    report += "(" + help_cast + ") "
+                if do_help:
+                    report += help
+                    if do_defaults:
+                        report += "; default: " + help_default
+                elif do_defaults:
+                    report += "Default: " + help_default
+
+            if l > 0 and key[:l] == filter_path:
+                rep_here += report + "\n"
+            else:
+                reported += report + "\n"
+
+        if len(reported) == 0:
+            return rep_here
+        if len(rep_here) == 0:
+            return reported
+        return rep_here + "# \n" + reported
+
+    def usage_reproducer(self) -> str:
+        """
+        Returns a string expression which will reproduce the current
+        configuration tree as long as each 'value' handles
+        repr() correctly.
+        """
+        report = ""
+        for key, record in self._recorder.items():
+            value        =  record['value']
+            report       += key + " = " + repr(value) + "\n"
+        return report
+
+    def input_report(self) -> str:
+        """
+        Returns a report of all inputs in a readable format, as long as all values
+        are as such.
+        """
+        inputs = []
+        def ireport(self, inputs):
+            for key in self:
+                value      = self.get_raw(key)
+                report_key = self._name + "['" + key + "'] = %s" % str(value)
+                inputs.append( report_key )
+            for _, c in self._children.items():
+                ireport(c, inputs)
+        ireport(self, inputs)
+
+        inputs = sorted(inputs)
+        report = ""
+        for i in inputs:
+            report += i + "\n"
+        return report
+
+    @property
+    def not_done(self) -> dict:
+        """ Returns a dictionary of keys which were not read yet """
+        h = { key : False for key in self if not key in self._done }
+        for k,c in self._children.items():
+            ch = c.not_done
+            if len(ch) > 0:
+                h[k] = ch
+        return h
+
+    def input_dict(self, ignore_underscore = True ) -> dict:
+        """ Returns a (pretty) dictionary of all inputs into this config. """
+        inputs = pdct()
+        for key in self:
+            if ignore_underscore and key[:1] == "_":
+                continue
+            inputs[key] = self.get_raw(key)
+        for k,c in self._children.items():
+            if ignore_underscore and k[:1] == "_":
+                continue
+            inputs[k] = c.input_dict()
+        return inputs
+
+    def unique_id(self, length : int = None, parse_functions : bool = False, parse_underscore : str = "none" ) -> str:
+        """
+        Returns an MDH5 hash key for this object, based on its provided inputs /not/ based on its usage
+        ** WARNING **
+        By default function ignores
+         1) Config keys or children with leading '_'s unless 'parse_underscore' is set to 'protected' or 'private'.
+         2) Functions and properties unless parse_functions is True
+            In the latter case function code will be used to distinguish
+            functions assigned to the config.
+        See util.unqiueHashExt() for further information.
+
+        Parameters
+        ----------
+            length : int
+                Desired length of the ID to be returned. Default is default hash size.
+            parse_functions : bool
+                If True, then function code will be parsed to hash functions. False means functions are not hashed
+            parse_underscore : str
+                If 'none' then any keys or sub-configs with leading '_' will be ignored.
+                If 'protected' then any keys or sub-configs with leading '__' will be ignored.
+                If 'private' then no keys or sub-configs will be ignored based on leading '_'s
+
+        Returns
+        -------
+            String ID
+        """
+        inputs = {}
+        for key in self:
+            if key[:1] == "_":
+                continue
+            inputs[key] = self.get_raw(key)
+        for c, child in self._children.items():
+            if c[:1] == "_":
+                continue
+            # collect ID for the child
+            child_data = child.unique_id()
+            # we only register children if they have keys.
+            # this way we do not trigger a change in ID simply due to a failed read access.
+            if child_data != "":
+                inputs[c]  = child_data
+        return uniqueHashExt(length=length,parse_functions=parse_functions)(inputs) if len(inputs) > 0 else ""
+
+    def used_info(self, key : str) -> tuple:
+        """Returns the usage stats for a given key in the form of a tuple (done, record) where 'done' is a boolean and 'record' is a dictionary of information on the key """
+        done   = key in self._done
+        record = self._recorder.get( self.record_key(key), None )
+        return (done, record)
+
+    def record_key(self, key):
+        """
+        Returns the fully qualified 'record' key for a relative 'key'.
+        It has the form config1.config['entry']
+        """
+        return self._name + "['" + key + "']"    # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
+
+    # magic
+    # -----
+
+    def __iter__(self):
+        """
+        Iterate. For some odd reason, adding this override will make
+        using f(**self) call our __getitem__() function.
+        """
+        return OrderedDict.__iter__(self)
+
+    # pickling
+    # --------
+
+    def __reduce__(self):
+        """
+        Pickling this object explicitly
+        See https://docs.python.org/3/library/pickle.html#object.__reduce__
+        """
+        keys = [ k for k in self ]
+        data = [ self.get_raw(k) for k in keys ]
+        state = dict(done = self._done,
+                     name = self._name,
+                     children = self._children,
+                     recorder = self._recorder,
+                     keys = keys,
+                     data = data )
+        return (Config, (), state)
+
+    def __setstate__(self, state):
+        """ Supports unpickling """
+        self._name = state['name']
+        self._done = state['done']
+        self._children = state['children']
+        self._recorder = state['recorder']
+        data = state['data']
+        keys = state['keys']
+        for (k,d) in zip(keys,data):
+            self[k] = d
+
+    # casting
+    # -------
+
+    @staticmethod
+    def to_config( kwargs, config_name = "kwargs"):
+        """
+        Makes sure an object is a config, and otherwise tries to convert it into one
+        Classic use case is to transform 'kwargs' to a Config
+        """
+        return kwargs if isinstance(kwargs,Config) else Config( kwargs,config_name=config_name )
+
+to_config = Config.to_config
 
 # ==============================================================================
 # New in version 0.1.45
@@ -327,917 +1310,3 @@ def _create_caster( cast : type, name : str, key : str, none_is_any : bool ):
         return cast
     return _Simple( cast, name, key, none_is_any=none_is_any )
 
-# ==============================================================================
-#
-# Actual Config class
-#
-# ==============================================================================
-
-class Config(OrderedDict):
-    """
-    A simple Config class.
-    Main features
-
-    Write
-        Set data as usual:
-
-            config = Config()
-            config['features']  = [ 'time', 'spot' ]
-            config['weights']   = [ 1, 2, 3 ]
-
-        Use member notation
-
-            config.network.samples    = 10000
-            config.network.activation = 'relu'
-
-    Read
-        def read_config( confg ):
-
-            features = config("features", [], list )          # reads features and returns a list
-            weights  = config("weights", [], np.ndarray )     # reads features and returns a nump array
-
-            network  = config.network
-            samples  = network('samples', 10000)              # networks samples
-            config.done()                                     # returns an error as we haven't read 'network.activitation'
-
-    Detaching child configs
-    You can also detach a child config, which allows you to store it for later
-    use without triggering done() errors for its parent.
-
-        def read_config( confg ):
-
-            features = config("features", [], list )          # reads features and returns a list
-            weights  = config("weights", [], np.ndarray )     # reads features and returns a nump array
-
-            network  = config.network.detach()
-            samples  = network('samples', 10000)              # networks samples
-            config.done()                                     # no error as 'network' was detached
-            network.done()                                    # error as network.activation was not read
-
-    Self-recording "help"
-    When reading a value, specify an optional help text:
-
-        def read_config( confg ):
-
-            features = config("features", [], list, help="Defines the features" )
-            weights  = config("weights", [], np.ndarray, help="Network weights" )
-
-            network  = config.network
-            samples  = network('samples', 10000, int, help="Number of samples")
-            activt   = network('activation', "relu", str, help="Activation function")
-            config.done()
-
-            config.usage_report()   # prints help
-
-    Attributes
-    ----------
-        config_name : str
-            Qualified name of the config, useful for error messages
-        children : dict
-            Children of this config
-        not_done : dict
-            A dictionary of keywords and children which were not read yet.
-        recorder : dict
-            Records usage of the object and its children.
-
-    Methods
-    -------
-        done()
-            Checks that all arguments passed to the config, and its children have been read.
-            If not, a warning will be produced. This helps catching typos.
-            The function will the call mark_done() on itself and all children
-            such that subsequent calls to done() to not produce error messages
-
-        mark_done()
-            Marks all elements of this config and all children as 'read' (done).
-            Any elements not read explicitly will not be recorded for usage_report
-
-        reset_done()
-            Removes all usage information for all members of this config and its children.
-            Note: this does not affected recorded previous usage.
-
-        detach()
-            Create a copy of the current object; set it as 'done'; and return it.
-            The copy keeps the reference to the usage recorder.
-            This is used to defer using children of configs to a later stage.
-            See examples above
-
-        copy()
-            Returns a blank copy of the current config, with a new recorder.
-
-        as_dict()
-            Converts object into a dict of dict's.
-    """
-
-    def __init__(self, *args, config_name : str = None, **kwargs):
-        """
-        See help(Config) for a description of this class.
-
-        Parameters
-        ----------
-            *args : list
-                List of dictionaries to update() for.
-                If the first element is a config, and no other parameters
-                are passed, then this object will be full copy of that config.
-                It shares all usage recording.
-            config_name : str, optional
-                Name of the configuration for report_usage. Default is 'config'
-            **kwargs : dict
-                Used to initialize the config, e.g.
-                Config(a=1, b=2)
-        """
-        if len(args) == 1 and isinstance(args[0], Config) and config_name is None and len(kwargs) == 0:
-            source               = args[0]
-            self._done           = source._done
-            self._name           = source._name
-            self._recorder       = source._recorder
-            self._children       = source._children
-            self.update(source)
-            return
-
-        OrderedDict.__init__(self)
-        self._done           = set()
-        self._name           = config_name if not config_name is None else "config"
-        self._children       = OrderedDict()
-        self._recorder       = SortedDict()
-        self._recorder._name = self._name
-        for k in args:
-            self.update(k)
-        self.update(kwargs)
-
-    @property
-    def config_name(self) -> str:
-        """ Returns the fully qualified name of this config """
-        return self._name
-
-    @property
-    def children(self) -> OrderedDict:
-        """ Returns dictionary of children """
-        return self._children
-
-    def __str__(self) -> str:
-        """ Print myself as dictionary """
-        s = self.config_name + str(self.as_dict(mark_done=False))
-        return s
-
-    def __repr__(self) -> str:
-        """ Print myself as reconstructable object """
-        s = repr(self.as_dict(mark_done=False))
-        s = "Config( **" + s + ", config_name='" + self.config_name + "' )"
-        return s
-
-    def as_dict(self, mark_done : bool = True ) -> dict:
-        """
-        Convert into dictionary of dictionaries
-
-        Parameters
-        ----------
-            mark_done : bool
-                If True, then all members of this config will be considered read ('done').
-        Returns
-        -------
-            Dict of dict's
-        """
-        d = { key : self.get(key) if mark_done else self.get_raw(key) for key in self }
-        for n, c in self._children.items():
-            if n == '_ipython_canary_method_should_not_exist_':
-                continue
-            c = c.as_dict(mark_done)
-            _log.verify( not n in d, "Cannot convert config to dictionary: found both a regular value, and a child with name '%s'", n)
-            d[n] = c
-        return d
-
-    @property
-    def is_empty(self) -> bool:
-        """ Checks whether any variables have been set """
-        return len(self) + len(self._children) == 0
-
-    def done(self, include_children : bool = True, mark_done : bool = True ):
-        """
-        Closes the config and checks that no unread parameters remain.
-        By default this function also validates that all child configs were done".
-
-        If you want to make a copy of a child config for later processing use detach() first
-            config = Config()
-            config.a = 1
-            config.child.b = 2
-
-            _ = config.a # read a
-            config.done()   # error because confg.child.b has not been read yet
-
-        Instead use:
-            config = Config()
-            config.a = 1
-            config.child.b = 2
-
-            _ = config.a # read a
-            child = config.child.detach()
-            config.done()   # no error, even though confg.child.b has not been read yet
-        """
-        inputs = set(self)
-        rest   = inputs - self._done
-        if len(rest) > 0:
-            _log.verify( False, "Error closing config '%s': the following config arguments were not read: %s\n\n"\
-                                "Summary of all variables read from this object:\n%s", \
-                                        self._name, list(rest), \
-                                        self.usage_report(filter_path=self._name ) )
-        if include_children:
-            for _, c in self._children.items():
-                c.done(include_children=include_children,mark_done=False)
-        if mark_done:
-            self.mark_done(include_children=include_children)
-        return
-
-    def reset(self):
-        """
-        Reset all usage information
-
-        Use reset_done() to only reset the information whether a key was used, but to keep information on previously used default values.
-        This avoids inconsistency in default values between function calls.
-        """
-        self._done.clear()
-        self._recorder.clear()
-
-    def reset_done(self):
-        """
-        Reset the internal list of keys which are 'done', e.g. read.
-        This function does not reset the recording of previous uses of each key. This ensures consistency of default values between uses of keys.
-        Use reset() to reset both 'done' and create a new recorder.
-        """
-        self._done.clear()
-
-    def mark_done(self, include_children : bool = True ):
-        """ Mark all members as being read. Once called calling done() will no longer trigger an error """
-        self._done.update( self )
-        if include_children:
-            for _, c in self._children.items():
-                c.mark_done(include_children=include_children)
-
-    def __getattr__(self, key : str):
-        """
-        Returns either the value for 'key', if it exists, or creates on-the-fly a child config
-        with the name 'key' and retruns it
-        """
-        _log.verify( key.find('.') == -1 , "Error in config '%s': key name cannot contain '.'. Found %s", self._name, key )
-        if key in self._children:
-            return self._children[key]
-        _log.verify( key.find(" ") == -1, "Error in config '%s': sub-config names cannot contain spaces. Found %s", self._name, key )
-        config = Config()
-        config._name              = self._name + "." + key
-        config._recorder          = self._recorder
-        self._children[key]       = config
-        return config
-
-    def _detach( self,  *, mark_self_done : bool, copy_done : bool, new_recorder ):
-        """
-        Creates a copy of the current config, with a number of options how to share usage information.
-        Use the functions
-            detach()
-            copy()
-            clean_copy()
-        instead.
-
-        Parameters
-        ----------
-            mark_self_done : bool
-                If True mark 'self' as 'read', otherwise not.
-            copy_done : bool
-                If True, create a copy of self._done, else remove all 'done' information
-            new_recorder :
-                <recorder> if a recorder is specified, use it.
-                "clean": use a new, empty recorder
-                "copy": use a new recorder which is a copy of self.recorder
-                "share": share the same recorder
-
-        Returns
-        -------
-            A new config
-        """
-        config = Config()
-        config.update(self)
-        config._done             = set( self._done ) if copy_done else config._done
-        config._name             = self._name
-        if isinstance( new_recorder, SortedDict ):
-            config._recorder     = new_recorder
-        elif new_recorder == "clean":
-            new_recorder         = config._recorder
-        elif new_recorder == "share":
-            config._recorder     = self._recorder
-        else:
-            assert new_recorder == "copy", "Invalid value for 'new_recorder': %s" % new_recorder
-            config._recorder.update( self._recorder )
-
-        config._children         = { k: c._detach(mark_self_done=mark_self_done, copy_done=copy_done, new_recorder=new_recorder) for k, c in self._children.items() }
-        config._children         = OrderedDict( config._children )
-
-        if mark_self_done:
-            self.mark_done()
-        return config
-
-    def detach( self ):
-        """
-        Returns a copy of 'self': the purpose of this function is to defer using a config to a later point, while maintaining consistency of usage.
-
-        - The copy has the same 'done' status at the time of calling detach. It does not share 'done' afterwards since 'self' will be marked as done.
-        - The copy shares the recorded to keep track of consistency of usage
-        - The function flags 'self' as done
-
-        For example:
-
-            class Example(object):
-
-                def __init__( config ):
-
-                    self.a      = config('a', 1, Int>=0, "'a' value")
-                    self.later  = config.later.detach()  # detach sub-config
-                    self._cache = None
-                    config.done()
-
-                def function(self):
-                    if self._cache is None:
-                        self._cache = Cache(self.later)  # deferred use of the self.later config. Cache() calls done() on self.later
-                    return self._cache
-
-        See also the examples in Deep Hedging which make extensive use of this feature.
-        """
-        return self._detach(mark_self_done=True, copy_done=True, new_recorder="share")
-
-    def detach(self):
-        """
-        Return a copy of 'self' with the following sematics
-            * All members of 'self' are marked as 'done'
-            * The copy shares the same 'recorder' as 'self', which means usage is tracked consistently.
-              That means that any defaults provided when reading variables have to match those when used for 'self'.
-        Use case is the ability to defer usage of a config to a later point.
-        Classic pattern:
-
-        class A(object):
-
-            def __init__(self, config)
-                ... read from 'config'
-                self.sub_config = config.sub.detach() # 'sub' config to be processed later
-                config.done()
-
-            def later(self):
-                ... read from self.sub_config
-                ...
-                self.sub_config.done()
-        """
-        return self._detach( mark_self_done=True, copy_done=True, new_recorder="share" )
-
-    def copy( self ):
-        """
-        Return a copy of 'self': the purpose of this function is to create a copy of the current state of 'self', which is then independent of 'self'
-        -- The copy shares a copy of the 'done' status of 'self'
-        -- The copy has a copy of the usage of 'self', but will not share furhter usage
-        -- 'self' will not be flagged as 'done'
-
-        As an example, this allows using different default values for
-        config members of the same name:
-
-            base = Config()
-            base.a = 1
-            _ = base('a', 1)  # use a
-
-            copy = base.copy() # copy will know 'a' as used with default 1
-
-            _ = base("x", 1)
-            _ = copy("x", 2) # will not fail, as usage tracking is not shared after copy()
-
-            _ = copy('a', 2) # will fail, as default value differs from previous use of 'a' prior to copy()
-        """
-        return self._detach( mark_self_done=False, copy_done=True, new_recorder="copy" )
-
-    def clean_copy( self ):
-        """
-        Return a copy of 'self': the purpose of this function is to create a clean, unused copy of 'self'.
-
-        As an example, this allows using different default values for
-        config members of the same name:
-
-            base = Config()
-            base.a = 1
-            _ = base('a', 1)  # use a
-
-            copy = base.copy() # copy will know 'a' as used with default 1
-
-            _ = base("x", 1)
-            _ = copy("x", 2) # will not fail, as no usage is shared
-
-            _ = copy('a', 2) # will not fail, as no usage is shared
-        """
-        return self._detach( mark_self_done=False, copy_done=False, new_recorder="clean" )
-
-    def clone(self):
-        """
-        Return a copy of 'self' which shars all usage tracking with 'self'.
-        """
-        return Config(self)
-
-
-    def update( self, other=None, **kwargs ):
-        """
-        Overwrite values of 'self' new values.
-        Accepts the two main formats
-
-            update( dictionary )
-            update( config )
-            update( a=1, b=2 )
-
-        Parameters
-        ----------
-            other : dict, Config, optional
-                Copy all content of 'other' into 'self'.
-                If 'other' is a config: elements will be clean_copy()ed.
-                  'other' will not be marked as 'used'
-            **kwargs
-                Allows assigning specific values.
-        """
-        if not other is None:
-            if isinstance( other, Config ):
-                # copy() children
-                # and reset recorder to ours.
-                def set_recorder(config, recorder):
-                    config._recorder = recorder
-                    for _,c in config._children.items():
-                        set_recorder( c, recorder )
-                for sub, child in other._children.items():
-                    child = child.clean_copy()
-                    set_recorder(child, self._recorder)
-                    self._children[sub]= child
-                # copy elements from other.
-                # we do not mark elements from another config as 'used'
-                for key in other:
-                    self[key] = other.get_raw(key)
-            else:
-                _log.verify( isinstance(other, Mapping), "Cannot update config with an object of type '%s'. Expected 'Mapping' type.", type(other).__name__ )
-                for key in other:
-                    self[key] = other[key]
-
-        OrderedDict.update( self, kwargs )
-
-    # Read
-    # -----
-
-    def __call__(self, key          : str,
-                       default      = no_default,
-                       cast         : type = None,
-                       help         : str = None,
-                       help_default : str = None,
-                       help_cast    : str = None,
-                       mark_done    : bool = True,
-                       record       : bool = True ):
-        """
-        Reads 'key' from the config. If not found, return 'default' if specified.
-
-            config("key")                      - returns the value for 'key' or if not found raises an exception
-            config("key", 1)                   - returns the value for 'key' or if not found returns 1
-            config("key", 1, int)              - if 'key' is not found, return 1. If it is found cast the result with int().
-            config("key", 1, int, "A number"   - also stores an optional help text.
-                                                 Call usage_report() after the config has been read to a get a full
-                                                 summary of all data requested from this config.
-
-        Parameters
-        ----------
-            key : string
-                Keyword to read
-            default : optional
-                Default value.
-                Set to 'no_default' to avoid defaulting.
-                In this case a KeyError is thrown if 'key' could not be found.
-            cast : object, optional
-                If None, any value will be acceptable.
-                If not None, the function will attempt to cast the value provided with the provided value.
-                E.g. if cast = int, then it will run int(x)
-                This function now also allows passing the following complex arguemts:
-                    * A list, in which case it is assumed that the 'key' must be from this list. The type of the first element of the list will be used to cast values
-                    * Int or Float which allow defining constrained integers and floating numbers.
-                    * A tuple of types, in which case any of the types is acceptable. A None here means that the value 'None' is acceptable (it does not mean that any value is acceptable)
-            help : str, optional
-                If provied adds a help text when self documentation is used.
-            help_default : str, optional
-                If provided, specifies the default value in plain text.
-                If not provided, help_default is equal to the string representation of the default value, if any.
-                Use this for complex default values which are hard to read.
-            help_cast : str, optional
-                If provided, specifies a description of the cast type.
-                If not provided, help_cast is set to the string representation of 'cast', or "None" if 'cast' is None. Complex casts are supported.
-                Use this for complex cast types which are hard to read.
-            mark_done : bool, optional
-                If true, marks the respective element as read.
-            record : bool, optional
-                If True, records usage of the key and validates that previous usage of the key is consistent with
-                the current usage, e.g. that the default values are consistent and that if help was provided it is the same.
-
-        Returns
-        -------
-            Value.
-        """
-        _log.verify( isinstance(key, str), "'key' must be a string. Found type %s. Details: %s", type(key), key)
-        _log.verify( key.find('.') == -1 , "Error in config '%s': key name cannot contain '.'. Found %s", self._name, key )
-
-        # determine raw value
-        if not key in self:
-            if default == no_default:
-                raise KeyError(key, "Error in config '%s': key '%s' not found " % (self._name, key))
-            value = default
-        else:
-            value = OrderedDict.get(self,key)
-
-        # casting
-        caster = _create_caster( cast, self._name, key, none_is_any = True )
-        value  = caster( value, self._name, key )
-
-        # mark key as read
-        if mark_done:
-            self._done.add(key)
-
-        # avoid recording
-        if not record:
-            return value
-        # record?
-        record_key    = self.record_key( key ) # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
-        help          = str(help) if not help is None and len(help) > 0 else ""
-        help          = help[:-1] if help[-1:] == "." else help  # remove trailing '.'
-        help_default  = str(help_default) if not help_default is None else ""
-        help_default  = str(default) if default != no_default and len(help_default) == 0 else help_default
-        help_cast     = str(help_cast) if not help_cast is None else str(caster)
-        _log.verify( default != no_default or help_default == "", "Config %s setup error for key %s: cannot specify 'help_default' if no default is given", self._name, key )
-
-        raw_use       = help == "" and help_cast == "" and help_default == "" # raw_use, e.g. simply get() or []. Including internal use
-
-        exst_value    = self._recorder.get(record_key, None)
-
-        if exst_value is None:
-            # no previous recorded use --> record this one, even if 'raw'
-            record = SortedDict(value=value,
-                                raw_use=raw_use,
-                                help=help,
-                                help_default=help_default,
-                                help_cast=help_cast )
-            if default != no_default:
-                record['default'] = default
-            self._recorder[record_key] = record
-            return value
-
-        if raw_use:
-            # do not compare raw_use with any other use
-            return value
-
-        if exst_value['raw_use']:
-            # previous usesage was 'raw'. Record this new use.
-            record = SortedDict(value=value,
-                                raw_use=raw_use,
-                                help=help,
-                                help_default=help_default,
-                                help_cast=help_cast )
-            if default != no_default:
-                record['default'] = default
-            self._recorder[record_key] = record
-            return value
-
-        # Both current and past were bona fide recorded uses.
-        # Ensure that their usage is consistent.
-        if default != no_default:
-            if 'default' in exst_value:
-                _log.verify( exst_value['default'] == default,  "Key '%s' of config '%s' (%s) was read twice with different default values '%s' and '%s'", key, self._name, record_key, exst_value['default'], default )
-            else:
-                exst_value['default'] = default
-
-        if help_default != "":
-            if exst_value['help_default'] != "":
-                _log.verify( exst_value['help_default'] == help_default, "Key '%s' of config '%s' (%s) was read twice with different 'help_default' texts '%s' and '%s'", key, self._name, record_key, exst_value['help_default'], help_default )
-            else:
-                exst_value['help_default'] = help_default
-
-        if help != "":
-            if exst_value['help'] != "":
-                _log.verify( exst_value['help'] == help, "Key '%s' of config '%s' (%s) was read twice with different 'help' texts '%s' and '%s'", key, self._name, record_key, exst_value['help'], help )
-            else:
-                exst_value['help'] = help
-
-        if help_cast != "" and help_cast != _Simple.STR_NONE_CAST:
-            if exst_value['help_cast'] != "" and exst_value['help_cast'] != _Simple.STR_NONE_CAST:
-                _log.verify( exst_value['help_cast'] == help_cast, "Key '%s' of config '%s' (%s) was read twice with different 'help_cast' texts '%s' and '%s'", key, self._name, record_key, exst_value['help_cast'], help_cast )
-            else:
-                exst_value['help_cast'] = help_cast
-        # done
-        return value
-
-    def record_key(self, key):
-        """ Returns the 'record' full key for a relative 'key' """
-        return self._name + "['" + key + "']"    # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
-
-    def __getitem__(self, key : str):
-        """ Returns self(key) """
-        return self(key)
-
-    def get(self, key : str, default = no_default ):
-        """
-        Returns self(key, default)
-        Note that if a default is provided, then this function will fail if a previous call has used a different default.
-        If no default is provided, then this function operates silently and will not trigger an error if a previous use provided additional, inconsistent information.
-        """
-        return self(key, default)
-
-    def get_default(self, key : str, default):
-        """
-        Returns self(key,default)
-        Note that if a default is provided, then this function will fail if a previous call has used a different default.
-        """
-        return self(key,default)
-
-    def get_raw(self, key : str, default = no_default ):
-        """
-        Returns self(key, default, mark_done=False, record=False )
-        Reads the respectitve element without marking the element as read; and without recording access to the element.
-        """
-        return self(key, default, mark_done=False, record=False)
-
-    def get_recorded(self, key : str ):
-        """
-        Returns the recorded used value of key, e.g. the value returned when the config was used:
-            If key is part of the input data, return that value
-            If key is not part of the input data, and a default was provided when the config was read, return the default.
-        This function:
-            Throws a KeyError if the key was never read successfully from the config (e.g. it is not used in the calling stack)
-        """
-        _log.verify( key.find('.') == -1 , "Error in config '%s': key name cannot contain '.'. Found %s", self._name, key )
-        record_key    = self._name + "['" + key + "']"    # using a fully qualified keys allows 'recorders' to be shared accross copy()'d configs.
-        record        = self._recorder.get(record_key, None)
-        if record is None:
-            raise KeyError(key)
-        return record['value']
-
-    # Write
-    # -----
-
-    def __setattr__(self, key, value):
-        """
-        Assign value.
-        If 'value' is a config, then the assigned config's recorder will be set to
-        the current recorder, and the 'done' information will be reset.
-        """
-        self.__setitem__(key,value)
-
-    def __setitem__(self, key, value):
-        """
-        Assign value.
-        If 'value' is a config, then the assigned config's recorder will be set to
-        the current recorder, and the 'done' information will be reset.
-        """
-        if key[0] == "_" or key in self.__dict__:
-            OrderedDict.__setattr__(self, key, value )
-        elif isinstance( value, Config ):
-            _log.warn_if( len(value._recorder) > 0, "Warning: when assigning a Config to another Config, all existing usage will be reset. The 'recorder' of the assignee will be set ot the recorder of the receiving Config" )
-            value._name  = self._name + "." + key
-            def update_recorder( config ):
-                config._recorder = self._recorder
-                config._done.clear()
-                for k, c in config._children.items():
-                    c._name     = config._name + "." + k
-                    c._recorder = self._recorder
-                    update_recorder(c._children)
-            update_recorder(value)
-            self._children[key]      = value
-        else:
-            OrderedDict.__setitem__(self, key, value)
-
-    # Recorder
-    # --------
-
-    @property
-    def recorder(self) -> SortedDict:
-        """ Returns the top level recorder """
-        return self._recorder
-
-    def usage_report(self,    with_values  : bool = True,
-                              with_help    : bool = True,
-                              with_defaults: bool = True,
-                              with_cast    : bool = False,
-                              filter_path  : str  = None ) -> str:
-        """
-        Generate a human readable report of all variables read from this config.
-
-        Parameters
-        ----------
-            with_values : bool, optional
-                Whether to also print values. This can be hard to read
-                if values are complex objects
-
-            with_help: bool, optional
-                Whether to print help
-
-            with_defaults: bool, optional
-                Whether to print default values
-
-            with_cast: bool, optional
-                Whether to print types
-
-            filter_path : str, optional
-                If provided, will match all children names vs this string.
-                Most useful with filter_path = self._name
-
-        Returns
-        -------
-            str
-                Report.
-        """
-        with_values   = bool(with_values)
-        with_help     = bool(with_help)
-        with_defaults = bool(with_defaults)
-        with_cast     = bool(with_cast)
-        l             = len(filter_path) if not filter_path is None else 0
-        rep_here      = ""
-        reported      = ""
-
-        for key, record in self._recorder.items():
-            value        =  record['value']
-            help         =  record['help']
-            help_default =  record['help_default']
-            help_cast    =  record['help_cast']
-            report       =  key + " = " + str(value) if with_values else key
-
-            do_help      =  with_help and help != ""
-            do_cast      =  with_cast and help_cast != ""
-            do_defaults  =  with_defaults and help_default != ""
-
-            if do_help or do_cast or do_defaults:
-                report += " # "
-                if do_cast:
-                    report += "(" + help_cast + ") "
-                if do_help:
-                    report += help
-                    if do_defaults:
-                        report += "; default: " + help_default
-                elif do_defaults:
-                    report += "Default: " + help_default
-
-            if l > 0 and key[:l] == filter_path:
-                rep_here += report + "\n"
-            else:
-                reported += report + "\n"
-
-        if len(reported) == 0:
-            return rep_here
-        if len(rep_here) == 0:
-            return reported
-        return rep_here + "# \n" + reported
-
-    def usage_reproducer(self) -> str:
-        """
-        Returns a string expression which will reproduce the current
-        configuration tree as long as each 'value' handles
-        repr() correctly.
-        """
-        report = ""
-        for key, record in self._recorder.items():
-            value        =  record['value']
-            report       += key + " = " + repr(value) + "\n"
-        return report
-
-    def input_report(self) -> str:
-        """
-        Returns a report of all inputs in a readable format, as long as all values
-        are as such.
-        """
-        inputs = []
-        def ireport(self, inputs):
-            for key in self:
-                value      = self.get_raw(key)
-                report_key = self._name + "['" + key + "'] = %s" % str(value)
-                inputs.append( report_key )
-            for _, c in self._children.items():
-                ireport(c, inputs)
-        ireport(self, inputs)
-
-        inputs = sorted(inputs)
-        report = ""
-        for i in inputs:
-            report += i + "\n"
-        return report
-
-    @property
-    def not_done(self) -> dict:
-        """ Returns a dictionary of keys which were not read yet """
-        h = { key : False for key in self if not key in self._done }
-        for k,c in self._children.items():
-            ch = c.not_done
-            if len(ch) > 0:
-                h[k] = ch
-        return h
-
-    def input_dict(self, ignore_underscore = True ) -> dict:
-        """ Returns a (pretty) dictionary of all inputs into this config. """
-        inputs = pdct()
-        for key in self:
-            if ignore_underscore and key[:1] == "_":
-                continue
-            inputs[key] = self.get_raw(key)
-        for k,c in self._children.items():
-            if ignore_underscore and k[:1] == "_":
-                continue
-            inputs[k] = c.input_dict()
-        return inputs
-
-    def unique_id(self, length : int = None, parse_functions : bool = False, parse_underscore : str = "none" ) -> str:
-        """
-        Returns an MDH5 hash key for this object, based on its provided inputs /not/ based on its usage
-        ** WARNING **
-        By default function ignores
-         1) Config keys or children with leading '_'s unless 'parse_underscore' is set to 'protected' or 'private'.
-         2) Functions and properties unless parse_functions is True
-            In the latter case function code will be used to distinguish
-            functions assigned to the config.
-        See util.unqiueHashExt() for further information.
-
-        Parameters
-        -----------
-            length : int
-                Desired length of the ID to be returned. Default is default hash size.
-            parse_functions : bool
-                If True, then function code will be parsed to hash functions. False means functions are not hashed
-            parse_underscore : str
-                If 'none' then any keys or sub-configs with leading '_' will be ignored.
-                If 'protected' then any keys or sub-configs with leading '__' will be ignored.
-                If 'private' then no keys or sub-configs will be ignored based on leading '_'s
-
-        Returbs
-        -------
-            String ID
-        """
-        inputs = {}
-        for key in self:
-            if key[:1] == "_":
-                continue
-            inputs[key] = self.get_raw(key)
-        for c, child in self._children.items():
-            if c[:1] == "_":
-                continue
-            # collect ID for the child
-            child_data = child.unique_id()
-            # we only register children if they have keys.
-            # this way we do not trigger a change in ID simply due to a failed read access.
-            if child_data != "":
-                inputs[c]  = child_data
-        return uniqueHashExt(length=length,parse_functions=parse_functions)(inputs) if len(inputs) > 0 else ""
-
-    def used_info(self, key : str) -> tuple:
-        """
-        Returns the usage stats for a given key in the form of a tuple (done, record) where 'done' is a boolean and 'record' is a dictionary of information on the key
-        """
-        done   = key in self._done
-        record = self._recorder.get( self.record_key(key), None )
-        return (done, record)
-
-    # magic
-    # -----
-
-    def __iter__(self):
-        """
-        Iterate. For some odd reason, adding this override will make
-        using f(**self) call our __getitem__() function.
-        """
-        return OrderedDict.__iter__(self)
-
-    # pickling
-    # --------
-
-    def __reduce__(self):
-        """
-        Pickling this object explicitly
-        See https://docs.python.org/3/library/pickle.html#object.__reduce__
-        """
-        keys = [ k for k in self ]
-        data = [ self.get_raw(k) for k in keys ]
-        state = dict(done = self._done,
-                     name = self._name,
-                     children = self._children,
-                     recorder = self._recorder,
-                     keys = keys,
-                     data = data )
-        return (Config, (), state)
-
-    def __setstate__(self, state):
-        """ Supports unpickling """
-        self._name = state['name']
-        self._done = state['done']
-        self._children = state['children']
-        self._recorder = state['recorder']
-        data = state['data']
-        keys = state['keys']
-        for (k,d) in zip(keys,data):
-            self[k] = d
-
-    # casting
-    # -------
-
-    @staticmethod
-    def to_config( kwargs, config_name = "kwargs"):
-        """
-        Makes sure an object is a config, and otherwise tries to convert it into one
-        Classic use case is to transform 'kwargs' to a Config
-        """
-        return kwargs if isinstance(kwargs,Config) else Config( kwargs,config_name=config_name )
-
-to_config = Config.to_config
