@@ -457,7 +457,7 @@ class SubDir(object):
 
     # -- write --
 
-    def _write( self, writer, key, obj ):
+    def _write( self, writer, key, obj, raiseOnError ) -> bool:
         """ Utility function for write() and writeLine() """
         if self._path is None:
             raise EOFError("Cannot write to '%s': current directory is not specified" % key)
@@ -470,16 +470,17 @@ class SubDir(object):
                 obj = [ obj ] * l
             else:
                 _log.verify( len(obj) == l, "'obj' must have same lengths as 'key', found %ld and %ld", len(obj), l )
+            ok = True
             for (k,o) in zip(key,obj):
-                self._write( writer, k, o )
-            return
+                ok |= self._write( writer, k, o, raiseOnError=raiseOnError )
+            return ok
 
         # single key
         _log.verify(len(key) > 0, "'key is empty (the filename)" )
         sub, key = os.path.split(key)
         _log.verify(len(key) > 0, "'key '%s' refers to a directory, not a file", key)
         if len(sub) > 0:
-            return SubDir(self,sub)._write(writer,key,obj)
+            return SubDir(self,sub)._write(writer,key,obj, raiseOnError=raiseOnError)
 
         # write to temp file
         # then rename into target file
@@ -495,10 +496,8 @@ class SubDir(object):
             if tmp_i >= 10:
                 raise RuntimeError("Failed to generate temporary file for writing '%s': too many temporary files found. For example, this file already exists: '%s'" % ( fullFileName, fullTmpFile ) )
 
-        writer( key, fullTmpFile, obj )
-        import time
-        time.sleep(1)
-
+        if not writer( key, fullTmpFile, obj ):
+            return False
         if os.path.exists(fullTmpFile):
             try:
                 if os.path.exists(fullFileName):
@@ -506,9 +505,12 @@ class SubDir(object):
                 os.rename(fullTmpFile, fullFileName)
             except Exception as e:
                 os.remove(fullTmpFile)
-                raise e
+                if raiseOnError:
+                    raise e
+                return False
+        return True
 
-    def write( self, key, obj ):
+    def write( self, key, obj, raiseOnError = True ) -> bool:
         """
         Pickles 'obj' into key.
         -- Supports 'key' containing directories
@@ -533,13 +535,19 @@ class SubDir(object):
         If the current directory is 'None', then the function throws an EOFError exception
         """
         def writer( key, fullFileName, obj ):
-            with open(fullFileName,"wb") as f:
-                pickle.dump(obj,f,-1)
-        self._write( writer=writer, key=key, obj=obj )
+            try:
+                with open(fullFileName,"wb") as f:
+                    pickle.dump(obj,f,-1)
+            except Exception as e:
+                if raiseOnError:
+                    raise e
+                return False
+            return True
+        return self._write( writer=writer, key=key, obj=obj, raiseOnError=raiseOnError )
 
     set = write
 
-    def writeString( self, key, line ):
+    def writeString( self, key, line, raiseOnError = True ) -> bool:
         """
         Writes 'line' into key. A trailing EOL will not be read back
         -- Supports 'key' containing directories
@@ -552,9 +560,15 @@ class SubDir(object):
         if len(line) == 0 or line[-1] != '\n':
             line += '\n'
         def writer( key, fullFileName, obj ):
-            with open(fullFileName,"w") as f:
-                f.write(obj)
-        self._write( writer=writer, key=key, obj=line )
+            try:
+                with open(fullFileName,"w") as f:
+                    f.write(obj)
+            except Exception as e:
+                if raiseOnError:
+                    raise e
+                return False
+            return True
+        return self._write( writer=writer, key=key, obj=line, raiseOnError=raiseOnError )
 
     # -- iterate --
 
