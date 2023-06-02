@@ -44,6 +44,7 @@ uniqueHash48 = util.uniqueHash48
 uniqueHash64 = util.uniqueHash64
 uniqueHashExt = util.uniqueHashExt
 _compress_function_code = util._compress_function_code
+OrderedDict = prettydict.OrderedDict
 
 Config = config.Config
 Float = config.Float
@@ -477,11 +478,24 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual( util.fmt_list(None, none="n/a"), "n/a" )
         self.assertEqual( util.fmt_list(["a"]), "a" )
         self.assertEqual( util.fmt_list(["a","b"]), "a and b" )
+        self.assertEqual( util.fmt_list(["a","b"], link="or"), "a or b" )
+        self.assertEqual( util.fmt_list(["a","b"], link=None), "a, b" )
+        self.assertEqual( util.fmt_list(["a","b"], link=""), "a, b" )
         self.assertEqual( util.fmt_list(["a","b", "c"]), "a, b and c" )
+        self.assertEqual( util.fmt_list(["a","b", "c"], link="or"), "a, b or c" )
+        self.assertEqual( util.fmt_list(["a","b", "c"], link=None), "a, b, c" )
+        self.assertEqual( util.fmt_list(["a","b", "c"], link=""), "a, b, c" )
+        self.assertEqual( util.fmt_dict({}), "-" )
+        self.assertEqual( util.fmt_dict({},none="n/a"), "n/a" )
+        self.assertEqual( util.fmt_dict(dict(a=1),sort=True), "a: 1" )
+        self.assertEqual( util.fmt_dict(dict(a=1,b=2),sort=True), "a: 1 and b: 2" )
+        self.assertEqual( util.fmt_dict(dict(a=1,b=2,c=3),sort=True), "a: 1, b: 2 and c: 3" )
+        self.assertEqual( util.fmt_dict(OrderedDict(c=1,b=2,a=3),sort=False), "c: 1, b: 2 and a: 3" )
 
         self.assertEqual( util.fmt_big_number(1), "1" )
         self.assertEqual( util.fmt_big_number(123), "123" )
         self.assertEqual( util.fmt_big_number(1234), "1234" )
+        self.assertEqual( util.fmt_big_number(12345), "12.35K" )
         self.assertEqual( util.fmt_big_number(123456), "123.46K" )
         self.assertEqual( util.fmt_big_number(1234567), "1234.57K" )
         self.assertEqual( util.fmt_big_number(12345678), "12.35M" )
@@ -489,7 +503,24 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual( util.fmt_big_number(1234567890), "1234.57M" )
         self.assertEqual( util.fmt_big_number(12345678900), "12.35B" )
         self.assertEqual( util.fmt_big_number(1234567890000), "1234.57B" )
-        self.assertEqual( util.fmt_big_number(1234567890000,True), "1234.57G" )
+        self.assertEqual( util.fmt_big_number(12345678900000), "12.35T" )
+
+        self.assertEqual( util.fmt_big_byte_number(1), "1" )
+        self.assertEqual( util.fmt_big_byte_number(123), "123" )
+        self.assertEqual( util.fmt_big_byte_number(1234), "1234" )
+        self.assertEqual( util.fmt_big_byte_number(12345), "12.06K" )
+        self.assertEqual( util.fmt_big_byte_number(123456), "120.56K" )
+        self.assertEqual( util.fmt_big_byte_number(12*1024), "12K" )
+        self.assertEqual( util.fmt_big_byte_number(1234567), "1205.63K" )
+        self.assertEqual( util.fmt_big_byte_number(12345678), "11.77M" )
+        self.assertEqual( util.fmt_big_byte_number(123456789), "117.74M" )
+        self.assertEqual( util.fmt_big_byte_number(1234567890), "1177.38M" )
+        self.assertEqual( util.fmt_big_byte_number(12345678900), "11.5G" )
+        self.assertEqual( util.fmt_big_byte_number(1234567890000), "1149.78G" )
+        self.assertEqual( util.fmt_big_byte_number(12345678900000), "11.23T" )
+
+        self.assertEqual( util.fmt_big_byte_number(12*1024, True), "12KB" )
+        self.assertEqual( util.fmt_big_byte_number(1234567890000, True), "1149.78GB" )
 
         DD = datetime.date
         DT = datetime.datetime

@@ -129,63 +129,96 @@ def fmt(text : str,*args,**kwargs) -> str:
 def prnt(text : str,*args,**kwargs) -> str:
     """ Prints a fmt() string. """
     print(_fmt(text,args,kwargs))
+
 def write(text : str,*args,**kwargs) -> str:
     """ Prints a fmt() string without EOL, e.g. uses print(fmt(..),end='') """
     print(_fmt(text,args,kwargs),end='')
 
-
 def fmt_seconds( seconds : int ) -> str:
-    """ Print nice format string for seconds """
+    """ Print nice format string for seconds, e.g. '23s' for seconds=23, or 1:10 for seconds=70 """
     if seconds < 60:
         return "%lds" % seconds
     if seconds < 60*60:
         return "%ld:%02ld" % (seconds//60, seconds%60)
     return "%ld:%02ld:%02ld" % (seconds//60//60, (seconds//60)%60, seconds%60)
 
-def fmt_list( lst, none="-" ) -> str:
-    """ Returns a nicely formatted list of string with commas """
+def fmt_list( lst : list, none : str = "-", link : str = "and" ) -> str:
+    """
+    Returns a nicely formatted list of string with commas
+
+    Parameters
+    ----------
+        lst  : list
+        none : string used when list was empty
+        link : string used to connect the last item. Default is 'and'
+               If the list is [1,2,3] then the function will return 1, 2 and 3
+
+    Returns
+    -------
+        String of the list.
+    """
     if lst is None:
-        return none
+        return str(none)
     if len(lst) == 0:
         return none
     if len(lst) == 1:
         return str(lst[0])
-    if len(lst) == 2:
-        return str(lst[0]) + " and " + str(lst[1])
-    s = ""
+
+    link = str(link) if not link is None else ""
+    link = (" " + link + " ") if len(link)>0 else ", "
+    s    = ""
     for k in lst[:-1]:
         s += str(k) + ", "
-    return s[:-2] + " and " + str(lst[-1])
+    return s[:-2] + link + str(lst[-1])
 
-def fmt_dict(x, sort=False):
-    """ Return a readable representation of a dictionary """
-    keys = x
+def fmt_dict( dct : dict, sort : bool = False, none : str = "-", link : str = "and" ) -> str:
+    """
+    Return a nice readable representation of a dictionary
+    This assumes that the elements of the dictionary itself can be formatted well with 'str()'
+
+    For a dictionary dict(a=1,b=2,c=3) this function will return a: 1, b: 2, and c: 3
+
+    Parameters
+    ----------
+        x : dict
+        sort : whether to sort the keys
+        none : string to be used if dictionary is empty
+        link : string to be used to link the last element to the previous string
+
+    Returns
+    -------
+        String
+    """
+    keys = dct
+    if len(keys) == 0:
+        return str(none)
     if sort:
-        keys = list(x)
+        keys = list(dct)
         sorted(keys)
-    s = ""
-    for k in keys:
-        q = k + ": " + str(x[k])
-        s = q if s=="" else (s + ", " + q)
-    return s
+    strs = [ str(k) + ": " + str(dct[k]) for k in keys ]
+    return fmt_list( strs, none=none, link=link )
 
-def fmt_big_number( number : int, fmt_computer = False ) -> str:
+def fmt_big_number( number : int ) -> str:
     """
     Return a formatted big number string, e.g. 12.35M instead of all digits.
+    Uses decimal system and "B" for billions.
+    Use fmt_big_byte_number for byte sizes
 
     Parameters
     ----------
         number : int
-        fmt_computer : bool
-            If False, return 'B' for billions. If True, return 'G'
     Returns
     -------
         String number
     """
+    if number >= 10**13:
+        number = number/(10**12)
+        number = round(number,2)
+        return "%gT" % number
     if number >= 10**10:
         number = number/(10**9)
         number = round(number,2)
-        return "%g%s" % (number, "G" if fmt_computer else "B")
+        return "%gB" % number
     if number >= 10**7:
         number = number/(10**6)
         number = round(number,2)
@@ -195,6 +228,40 @@ def fmt_big_number( number : int, fmt_computer = False ) -> str:
         number = round(number,2)
         return "%gK" % number
     return str(number)
+
+def fmt_big_byte_number( byte_cnt : int, add_B_to_string = False ) -> str:
+    """
+    Return a formatted big number string, e.g. 12.35M instead of all digits.
+
+    Parameters
+    ----------
+        byte_cnt : int
+        add_B_to_string : bool
+            If true, return GB, MB and KB. If False, return G, M, K
+    Returns
+    -------
+        String number
+    """
+    if byte_cnt >= 10*1024*1024*1024*1024:
+        byte_cnt = byte_cnt/(1024*1024*1024*1024)
+        byte_cnt = round(byte_cnt,2)
+        s = "%gT" % byte_cnt
+    elif byte_cnt >= 10*1024*1024*1024:
+        byte_cnt = byte_cnt/(1024*1024*1024)
+        byte_cnt = round(byte_cnt,2)
+        s = "%gG" % byte_cnt
+    elif byte_cnt >= 10*1024*1024:
+        byte_cnt = byte_cnt/(1024*1024)
+        byte_cnt = round(byte_cnt,2)
+        s = "%gM" % byte_cnt
+    elif byte_cnt >= 10*1024:
+        byte_cnt = byte_cnt/1024
+        byte_cnt = round(byte_cnt,2)
+        s = "%gK" % byte_cnt
+    else:
+        s = str(byte_cnt)
+
+    return s if not add_B_to_string else s+"B"
 
 def fmt_datetime(dt : datetime.datetime) -> str:
     """

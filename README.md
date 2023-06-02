@@ -702,12 +702,14 @@ Example 2 (line length is getting shorter)
             pass
         f_a = bind(f, a=1)
 
-* `fmt_list()` returns a nicely formatted list, e.g. `fmt_list([1,2,3])` returns `1, 2 or 3`.
+* `fmt_list()` returns a nicely formatted list, e.g. `fmt_list([1,2,3])` returns `1, 2 and 3`.
 
 * `fmt_dict()` returns a nicely formatted dictrionary, e.g. `fmt_dict({'a':1,'b':'test'})` returns `a: 1, b: test`.
 * `fmt_seconds()` returns string for seconds, e.g. `fmt_seconds(10)` returns `10s` while `fmt_seconds(61)` returns `1:00`.
-* `fmt_big_number()` converts a large integer into an abbreviated string with `K`, `M`, `B` (or `G`) for example `fmt_big_number(12345)` returns `12.35K`. You can change from the default `B` for billions to `G` by using the `fmt_computer` keyword.
-* `fmt_datetime()` returns a nicely formatted daytime code in natural order e.g. YYYY-MM-DD HH:SS. It returns the respective simplification if just a `date` or `time` is passed instead of a `datetime`.
+* `fmt_big_number()` converts a large integer into an abbreviated string with terminating `K`, `M`, `B`, `T` as appropriate, using base 10.<br>
+   For example `fmt_big_number(12345)` returns `12.35K`. 
+* `fmt_big_byte_number()` converts a large integer into an abbreviated string with terminating `K`, `M`, `G`, `T` as appropriate, here using base 16.<br>For example `fmt_big_byte_number(12345)` returns `12.06K`. 
+* `fmt_datetime()` returns a nicely formatted daytime code in natural order e.g. YYYY-MM-DD HH:SS.<br>It returns the respective simplification if just a `date` or `time` is passed instead of a `datetime`.
  
 * `is_jupyter()` tries to assess whether the current environment is a jupyer IPython environment.
 This is experimental as it appears there is no safe way to do this. The current implemenentation checks whether the command which started the current process contains the string `jupyter`.
