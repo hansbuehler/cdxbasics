@@ -700,8 +700,7 @@ class Config(OrderedDict):
                 config._done.clear()
                 for k, c in config._children.items():
                     c._name     = config._name + "." + k
-                    c._recorder = self._recorder
-                    update_recorder(c._children)
+                    update_recorder(c)
             update_recorder(value)
             self._children[key]      = value
         else:
@@ -752,6 +751,8 @@ class Config(OrderedDict):
             else:
                 _log.verify( isinstance(other, Mapping), "Cannot update config with an object of type '%s'. Expected 'Mapping' type.", type(other).__name__ )
                 for key in other:
+                    if key[:1] == "_" or key in self.__dict__:
+                        continue
                     if isinstance(other[key], Mapping):
                         if key in self:
                             del self[key]
@@ -763,7 +764,8 @@ class Config(OrderedDict):
                             del self._children[key]
                         self[key] = other[key]
 
-        OrderedDict.update( self, kwargs )
+        if len(kwargs) > 0:
+            self.update( other=kwargs )
 
     # delete
     # ------

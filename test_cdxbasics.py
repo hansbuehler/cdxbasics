@@ -797,6 +797,13 @@ class CDXCConfigTest(unittest.TestCase):
 
         self.assertEqual( test, inp_dict)
 
+        # clean_copy
+        config = Config()
+        config.gym.user_version = 1
+        config.gym.world_character_id = 2
+        config.gym.vol_model.type = "decoder"
+        _ = config.clean_copy()
+
         """
         test = PrettyDict()
         test.x = config("x", 1)
