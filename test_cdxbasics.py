@@ -810,6 +810,18 @@ class CDXCConfigTest(unittest.TestCase):
         self.assertEqual( usd_dict, test )
         """
 
+        # test keys()
+
+        config = Config()
+        config.a = 1
+        config.x.b = 2
+        keys = list(config)
+        sorted(keys)
+        self.assertEqual( keys, ['a'])
+        keys = list(config.keys())
+        sorted(keys)
+        self.assertEqual( keys, ['a'])
+
         # test update
 
         config = Config()

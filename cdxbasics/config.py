@@ -262,7 +262,7 @@ class Config(OrderedDict):
 
     def reset_done(self):
         """
-        Reset the internal list of keys which are 'done', e.g. read.
+        Reset the internal list of which are 'done', e.g. read.
         This function does not reset the recording of previous uses of each key. This ensures consistency of default values between uses of keys.
         Use reset() to reset both 'done' and create a new recorder.
         """
@@ -635,6 +635,13 @@ class Config(OrderedDict):
             raise KeyError(key)
         return record['value']
 
+    def keys(self):
+        """
+        Returns the keys for the immediate keys of this config.
+        This call will *not* return the names of config children
+        """
+        return OrderedDict.keys(self)
+
     # Write
     # -----
 
@@ -727,16 +734,21 @@ class Config(OrderedDict):
                     for _,c in config._children.items():
                         set_recorder( c, recorder )
                 for sub, child in other._children.items():
+                    assert isinstance(child,Config)
                     if sub in self._children:
-                        self._children.update( child )
+                        self._children[sub].update( child )
                     else:
                         self[sub] = child.clean_copy() # see above for assigning config
+                    assert sub in self._children
+                    assert not sub in self
                 # copy elements from other.
                 # we do not mark elements from another config as 'used'
                 for key in other:
                     if key in self._children:
                         del self._children[key]
                     self[key] = other.get_raw(key)
+                    assert key in self
+                    assert not key in self._children
             else:
                 _log.verify( isinstance(other, Mapping), "Cannot update config with an object of type '%s'. Expected 'Mapping' type.", type(other).__name__ )
                 for key in other:
@@ -871,7 +883,7 @@ class Config(OrderedDict):
                 value      = self.get_raw(key)
                 report_key = self._name + "['" + key + "'] = %s" % str(value)
                 inputs.append( report_key )
-            for _, c in self._children.items():
+            for c in self._children.values():
                 ireport(c, inputs)
         ireport(self, inputs)
 
