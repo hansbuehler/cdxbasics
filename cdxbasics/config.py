@@ -720,7 +720,7 @@ class Config(OrderedDict):
                 Allows assigning specific values.
         """
         if not other is None:
-            if BACKWARD_COMPATIBLE_ITEM_ACCESS and isinstance( other, Config ):
+            if isinstance( other, Config ):
                 # copy() children
                 # and reset recorder to ours.
                 def set_recorder(config, recorder):
