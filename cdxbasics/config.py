@@ -580,7 +580,6 @@ class Config(OrderedDict):
         self._children[key]       = config
         return config
 
-
     def get(self, *kargs, **kwargs ):
         """
         Returns self(key, *kargs, **kwargs)
@@ -728,17 +727,29 @@ class Config(OrderedDict):
                     for _,c in config._children.items():
                         set_recorder( c, recorder )
                 for sub, child in other._children.items():
-                    child = child.clean_copy()
-                    set_recorder(child, self._recorder)
-                    self._children[sub]= child
+                    if sub in self._children:
+                        self._children.update( child )
+                    else:
+                        self[sub] = child.clean_copy() # see above for assigning config
                 # copy elements from other.
                 # we do not mark elements from another config as 'used'
                 for key in other:
+                    if key in self._children:
+                        del self._children[key]
                     self[key] = other.get_raw(key)
             else:
                 _log.verify( isinstance(other, Mapping), "Cannot update config with an object of type '%s'. Expected 'Mapping' type.", type(other).__name__ )
                 for key in other:
-                    self[key] = other[key]
+                    if isinstance(other[key], Mapping):
+                        if key in self:
+                            del self[key]
+                        elif not key in self._children:
+                            self.__getattr__(key)  # creates child
+                        self._children[key].update( other[key] )
+                    else:
+                        if key in self._children:
+                            del self._children[key]
+                        self[key] = other[key]
 
         OrderedDict.update( self, kwargs )
 
