@@ -95,7 +95,7 @@ class Context(object):
         The message will be formatted as util.fmt( message, *args, **kwargs )
         It will be displayed in all cases except if the context is 'quiet'.
         """
-        self.report( level=0, message=message, *args, **kwargs )
+        self.report( 0, message, *args, **kwargs )
 
     def report( self, level : int, message : str, *args, **kwargs ):
         """
@@ -109,10 +109,21 @@ class Context(object):
                 Additional context level, added to the level of 'self'.
             message, args, kwargs:
                 Parameters for util.fmt().
+
+        Additional 'kwargs' keywords
+            end: str, default '\n'
+                Alternative end='' for print(). In case use, print()'s flush is set to True
         """
+        end = "\n"
+        flush=False
+        if 'end' in kwargs:
+            end   = kwargs['end']
+            flush = True
+            del kwargs['end']
+
         message = self.fmt( level, message, *args, **kwargs )
         if not message is None:
-            print(message)
+            print(message,end=end,flush=flush)
 
     def fmt( self, level : int, message : str, *args, **kwargs ) -> str:
         """
