@@ -336,7 +336,7 @@ You can also detach a child config, which allows you to store it for later use w
 
             self.config_training.done()
 
-Use `copy()` to make a bona fide copy of a child, without marking the source child as 'done'. `copy()` will return a config which shares the same status as the source object. If you want an "unused" copy, use `clean_copy()`. A virtual clone is created via `clone()`. A cloned config stores information on usage in the same place for the original object. Thiis is also the semantic of the copy constructor.
+Use `copy()` to make a bona fide copy of a child, without marking the source child as 'done'. `copy()` will return a config which shares the same status as the source object. If you want an "unused" copy, use `clean_copy()`. A virtual clone is created via `clone()`. A cloned config stores information on usage in the same place for the original object. This is also the semantic of the copy constructor.
 
 #### Self-recording all available configuration parameters
 

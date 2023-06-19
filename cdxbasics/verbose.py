@@ -89,19 +89,48 @@ class Context(object):
         self.indent      = indent
         self.fmt_level   = str(fmt_level)
 
-    def write( self, message : str, *args, **kwargs ):
+    def write( self, message : str, *args, end : str = "\n", head : bool = True, **kwargs ):
         """
         Report message at level 0 with the formattting arguments at curent context level.
         The message will be formatted as util.fmt( message, *args, **kwargs )
         It will be displayed in all cases except if the context is 'quiet'.
-        """
-        self.report( 0, message, *args, **kwargs )
 
-    def report( self, level : int, message : str, *args, **kwargs ):
+        The parameter 'end' matches 'end' in print, e.g. end='' avoids a newline at the end of the message.
+        If 'head' is True, then the first line of the text will be preceeded by proper indentation.
+        If 'head' is False, the first line will be printed without preamble.
+
+        This means the following is a valid pattern
+
+            verbose = Context()
+            verbose.write("Doing something... ", end='')
+            # do something
+            verbose.write("done.", head=False)
+
+        which now prints
+
+            00: Doing something... done.
+
+        """
+        self.report( 0, message, *args, end=end, head=head, **kwargs )
+
+    def report( self, level : int, message : str, *args, end : str = "\n", head : bool = True, **kwargs ):
         """
         Print message with the formattting arguments at curent context level plus 'level'
         The message will be formatted as util.fmt( message, *args, **kwargs )
         Will print empty lines.
+
+        The 'end' and 'head' parameters can be used as follows
+
+            verbose = Context()
+
+            verbose.report(1, "Testing... ", end='')
+            # do some stuff
+            verbose.report(1, "done.\nOverall result is good", head=False)
+
+        prints
+
+            01:   Testing... done.
+            01:   Overall result is good
 
         Parameters
         ----------
@@ -109,23 +138,17 @@ class Context(object):
                 Additional context level, added to the level of 'self'.
             message, args, kwargs:
                 Parameters for util.fmt().
+            end : string
+                Same function as in print(). In particular, end='' avoids a newline at the end of the messahe
+            head : bool
+                If False, do not print out preamble for first line of 'message'
 
-        Additional 'kwargs' keywords
-            end: str, default '\n'
-                Alternative end='' for print(). In case use, print()'s flush is set to True
         """
-        end = "\n"
-        flush=False
-        if 'end' in kwargs:
-            end   = kwargs['end']
-            flush = True
-            del kwargs['end']
-
-        message = self.fmt( level, message, *args, **kwargs )
+        message = self.fmt( level, message, *args, head=head, **kwargs )
         if not message is None:
-            print(message,end=end,flush=flush)
+            print(message,end=end,flush=end!='\n')
 
-    def fmt( self, level : int, message : str, *args, **kwargs ) -> str:
+    def fmt( self, level : int, message : str, *args, head : bool = True, **kwargs ) -> str:
         """
         Formats message with the formattting arguments at curent context level plus 'level'
         The message will be formatted with util.fmt( message, *args, **kwargs ) and then indented appropriately.
@@ -136,6 +159,9 @@ class Context(object):
                 Additional context level, added to the level of 'self'.
             message, args, kwargs:
                 Parameters for the util.fmt().
+            head : bool
+                Set to False to turn off indentation for the first line of the resulting
+                message. See write() for an example use case
 
         Returns
         -------
@@ -148,8 +174,9 @@ class Context(object):
             return ""
         str_level = self.str_indent( level )
         text      = fmt( message, *args, **kwargs ) if (len(args) + len(kwargs) > 0) else message
+        text      = text[:-1].replace("\r", "\r" + str_level ) + text[-1]
         text      = text[:-1].replace("\n", "\n" + str_level ) + text[-1]
-        text      = str_level + text
+        text      = str_level + text if head else text
         return text
 
     def sub( self, add_level : int = 1, message : str = None, *args, **kwargs ):

@@ -608,7 +608,6 @@ class SubDir(object):
         # do not do anything if the object was deleted
         if self._path is None:
             return []
-        _log.verify( not self._path is None, "Object has been deleted")
         subdirs = []
         with os.scandir(self._path[:-1]) as it:
             for entry in it:
