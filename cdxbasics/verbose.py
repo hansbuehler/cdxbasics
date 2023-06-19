@@ -176,7 +176,7 @@ class Context(object):
         text      = fmt( message, *args, **kwargs ) if (len(args) + len(kwargs) > 0) else message
         text      = text[:-1].replace("\r", "\r" + str_level ) + text[-1]
         text      = text[:-1].replace("\n", "\n" + str_level ) + text[-1]
-        text      = str_level + text if head else text
+        text      = str_level + text if head and text[:1] != "\r" else text
         return text
 
     def sub( self, add_level : int = 1, message : str = None, *args, **kwargs ):
