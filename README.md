@@ -620,7 +620,7 @@ This is sometimes undesitable, for example when functions are configuration elem
 
 To change this behavuour, use `uniqueHashExt( length : int, parse_functions : bool = False, parse_underscore : str = "nonee")` which returns a hash function of desired lengths with the option to parse elements starting with "`_`" as well.
 
-### CacheMode
+## CacheMode
 
 A simple enum-type class to help implement a standard caching pattern.
 It implements the following decision matrix
@@ -828,3 +828,6 @@ Returns
 
 The purpose of initializing functions usually with `quiet` is that they can be used accross different contexts without printing anything by default.
 
+## version
+
+Framework to keep track of versions of functions, and their dependencies. Main use case is a data pipeline where a changfe in version of down a dependency tree should trigger an update of the "full" version of the respective top level calculation.
