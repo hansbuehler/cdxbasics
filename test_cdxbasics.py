@@ -337,9 +337,19 @@ class CDXBasicsTest(unittest.TestCase):
         p = str(p).replace(' ','').replace('\n','')
         if (not np is None) and (not pd is None):
             tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234],'t':[1,2,'test'],'a':array([1,2,3]),'b':array([[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]]]),'c':None}"
-        else:
-            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234]}"
-        self.assertEqual(p,tst)
+            self.assertEqual(p,tst)
+
+        p = util.plain(o,sorted_dicts=True)
+        p = str(p).replace(' ','').replace('\n','')
+        if (not np is None) and (not pd is None):
+            tst = "SortedDict({'a':array([1,2,3]),'b':array([[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]]]),'c':None,'r':[65,1231,123123,12312,6234],'t':[1,2,'test'],'x':[1,2,3.0],'y':SortedDict({'a':1,'b':2}),'z':SortedDict({'c':3,'d':4})})"
+            self.assertEqual(p,tst)
+
+        p = util.plain(o,native_np=True)
+        p = str(p).replace(' ','').replace('\n','')
+        if (not np is None) and (not pd is None):
+            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234],'t':[1,2,'test'],'a':[1,2,3],'b':[[[0.0,0.0],[0.0,0.0],[0.0,0.0],[0.0,0.0]],[[0.0,0.0],[0.0,0.0],[0.0,0.0],[0.0,0.0]],[[0.0,0.0],[0.0,0.0],[0.0,0.0],[0.0,0.0]]],'c':None}"
+            self.assertEqual(p,tst)
 
     def test_subdir(self):
 

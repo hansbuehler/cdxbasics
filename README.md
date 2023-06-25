@@ -461,9 +461,138 @@ If-conditional functions
 
 ## subdir
 
-A few tools to handle file i/o in a transparent way, focusing on caching data. The key idea is to provide transparent, concise pickle access to the file system in a manner similar to dictionary access. Files managed by `subdir` also all have the same extension, which is `pck` by default.
+A few tools to handle file i/o in a transparent way. The key idea is to provide transparent, concise pickle access to the file system in a manner similar to dictionary access - hence core file names are referred to as 'keys'. Files managed by `subdir` all have the same extension. From 0.2.60 `SubDir` supports different file formats:
+* PICKLE: standard pickling. Default extension 'pck'
+* JSON_PICKLE: uses the `jsonpickle` package. Default extension 'jpck'. The advantage of this format over PICKLE is that it is somewhat human-readable. However, `jsonpickle` uses compressed formats for complex objects such as `numpy` arrays, hence readablility is somewhat limited. It comes at cost of slower writing speeds.
+* JSON_PLAIN: calls `cdxbasics.util.plain()` to convert objects into plain Python objects before using `json` to write them. That means that deserialized data does not have the correct object structure. However, such files are much easier to read.
 
-#### Key pattern:
+#### Creating directories
+
+You can create directories using the `SubDir` class. Simply write
+
+    subdir = SubDir("my_directory")      # relative to current working directory
+    subdir = SubDir("./my_directory")    # relative to current working directory
+    subdir = SubDir("~/my_directory")    # relative to home directory
+    subdir = SubDir("!/my_directory")    # relative to default temp directory
+
+You can specify a parent for relative path names:
+
+    subdir = SubDir("my_directory", "~")      # relative to home directory
+    subdir2 = SubDir("my_directory", subdir)  # subdir2 is relative to `subdir`
+
+Change the extension to `bin`
+
+    subdir = SubDir("~/my_directory;*.bin")     
+    subdir = SubDir("~/my_directory", ext="bin")    
+    subdir = SubDir("my_directory", "~", ext="bin")    
+
+You can turn off extension management by setting the extension to "":
+
+    subdir = SubDir("~/my_directory", ext="")
+
+You may specify the file format; in this case the extension will be automaticall set to `pck`, `jpck` or `json`, respectively. See discussion above about the relative merits of each format:
+
+    subdir = SubDir("~/my_directory", fmt=SubDir.PICKLE)
+    subdir = SubDir("~/my_directory", fmt=SubDir.JSON_PICKLE)
+    subdir = SubDir("~/my_directory", fmt=SubDir.JSON_PLAIN)
+
+You can also use the `()` operator to generate sub directories. This operator is overloaded: for a single argument, it creates a relative sub-directory:
+
+    parent = SubDir("~/parent")
+    subdir = parent("subdir")                                   # shares extension and format with parent
+    subdir = parent("subdir", ext="bin", format=SubDir.PICKLE)  # change extension and format
+
+Be aware that when the operator `()` is called with two arguments, then it reads files; see below.
+
+You can obtain a list of all sub directories in a directory by using `subDirs()`.
+
+#### I/O
+##### Reading
+
+To read the data contained in a file 'file.pck' in our subdirectory with extension 'pck' use either of the following
+
+    data = subdir.read("file")                 # returns the default if file is not found
+    data = subdir.read("file", default=None)   # returns the default if file is not found
+
+This function will return `None` or the default if 'file' does not exist. You can make it throw an error by calling `subdir.read("file", throwOnError=True)` instead.
+
+You may specify a different extension:
+
+    data = subdir.read("file", ext="bin")
+
+Specify a different extension and a different format. Specifying a different format for `read` does not change the extension automatically, hence you may want to set this explicitly at the same time:
+
+    data = subdir.read("file", ext="json", fmt=Subdir.JSON_PLAIN )
+
+You can also use the `()` operator, in which case you must specify a default value (if you don't, then the operator will return a sub directory):
+
+    data = subdir("file", None)   # returns None if file is not found
+
+You can also use both member and item notation to access files. In this case, though, an error will be thrown if the file does not exist
+
+    data = subdir.file      # raises AtttributeError if file is not found
+    data = subdir['file']   # raises KeyError if file is not found
+
+You can read a range of files in one function call:
+
+    data = subdir.read( ["file1", "file2"] )
+
+Finally, you can also iterate through all existing files:
+
+    for file in subdir:
+        data = subdir.read(file)
+        ...
+
+To obtain a list of all files  in our directory which have the correct extension, use `keys()`.
+
+##### Writing
+
+To write data, use any of
+
+    subdir.write("file", data)
+    subdir.file    = data
+    subdir['file'] = data
+
+You may specifify different extensions:
+
+    subdir.write("file", data, ext="bin)
+
+You can also specify the file format. Note that this will not automatically change the extension, so you may want to set this at the same time:
+
+    subdir.write("file", data, fmt=SubDir.JSON_PLAIN, ext="json")
+
+To write several files at once, write
+
+    subdir.write(["file1", "file"], [data1, data2])
+
+Note that when writing to an object, `subdir` will first write to a temporary file, and then rename this file into the target file name. The temporary file name is a `util.uniqueHash48` generated from the target file name, current time, process and thread ID, as well as the machines's UUID. This is done to reduce collisions between processes/machines accessing the same files. It does not remove collision risk entirely, though.
+
+##### Test existence of files
+
+To test existence of 'file' in a directory, use one of
+
+    subdir.exist('file')
+    'file' in subdir
+
+#### Deleting files
+
+To delete a 'file', use any of the following:
+
+    subdir.delete(file)
+    del subdir.file
+    del subdir['file']
+
+All of these are _silent_, and will not throw errors if 'file' does not exist. In order to throw an  error use
+
+    subdir.delete(file, raiseOnError=True)
+
+Other file and directoru deletion methods:
+
+* `deleteAllKeys`: delete all files in the directory, but do not delete sub directories or files with extensions different to our own.
+* `deleteAllContent`: delete all files with our extension, and all sub directories.
+* `eraseEverything`: delete everything
+
+#### Caching pattern:
 
 Our pattern assumes that each calcuation is determined by a number of parameters for which we can compute a unique (file) ID for caching results. Unique file IDs can be computed using `uniqueFileName48()`. Here is an example which assumes that `None` is not a valid return value for the underlying function code:
 
@@ -498,104 +627,6 @@ Our pattern assumes that each calcuation is determined by a number of parameters
 
 See also the example for `CacheMode` below.
 
-
-#### Creating directories
-
-You can create directories using the `SubDir` class. Simply write
-
-    subdir = SubDir("my_directory")      # relative to current working directory
-    subdir = SubDir("./my_directory")    # relative to current working directory
-    subdir = SubDir("~/my_directory")    # relative to home directory
-    subdir = SubDir("!/my_directory")    # relative to default temp directory
-
-You can specify a parent for relative path names:
-
-    subdir = SubDir("my_directory", "~")  # relative to home directory
-
-Change the extension to `bin`
-
-    subdir = SubDir("~/my_directory;*.bin")     
-    subdir = SubDir("~/my_directory", ext="bin")    
-    subdir = SubDir("my_directory", "~", ext="bin")    
-
-You can also use the `()` operator to generate sub directories. This operator is overloaded: for a single argument, it creates a relative sub-directory:
-
-    parent = SubDir("~/parent")
-    subdir = parent("subdir")
-
-Be aware that when the operator `()` is called with two arguments, then it reads files; see below.
-
-You can obtain a list of all sub directories in a directory by using `subDirs()`.
-
-#### I/O
-##### Reading
-
-To read the data contained in a file 'file.pck' in our subdirectory with extension 'pck' use either of the following
-
-    data = subdir.read("file")                 # returns the default if file is not found
-    data = subdir.read("file", default=None)   # returns the default if file is not found
-
-This function will return `None` by default if 'file' does not exist. You can make it throw an error by calling `subdir.read("file", throwOnError=True)` instead.
-
-You can also use the `()` operator, in which case you must specify a default value (if you don't, then the operator will return a sub directory):
-
-    data = subdir("file", None)   # returns None if file is not found
-
-You can also use both member and item notation to access files. In this case, though, an error will be thrown if the file does not exist
-
-    data = subdir.file      # raises AtttributeError if file is not found
-    data = subdir['file']   # raises KeyError if file is not found
-
-You can read a range of files in one function call:
-
-    data = subdir.read( ["file1", "file2"] )
-
-Finally, you can also iterate through all existing files:
-
-    for file in subdir:
-        data = subdir.read(file)
-        ...
-
-To obtain a list of all files  in our directory which have the correct extension, use `keys()`.
-
-##### Writing
-
-To write data, use any of
-
-    subdir.write("file", data)
-    subdir.file    = data
-    subdir['file'] = data
-
-To write several files at once, write
-
-    subdir.write(["file1", "file"], [data1, data2])
-
-Note that when writing to an object, `subdir` will first write to a temporary file, and then rename this file into the target file name. The temporary file name is a `util.uniqueHash48` generated from the target file name, current time, process and thread ID, as well as the machines's UUID. This is done to reduce collisions between processes/machines accessing the same files. It does not remove collision risk entirely, though.
-
-##### Test existence of files
-
-To test existence of 'file' in a directory, use one of
-
-    subdir.exist('file')
-    'file' in subdir
-
-#### Deleting files
-
-To delete a 'file', use any of the following:
-
-    subdir.delete(file)
-    del subdir.file
-    del subdir['file']
-
-All of these are _silent_, and will not throw errors if 'file' does not exist. In order to throw an  error use
-
-    subdir.delete(file, raiseOnError=True)
-
-Other file and directoru deletion methods:
-
-* `deleteAllKeys`: delete all files in the directory, but do not delete sub directories or files with extensions different to our own.
-* `deleteAllContent`: delete all files with our extension, and all sub directories.
-* `eraseEverything`: delete everything
 
 ## util
 

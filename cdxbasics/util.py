@@ -13,6 +13,7 @@ from collections.abc import Mapping, Collection
 from .prettydict import PrettyDict
 import sys as sys
 import time as time
+from sortedcontainers import SortedDict
 
 # support for numpy and pandas is optional for this module
 # At the moment both are listed as dependencies in setup.py to ensure
@@ -369,46 +370,53 @@ class WriteLine(object):
 # Conversion of arbitrary python elements into re-usable versions
 # =============================================================================
 
-def plain( inn, sorted = False ):
+def plain( inn, *, sorted_dicts : bool = False, native_np : bool = False ):
     """
     Converts a python structure into a simple atomic/list/dictionary collection such
     that it can be read without the specific imports used inside this program.
     or example, objects are converted into dictionaries of their data fields.
 
+    Parameters
+    ----------
+        inn          : some object
+        sorted_dicts : Use SortedDicts instead of dicts.
+        native_np    : convert numpy to Python natives.
+
     Hans Buehler, Dec 2013
     """
+    def rec_plain( x ):
+        return plain( x, sorted_dicts=sorted_dicts, native_np = native_np )
     # basics
     if isAtomic(inn) \
         or isinstance(inn,(datetime.time,datetime.date,datetime.datetime))\
-        or (False if np is None else isinstance(inn,np.ndarray)) \
         or inn is None:
         return inn
+    if not np is None:
+        if isinstance(inn,np.ndarray):
+            return inn if not native_np else rec_plain( inn.tolist() )
+        if isinstance(inn, np.integer):
+            return int(inn)
+        elif isinstance(inn, np.floating):
+            return float(inn)
     # can't handle functions --> return None
     if isFunction(inn) or isinstance(inn,property):
         return None
     # dictionaries
-    if isinstance(inn,dict):
-        out = {}
-        for k in inn:
-            out[k] = plain(inn[k])
-        return out
+    if isinstance(inn,Mapping):
+        r  = { k: rec_plain(v) for k, v in inn.items() if not isFunction(v) and not isinstance(v,property) }
+        return r if not sorted_dicts else SortedDict(r)
     # pandas
     if not pd is None and isinstance(inn,pd.DataFrame):
-        plain(inn.columns)
-        plain(inn.index)
-        plain(inn.to_numpy())
+        rec_plain(inn.columns)
+        rec_plain(inn.index)
+        rec_plain(inn.to_numpy())
         return
     # lists, tuples and everything which looks like it --> lists
-    if not getattr(inn,"__iter__",None) is None: #isinstance(inn,list) or isinstance(inn,tuple):
-        return [ plain(k) for k in inn ]
+    if isinstance(inn,Collection):
+        return [ rec_plain(k) for k in inn ]
     # handle objects as dictionaries, removing all functions
     if not getattr(inn,"__dict__",None) is None:
-        out = {}
-        for k in inn.__dict__:
-            x = inn.__dict__[k]
-            if not isFunction(x):
-                out[k] = plain(x)
-        return out
+        return rec_plain(inn.__dict__)
     # nothing we can do
     raise TypeError(fmt("Cannot handle type %s", type(inn)))
 

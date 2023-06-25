@@ -8,7 +8,7 @@ This is under development. I have not figured out how to test file i/o on GitHub
 """
 
 from .logger import Logger
-from .util import CacheMode, uniqueHash48
+from .util import CacheMode, uniqueHash48, plain
 _log = Logger(__file__)
 
 import os
@@ -21,6 +21,17 @@ import tempfile
 import shutil
 import datetime
 from collections.abc import Collection, Mapping
+from enum import Enum
+import json as json
+
+try:
+    import numpy as np
+    import jsonpickle as jsonpickle
+    import jsonpickle.ext.numpy as jsonpickle_numpy
+    jsonpickle_numpy.register_handlers()
+except ModuleNotFoundError:
+    np = None
+    jsonpickle = None
 
 uniqueFileName48 = uniqueHash48
 
@@ -29,6 +40,16 @@ def _remove_trailing( path ):
         if path[-1] in ['/' or '\\']:
             return _remove_trailing(path[:-1])
     return path
+
+class Format(Enum):
+    """
+    File format for SubDir.
+    Currently supports PICKLE and JSON_PICKLE
+    """
+
+    PICKLE = 0
+    JSON_PICKLE = 1
+    JSON_PLAIN = 2
 
 class SubDir(object):
     """
@@ -82,14 +103,39 @@ class SubDir(object):
 
             Delete items:
 
-                    del subDir['item']             <-- silently fails if 'item' does not exist
-                    del subDir.item                <-- silently fails if 'item' does not exist
-                    subDir.delete('item')          <-- silently fails if 'item' does not exist
-                    subDir.delete('item', True)    <-- throw a KeyError if 'item' does not exit
+                del subDir['item']             <-- silently fails if 'item' does not exist
+                del subDir.item                <-- silently fails if 'item' does not exist
+                subDir.delete('item')          <-- silently fails if 'item' does not exist
+                subDir.delete('item', True)    <-- throw a KeyError if 'item' does not exit
 
         5) Cleaning up
 
                 parentDir.deleteAllContent()       <-- silently deletes all files and sub directories.
+
+        6) As of version 0.2.59 subdir supports json file formats. Those can be controlled with the 'fmt' keyword in various functions.
+        The most straightfoward way is to specify the format of the directory itself:
+
+                subdir = SubDir("!/.test", fmt=SubDir.JSON_PICKLE)
+
+        The following formats are supported:
+
+            SubDir.PICKLE:
+                Use pickle
+            SubDir.JSON_PLAIN:
+                Uses cdxbasics.util.plain() to convert data into plain Python objects and writes
+                this to disk as text. Loading back such files will result in plain Python objects,
+                but *not* the original objects
+            SubDir.JSON_PICKLE:
+                Uses the jsonpickle package to load/write data in somewhat readable text formats.
+                Data can be loaded back from such a file, but files may not be readable (e.g. numpy arrays
+                are written in compressed form).
+
+            Summary of properties:
+
+                          | Restores objects | Human readable | Speed
+             PICKLE       | yes              | no             | high
+             JSON_PLAIN   | no               | yes            | low
+             JSON_PICKLE  | yes              | limited        | low
 
         Several other operations are supported; see help()
 
@@ -99,11 +145,15 @@ class SubDir(object):
     class __RETURN_SUB_DIRECTORY(object):
         pass
 
-    DEFAULT_EXT = "pck"
-    DEFAULT_RAISE_ON_ERROR = False
-    RETURN_SUB_DIRECTORY = __RETURN_SUB_DIRECTORY     # comparison between classes is unique accross Python name space
+    PICKLE = Format.PICKLE
+    JSON_PICKLE = Format.JSON_PICKLE
+    JSON_PLAIN = Format.JSON_PLAIN
 
-    def __init__(self, name : str, parent = None, *, ext : str = None, eraseEverything : bool = False ):
+    DEFAULT_RAISE_ON_ERROR = False
+    RETURN_SUB_DIRECTORY = __RETURN_SUB_DIRECTORY
+    DEFAULT_FORMAT = Format.PICKLE
+
+    def __init__(self, name : str, parent = None, *, ext : str = None, fmt : Format = None, eraseEverything : bool = False ):
         """
         Creates a sub directory which contains pickle files with a common extension.
 
@@ -146,64 +196,74 @@ class SubDir(object):
 
         Parameters
         ----------
-            name          - Name of the directory.
+            name            - Name of the directory.
                                '.' for current directory
                                '~' for home directory
                                '!' for system default temp directory
-                            May contain a formatting string for defining 'ext' on the fly:
+                              May contain a formatting string for defining 'ext' on the fly:
                                 Use "!/test;*.bin" to specify 'test' in the system temp directory as root directory with extension 'bin'
-                            Can be set to None, see above.
-            parent         - Parent directory. If provided, will also set defaults for 'ext' and 'raiseOnError'
-            ext            - standard file extenson for data files. All files will share the same extension.
-                             If None, use the parent extension, or if that is not specified DEFAULT_EXT (pck)
-                             Set to "" to turn off managing extensions.
+                              Can be set to None, see above.
+            parent          - Parent directory. If provided, will also set defaults for 'ext' and 'raiseOnError'
+            ext             - standard file extenson for data files. All files will share the same extension.
+                              If None, use the parent extension, or if that is not specified use an extension depending on 'fmt':
+                                     'pck' for the default PICKLE format
+                                     'json' for JSON_PLAIN
+                                     'jpck' for JSON_PICKLE
+                              Set to "" to turn off managing extensions.
+            fmt             - format, current pickle or json
             eraseEverything - delete all contents in the newly defined subdir
         """
         # copy constructor support
         if isinstance(name, SubDir):
             assert parent is None, "Internal error: copy construction does not accept additional keywords"
             self._path = name._path
-            self._ext = name._ext if ext is None else ext
+            self._ext  = name._ext if ext is None else ext
+            self._fmt  = name._fmt if fmt is None else fmt
+            if eraseEverything: _log.throw( "Cannot use 'eraseEverything' when cloning a directory")
             return
 
         # reconstruction from a dictionary
         if isinstance(name, Mapping):
             assert parent is None, "Internal error: dictionary construction does not accept additional keywords"
             self._path = name['_path']
-            self._ext = name['_ext'] if ext is None else ext
+            self._ext  = name['_ext'] if ext is None else ext
+            self._fmt  = name['_fmt'] if fmt is None else fmt
+            if eraseEverything: _log.throw( "Cannot use 'eraseEverything' when cloning a directory via a Mapping")
             return
 
         # parent
         if isinstance(parent, str):
-            parent = SubDir(parent, ext=ext )
-        _log.verify( parent is None or isinstance(parent, SubDir), "'parent' must be SubDir or None. Found object of type %s", type(parent))
+            parent = SubDir( parent, ext=ext, fmt=fmt )
+        if not parent is None and not isinstance(parent, SubDir): _log.throw( "'parent' must be SubDir or None. Found object of type %s", type(parent))
 
         # operational flags
         _name  = name if not name is None else "(none)"
 
+        # format
+        if fmt is None:
+            assert parent is None or not parent._fmt is None
+            self._fmt = parent._fmt if not parent is None else self.DEFAULT_FORMAT
+            assert not self._fmt is None
+        else:
+            self._fmt = fmt
+            assert not self._fmt is None
+
         # extension
         if not name is None:
-            _log.verify( isinstance(name, str), "'name' must be string. Found object of type %s", type(name))
+            if not isinstance(name, str): _log.throw( "'name' must be string. Found object of type %s", type(name))
             name   = name.replace('\\','/')
 
             # extract extension information
             ext_i = name.find(";*.")
             if ext_i >= 0:
                 _ext = name[ext_i+3:]
-                _log.verify( ext is None or ext == _ext, "Canot specify an extension both in the name string ('%s') and as 'ext' ('%s')", _name, ext)
+                if not ext is None and ext != _ext: _log.throw("Canot specify an extension both in the name string ('%s') and as 'ext' ('%s')", _name, ext)
                 ext  = _ext
                 name = name[:ext_i]
         if ext is None:
-            self._ext = ("." + SubDir.DEFAULT_EXT) if parent is None else parent._ext
+            self._ext = ("." + self._auto_ext(self._fmt)) if parent is None else parent._ext
         else:
-            _log.verify( isinstance(ext,str), "Extension 'ext' must be a string. Found type %s", type(ext))
-            if len(ext) == 0:
-                self._ext = ""
-            else:
-                _log.verify( not ext in ['.','/','\\'], "Extension 'ext' cannot be '%s'", ext )
-                sub, _ = os.path.split(ext)
-                _log.verify( len(sub) == 0, "Extension 'ext' '%s' contains directory information", ext)
-                self._ext = ("." + ext) if ext[:1] != '.' else ext
+            self._ext = self._convert_ext(ext)
 
         # name
         if name is None:
@@ -215,7 +275,7 @@ class SubDir(object):
             if name == "" and parent is None:
                 name = "."
             if name[:1] in ['.', '!', '~']:
-                _log.verify( len(name) == 1 or name[1] == '/', "If 'name' starts with '%s', then the second character must be '/' (or '\\' on windows). Found 'name' set to '%s'", name[:1], _name)
+                if len(name) > 1 and name[1] != '/': _log.throw( "If 'name' starts with '%s', then the second character must be '/' (or '\\' on windows). Found 'name' set to '%s'", name[:1], _name)
                 if name[0] == '!':
                     name = SubDir.tempDir()[:-1] + name[1:]
                 elif name[0] == ".":
@@ -227,6 +287,7 @@ class SubDir(object):
                 # path relative to 'parent'
                 name = (parent._path + name) if not parent.is_none else name
 
+        # create directory/clean up
         if name is None:
             self._path = None
         else:
@@ -238,7 +299,7 @@ class SubDir(object):
             if not os.path.exists( self._path[:-1] ):
                 os.makedirs( self._path[:-1] )
             else:
-                _log.verify( os.path.isdir(self._path[:-1]), "Cannot use sub directory %s: object exists but is not a directory", self._path[:-1] )
+                if not os.path.isdir(self._path[:-1]): _log.throw( "Cannot use sub directory %s: object exists but is not a directory", self._path[:-1] )
                 # erase all content if requested
                 if eraseEverything:
                     self.eraseEverything(keepDirectory = True)
@@ -282,22 +343,74 @@ class SubDir(object):
         """ Returns the common extension of the files in this directory """
         return self._ext
 
-    def fullKeyName(self, key : str) -> str:
-        """
-        Returns fully qualified key name
-        Note this function is not robustified against 'key' containing directory features
-        """
-        if self._path is None:
-            return None
-        _log.verify( len(key) > 0, "'key' cannot be empty")
-        _log.verify( key.find("/") == -1, "'key' must be a filename without directory information. It cannot contain forward slashes '/'. Found %s", key)
-        _log.verify( key.find("\\") == -1, "'key' must be a filename without directory information. It cannot contain backward slashes '\\'. Found %s", key)
-        _log.verify( key.find(":") == -1, "'key' must be a filename without directory information. It cannot contain ':'. Found %s", key)
-        _log.verify( key.find("~") == -1, "'key' must be a filename without directory information. It cannot contain '~'. Found %s", key)
-        _log.verify( key[0] != '!', "'key' must be a filename without directory information. It cannot start with '!'. Found %s", key)
+    @property
+    def fmt(self) -> Format:
+        """ Returns current format """
+        return self._fmt
 
-        if len(self._ext) > 0 and key[-len(self._ext):] != self._ext:
-            return self._path + key + self._ext
+    @staticmethod
+    def _auto_ext( fmt : Format ):
+        if fmt == Format.PICKLE:
+            return "pck"
+        if fmt == Format.JSON_PLAIN:
+            return "json"
+        if fmt == Format.JSON_PICKLE:
+            return "jpck"
+        _log.throw("Unknown format '%s'", str(fmt))
+
+    @staticmethod
+    def _convert_ext( ext ):
+        """ Returns .ext or "" """
+        assert not ext is None, "Internal error"
+        _log.verify( isinstance(ext,str), "Extension 'ext' must be a string. Found type %s", type(ext).__name__ )
+        # remove leading '.'s
+        while ext[:1] == ".":
+            ext = ext[1:]
+        # empty extension -> match all files
+        if ext == "":
+            return ext
+        # ensure extension has no directiory information
+        sub, _ = os.path.split(ext)
+        _log.verify( len(sub) == 0, "Extension '%s' contains directory information", ext)
+
+        # remove internal characters
+        _log.verify( ext[0] != "!", "Extension '%s' cannot start with '!' (this symbol indicates the temp directory)", ext)
+        _log.verify( ext[0] != "~", "Extension '%s' cannot start with '~' (this symbol indicates the user's directory)", ext)
+        return "." + ext
+
+    def fullKeyName(self, key : str, *, ext : str = None) -> str:
+        """
+        Returns fully qualified key name.
+        The function tests that 'key' does not contain directory information.
+
+        If 'self' is None, then this function returns None
+        If key is None then this function returns None
+
+        Parameters
+        ----------
+            key : str
+                Core file name, e.g. the 'key' in a data base sense
+            ext : str
+                If not None, use this extension rather than self.ext
+
+        Returns
+        -------
+            Fully qualified system file name
+        """
+        if self._path is None or key is None:
+            return None
+        key = str(key)
+        _log.verify( len(key) > 0, "'key' cannot be empty")
+
+        sub, _ = os.path.split(key)
+        _log.verify( len(sub) == 0, "Key '%s' contains directory information", key)
+
+        _log.verify( key[0] != "!", "Key '%s' cannot start with '!' (this symbol indicates the temp directory)", key)
+        _log.verify( key[0] != "~", "Key '%s' cannot start with '~' (this symbol indicates the user's directory)", key)
+
+        ext = self._convert_ext( ext if not ext is None else self._ext )
+        if len(ext) > 0 and key[-len(ext):] != ext:
+            return self._path + key + ext
         return self._path + key
 
     @staticmethod
@@ -332,7 +445,7 @@ class SubDir(object):
 
     # -- read --
 
-    def _read( self, reader, key : str, default, raiseOnError : bool ):
+    def _read( self, reader, key : str, default, raiseOnError : bool, *, ext : str = None ):
         """
         Utility function for read() and readLine()
 
@@ -351,16 +464,23 @@ class SubDir(object):
                 list : list of defaults for a list of keys
             raiseOnError : bool
                 If True, and the file does not exist, throw exception
+            ext :
+                Extension or None for current extension.
+                list : list of extensions for a list of keys
         """
         # vector version
         if not isinstance(key,str):
-            _log.verify( isinstance(key, Collection), "'key' must be a string, or an interable object. Found type %s", type(key))
+            if not isinstance(key, Collection): _log.throw( "'key' must be a string, or an interable object. Found type %s", type(key))
             l = len(key)
-            if default is None or isinstance(default,str) or getattr(default,"__iter__",None) is None:
+            if default is None or isinstance(default,str) or not isinstance(default, Collection):
                 default = [ default ] * l
             else:
-                _log.verify( len(default) == l, "'default' must have same lengths as 'key', found %ld and %ld", len(default), l )
-            return [ self._read(reader=reader,key=k,default=d,raiseOnError=raiseOnError) for k, d in zip(key,default) ]
+                if len(default) != l: _log.throw("'default' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(default), l )
+            if ext is None or isinstance(ext, str) or not isinstance(ext, Collection):
+                ext = [ ext ] * l
+            else:
+                if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
+            return [ self._read(reader=reader,key=k,default=d,raiseOnError=raiseOnError,ext=e) for k, d, e in zip(key,default,ext) ]
 
         # deleted directory?
         if self._path is None:
@@ -368,19 +488,19 @@ class SubDir(object):
             return default
 
         # single key
-        _log.verify(len(key) > 0, "'key' missing (the filename)" )
+        if len(key) == 0: _log.throw("'key' missing (the filename)" )
         sub, key = os.path.split(key)
         if len(sub) > 0:
-            return SubDir(self,sub)._read(reader,key,default)
-        _log.verify(len(key) > 0, "'key' %s indicates a directory, not a file", key)
+            return SubDir(self,sub)._read(reader,key,default,ext=ext)
+        if len(key) == 0: _log.throw( "'key' %s indicates a directory, not a file", key)
 
         # does file exit?
-        fullFileName = self.fullKeyName(key)
+        fullFileName = self.fullKeyName(key,ext=ext)
         if not os.path.exists(fullFileName):
             if raiseOnError:
                 raise KeyError(key)
             return default
-        _log.verify( os.path.isfile(fullFileName), "Cannot read %s: object exists, but is not a file (full path %s)", key, fullFileName )
+        if not os.path.isfile(fullFileName): _log.throw( "Cannot read %s: object exists, but is not a file (full path %s)", key, fullFileName )
 
         # read content
         # delete existing files upon read error
@@ -396,11 +516,11 @@ class SubDir(object):
             raise KeyError(key)
         return default
 
-    def read( self, key, default = None, raiseOnError : bool = False ):
+    def read( self, key : str, default = None, raiseOnError : bool = False, *, ext : str = None, fmt : Format = None ):
         """
         Read pickled data from 'key' if the file exists, or return 'default'
         -- Supports 'key' containing directories
-        -- Supports 'key' being iterable.
+        -- Supports 'key' (and default, ext) being iterable.
            In this case any any iterable 'default' except strings are considered accordingly.
            In order to have a unit default which is an iterable, you will have to wrap it in another iterable, e.g.
            E.g.:
@@ -428,15 +548,47 @@ class SubDir(object):
 
         Returns the read object, or a list of objects if 'key' was iterable.
         If the current directory is 'None', then behaviour is as if the file did not exist.
+
+        Parameters
+        ----------
+            key : str
+                A core filename ("key") or a list thereof. The 'key' may contain subdirectory information '/'.
+            default :
+                Default value, or default values if key is a list
+            raiseOnError:
+                Whether to raise an exception if reading an existing file failed.
+                By default this function fails silently and returns the default.
+            ext:
+                Extension overwrite, or a list thereof if key is a list
+                Set to None to use directory's default
+            fmt:
+                File format or None to use the directory's default.
+                Note that 'fmt' cannot be a list even if 'key' is
+
+        Returns
+        -------
+            For a single 'key': Content of the file if successfully read, or 'default' otherwise.
+            If 'key' is a list: list of contents.
         """
+        fmt = fmt if not fmt is None else self._fmt
         def reader( key, fullFileName, default ):
-            with open(fullFileName,"rb") as f:
-                return pickle.load(f)
-        return self._read( reader=reader, key=key, default=default, raiseOnError=raiseOnError )
+            if fmt == Format.PICKLE:
+                with open(fullFileName,"rb") as f:
+                    return pickle.load(f)
+            elif fmt == Format.JSON_PICKLE:
+                if jsonpickle is None: raise ModuleNotFoundError("jsonpickle")
+                with open(fullFileName,"rt") as f:
+                    return jsonpickle.decode( f.read() )
+            else:
+                assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
+                with open(fullFileName,"rt") as f:
+                    return json.loads( f.read() )
+
+        return self._read( reader=reader, key=key, default=default, raiseOnError=raiseOnError, ext=ext )
 
     get = read
 
-    def readString( self, key, default = None, raiseOnError = False ):
+    def readString( self, key : str, default = None, raiseOnError : bool = False, *, ext : str = None ) -> str:
         """
         Reads text from 'key' or returns 'default'. Removes trailing EOLs
         -- Supports 'key' containing directories#
@@ -445,48 +597,54 @@ class SubDir(object):
         Returns the read string, or a list of strings if 'key' was iterable.
         If the current directory is 'None', then behaviour is as if the file did not exist.
 
+        This function ignores the the format (self.fmt) of the subdirectory as it is writing text in the first place.
+
         See additional comments for read()
         """
         def reader( key, fullFileName, default ):
-            with open(fullFileName,"r") as f:
+            with open(fullFileName,"rt") as f:
                 line = f.readline()
                 if len(line) > 0 and line[-1] == '\n':
                     line = line[:-1]
                 return line
-        return self._read( reader=reader, key=key, default=default, raiseOnError=raiseOnError )
+        return self._read( reader=reader, key=key, default=default, raiseOnError=raiseOnError, ext=ext )
 
     # -- write --
 
-    def _write( self, writer, key, obj, raiseOnError ) -> bool:
+    def _write( self, writer, key : str, obj, raiseOnError : bool, *, ext : str = None ) -> bool:
         """ Utility function for write() and writeLine() """
         if self._path is None:
             raise EOFError("Cannot write to '%s': current directory is not specified" % key)
 
         # vector version
         if not isinstance(key,str):
-            _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
+            if not isinstance(key, Collection): _log.throw( "'key' must be a string or an interable object. Found type %s", type(key))
             l = len(key)
             if obj is None or isinstance(obj,str) or not isinstance(obj, Collection):
                 obj = [ obj ] * l
             else:
-                _log.verify( len(obj) == l, "'obj' must have same lengths as 'key', found %ld and %ld", len(obj), l )
+                if len(obj) != l: _log.throw("'obj' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(obj), l )
+            if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
+                ext = [ ext ] * l
+            else:
+                if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
             ok = True
-            for (k,o) in zip(key,obj):
-                ok |= self._write( writer, k, o, raiseOnError=raiseOnError )
+            for k,o,e in zip(key,obj,ext):
+                ok |= self._write( writer, k, o, raiseOnError=raiseOnError, ext=e )
             return ok
 
         # single key
-        _log.verify(len(key) > 0, "'key is empty (the filename)" )
+        if not len(key) > 0: _log.throw("'key is empty (the filename)" )
         sub, key = os.path.split(key)
-        _log.verify(len(key) > 0, "'key '%s' refers to a directory, not a file", key)
+        if len(key) == 0: _log.throw("'key '%s' refers to a directory, not a file", key)
         if len(sub) > 0:
-            return SubDir(self,sub)._write(writer,key,obj, raiseOnError=raiseOnError)
+            return SubDir(self,sub)._write(writer,key,obj, raiseOnError=raiseOnError,ext=ext )
 
         # write to temp file
         # then rename into target file
         # this reduces collision when i/o operations
         # are slow
-        fullFileName = self.fullKeyName(key)
+        fullFileName = self.fullKeyName(key,ext=ext)
         tmp_file     = uniqueHash48( [ key, uuid.getnode(), os.getpid(), threading.get_ident(), datetime.datetime.now() ] )
         tmp_i        = 0
         fullTmpFile  = self.fullKeyName(tmp_file) + ".tmp"
@@ -496,21 +654,22 @@ class SubDir(object):
             if tmp_i >= 10:
                 raise RuntimeError("Failed to generate temporary file for writing '%s': too many temporary files found. For example, this file already exists: '%s'" % ( fullFileName, fullTmpFile ) )
 
+        # write
         if not writer( key, fullTmpFile, obj ):
             return False
-        if os.path.exists(fullTmpFile):
-            try:
-                if os.path.exists(fullFileName):
-                    os.remove(fullFileName)
-                os.rename(fullTmpFile, fullFileName)
-            except Exception as e:
-                os.remove(fullTmpFile)
-                if raiseOnError:
-                    raise e
-                return False
+        assert os.path.exists(fullTmpFile), ("Internal error: file does not exist ...?", fullTmpFile, fullFileName)
+        try:
+            if os.path.exists(fullFileName):
+                os.remove(fullFileName)
+            os.rename(fullTmpFile, fullFileName)
+        except Exception as e:
+            os.remove(fullTmpFile)
+            if raiseOnError:
+                raise e
+            return False
         return True
 
-    def write( self, key, obj, raiseOnError = True ) -> bool:
+    def write( self, key : str, obj, raiseOnError : bool = True, *, ext : str = None, fmt : Format = None ) -> bool:
         """
         Pickles 'obj' into key.
         -- Supports 'key' containing directories
@@ -533,21 +692,50 @@ class SubDir(object):
               --> produces error as len(keys) != len(obj)
 
         If the current directory is 'None', then the function throws an EOFError exception
+
+        Parameters
+        ----------
+            key : str
+                Core filename ("key"), or list thereof
+            obj :
+                Object to write, or list thereof if 'key' is a list
+            raiseOnError:
+                If False, this function will return False upon failure
+            ext :
+                Extension, or list thereof if 'key' is a list.
+                Set to None to use default extension.
+            fmt :
+                Overwrite which is either PICKLE or JSON_PICKLE.
+                Use None to use the directory's default
+
+        Returns
+        -------
+            Boolean to indicate success if raiseOnError is False.
         """
+        fmt = fmt if not fmt is None else self._fmt
         def writer( key, fullFileName, obj ):
             try:
-                with open(fullFileName,"wb") as f:
-                    pickle.dump(obj,f,-1)
+                if fmt == Format.PICKLE:
+                    with open(fullFileName,"wb") as f:
+                        pickle.dump(obj,f,-1)
+                elif fmt == Format.JSON_PICKLE:
+                    if jsonpickle is None: raise ModuleNotFoundError("jsonpickle")
+                    with open(fullFileName,"wt") as f:
+                        f.write( jsonpickle.encode(obj) )
+                else:
+                    assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
+                    with open(fullFileName,"wt") as f:
+                        f.write( json.dumps( plain(obj, sort_dicts=True, native_np=True) ) )
             except Exception as e:
                 if raiseOnError:
                     raise e
                 return False
             return True
-        return self._write( writer=writer, key=key, obj=obj, raiseOnError=raiseOnError )
+        return self._write( writer=writer, key=key, obj=obj, raiseOnError=raiseOnError, ext=ext )
 
     set = write
 
-    def writeString( self, key, line, raiseOnError = True ) -> bool:
+    def writeString( self, key : str, line : str, raiseOnError : bool = True, *, ext : str = None ) -> bool:
         """
         Writes 'line' into key. A trailing EOL will not be read back
         -- Supports 'key' containing directories
@@ -561,39 +749,40 @@ class SubDir(object):
             line += '\n'
         def writer( key, fullFileName, obj ):
             try:
-                with open(fullFileName,"w") as f:
+                with open(fullFileName,"wt") as f:
                     f.write(obj)
             except Exception as e:
                 if raiseOnError:
                     raise e
                 return False
             return True
-        return self._write( writer=writer, key=key, obj=line, raiseOnError=raiseOnError )
+        return self._write( writer=writer, key=key, obj=line, raiseOnError=raiseOnError, ext=ext )
 
     # -- iterate --
 
-    def keys(self) -> list:
+    def keys(self, *, ext : str = None ) -> list:
         """
-        Returns a list of keys in this subdirectory with the correct extension.
-        Note that the keys do not include the extension themselves.
+        Returns a list of keys in this subdirectory with the current extension, or the specified extension.
 
         In other words, if the extension is ".pck", and the files are "file1.pck", "file2.pck", "file3.bin"
         then this function will return [ "file1", "file2" ]
 
-        This function ignores directories.
+        If 'ext' is "" then this function will return all files in this directory.
+        If 'ext' is None, the directory's default extension will be used
 
-        If self is None, then this function returns an empty list.
+        This function ignores directories.
         """
         if self._path is None:
             return []
-        ext_l = len(self._ext)
+        ext   = ext if not ext is None else self._ext
+        ext_l = len(ext)
         keys = []
         with os.scandir(self._path) as it:
             for entry in it:
                 if not entry.is_file():
                     continue
                 if ext_l > 0:
-                    if len(entry.name) <= ext_l or entry.name[-ext_l:] != self._ext:
+                    if len(entry.name) <= ext_l or entry.name[-ext_l:] != ext:
                         continue
                     keys.append( entry.name[:-ext_l] )
                 else:
@@ -618,14 +807,19 @@ class SubDir(object):
 
     # -- delete --
 
-    def delete( self, key, raiseOnError = False ):
+    def delete( self, key : str, raiseOnError: bool  = False, *, ext : str = None ):
         """
         Deletes 'key'; 'key' might be a list.
 
         Parameters
         ----------
-            key : filename, or list of filenames
-            raiseOnError : if False, do not throw KeyError if file does not exist. If None, use subdir's default.
+            key :
+                filename, or list of filenames
+            raiseOnError :
+                if False, do not throw KeyError if file does not exist.
+            ext :
+                Extension, or list thereof if 'key' is an extension.
+                Use None for the directory default
         """
         # do not do anything if the object was deleted
         if self._path is None:
@@ -633,30 +827,41 @@ class SubDir(object):
             return
         # vector version
         if not isinstance(key,str):
-            _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
-            for k in key:
-                self.delete(k, raiseOnError=raiseOnError)
+            if not isinstance(key, Collection): _log.throw( "'key' must be a string or an interable object. Found type %s", type(key))
+            l = len(key)
+            if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
+                ext = [ ext ] * l
+            else:
+                if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
+            for k, e in zip(key,ext):
+                self.delete(k, raiseOnError=raiseOnError, ext=e)
             return
-        # single key
-        _log.verify(len(key) > 0, "'key' is empty" )
+
+        # resolve sub directories
+        if len(key) == 0: _log.throw( "'key' is empty" )
         sub, key2 = os.path.split(key)
-        _log.verify(len(key2) > 0, "'key' %s indicates a directory, not a file", key)
-        fullFileName = self.fullKeyName(key)
+        if len(key2) == 0: _log.throw("'key' %s indicates a directory, not a file", key)
+        if len(sub) > 0:
+            return SubDir(self,sub).delete(key2,raiseOnError=raiseOnError,ext=ext)
+
+        fullFileName = self.fullKeyName(key, ext=ext)
         if not os.path.exists(fullFileName):
             if raiseOnError:
                 raise KeyError(key)
         else:
             os.remove(fullFileName)
 
-    def deleteAllKeys( self, raiseOnError = False ):
-        """ Deletes all valid keys in this sub directory """
-        # do not do anything if the object was deleted
+    def deleteAllKeys( self, raiseOnError : bool = False, *, ext : str = None ):
+        """
+        Deletes all valid keys in this sub directory with the correct extension.
+        You can use 'ext' to specify a different extension than used for the directory itself
+        """
         if self._path is None:
             if raiseOnError: raise EOFError("Cannot delete all files: current directory not specified")
             return
-        self.delete( self.keys(), raiseOnError=raiseOnError )
+        self.delete( self.keys(ext=ext), raiseOnError=raiseOnError, ext=ext )
 
-    def deleteAllContent( self, deleteSelf = False, raiseOnError = False ):
+    def deleteAllContent( self, deleteSelf : bool = False, raiseOnError : bool = False, *, ext : str = None ):
         """
         Deletes all valid keys and subdirectories in this sub directory.
         Does not delete files with other extensions.
@@ -666,6 +871,7 @@ class SubDir(object):
         ----------
             deleteSelf: whether to delete the directory or only its contents
             raiseOnError: False for silent failure
+            ext: extension for keys, or None for the directory's default
         """
         # do not do anything if the object was deleted
         if self._path is None:
@@ -674,9 +880,9 @@ class SubDir(object):
         # delete sub directories
         subdirs = self.subDirs();
         for subdir in subdirs:
-            SubDir(subdir, parent=self).deleteAllContent( deleteSelf=True, raiseOnError=raiseOnError )
+            SubDir(subdir, parent=self).deleteAllContent( deleteSelf=True, raiseOnError=raiseOnError, ext=ext )
         # delete keys
-        self.deleteAllKeys( raiseOnError=raiseOnError )
+        self.deleteAllKeys( raiseOnError=raiseOnError,ext=ext )
         # delete myself
         if not deleteSelf:
             return
@@ -684,12 +890,12 @@ class SubDir(object):
         txt = str(rest)
         txt = txt if len(txt) < 50 else (txt[:47] + '...')
         if len(rest) > 0:
-            _log.verify( not raiseOnError, "Cannot delete my own directory %s: directory not empty: found %ld object(s): %s", self._path,len(rest), txt)
+            if raiseOnError: _log.throw( "Cannot delete my own directory %s: directory not empty: found %ld object(s): %s", self._path,len(rest), txt)
             return
         os.rmdir(self._path[:-1])   ## does not work ????
         self._path = None
 
-    def eraseEverything( self, keepDirectory = True ):
+    def eraseEverything( self, keepDirectory : bool = True ):
         """
         Deletes the entire sub directory will all contents
         WARNING: deletes ALL files, not just those with the present extension.
@@ -709,24 +915,29 @@ class SubDir(object):
 
     # -- file ops --
 
-    def exists(self, key ):
+    def exists(self, key : str, *, ext : str = None ) -> bool:
         """ Checks whether 'key' exists. Works with iterables """
         # vector version
         if not isinstance(key,str):
             _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
-            return [ self.exists(k) for k in key ]
+            l = len(key)
+            if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
+                ext = [ ext ] * l
+            else:
+                if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
+            return [ self.exists(k,ext=e) for k,e in zip(key,ext) ]
         # empty directory
         if self._path is None:
             return False
         # single key
-        fullFileName = self.fullKeyName(key)
+        fullFileName = self.fullKeyName(key, ext=ext)
         if not os.path.exists(fullFileName):
             return False
         if not os.path.isfile(fullFileName):
-            raise _log.Exceptn("Structural error: key %s: exists, but is not a file (full path %s)",rel=key,abs=fullFileName)
+            raise _log.Exceptn("Structural error: key %s: exists, but is not a file (full path %s)",key,fullFileName)
         return True
 
-    def getCreationTime( self, key ):
+    def getCreationTime( self : str, key, *, ext : str = None ) -> datetime.datetime:
         """
         Returns the creation time of 'key', or None if file was not found.
         Works with key as list.
@@ -735,17 +946,22 @@ class SubDir(object):
         # vector version
         if not isinstance(key,str):
             _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
-            return [ self.getCreationTime(k) for k in key ]
+            l = len(key)
+            if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
+                ext = [ ext ] * l
+            else:
+                if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
+            return [ self.getCreationTime(k,e) for k,e in zip(key,ext) ]
         # empty directory
         if self._path is None:
             return None
         # single key
-        fullFileName = self.fullKeyName(key)
+        fullFileName = self.fullKeyName(key, ext=ext)
         if not os.path.exists(fullFileName):
             return None
         return datetime.datetime.fromtimestamp(os.path.getctime(fullFileName))
 
-    def getLastModificationTime( self, key ):
+    def getLastModificationTime( self, key : str, *, ext : str = None ) -> datetime.datetime:
         """
         Returns the last modification time of 'key', or None if file was not found.
         Works with key as list.
@@ -754,17 +970,22 @@ class SubDir(object):
         # vector version11
         if not isinstance(key,str):
             _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
-            return [ self.getLastModificationTime(k) for k in key ]
+            l = len(key)
+            if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
+                ext = [ ext ] * l
+            else:
+                if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
+            return [ self.getLastModificationTime(k,e) for k,e in zip(key,ext) ]
         # empty directory
         if self._path is None:
             return None
         # single key
-        fullFileName = self.fullKeyName(key)
+        fullFileName = self.fullKeyName(key, ext=ext)
         if not os.path.exists(fullFileName):
             return None
         return datetime.datetime.fromtimestamp(os.path.getmtime(fullFileName))
 
-    def getLastAccessTime( self, key ):
+    def getLastAccessTime( self, key : str, *, ext : str = None ) -> datetime.datetime:
         """
         Returns the last access time of 'key', or None if file was not found.
         Works with key as list.
@@ -773,39 +994,55 @@ class SubDir(object):
         # vector version
         if not isinstance(key,str):
             _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
-            return [ self.getLastAccessTime(k) for k in key ]
+            l = len(key)
+            if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
+                ext = [ ext ] * l
+            else:
+                if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
+            return [ self.getLastAccessTime(k,e) for k,e in zip(key,ext) ]
         # empty directory
         if self._path is None:
             return None
         # single key
-        fullFileName = self.fullKeyName(key)
+        fullFileName = self.fullKeyName(key, ext=ext)
         if not os.path.exists(fullFileName):
             return None
         return datetime.datetime.fromtimestamp(os.path.getatime(fullFileName))
 
     # -- dict-like interface --
 
-    def __call__(self, keyOrSub, default = RETURN_SUB_DIRECTORY ):
+    def __call__(self, keyOrSub : str, default = RETURN_SUB_DIRECTORY, *, ext : str = None, fmt : Format = None ):
         """
         Return either the value of a sub-key (file), or return a new sub directory.
         If only one argument is used, then this function returns a new sub directory.
         If two arguments are used, then this function returns read( keyOrSub, default ).
 
+        sd  = SubDir("!/test")
+
         Member access:
-            sd  = SubDir("!/test")
             x   = sd('x', None)                      reads 'x' with default value None
             x   = sd('sd/x', default=1)              reads 'x' from sub directory 'sd' with default value 1
+            x   = sd('x', default=1, ext="tmp")      reads 'x.tmp' from sub directory 'sd' with default value 1
+
         Create sub directory:
             sd2 = sd("subdir")                       creates and returns handle to subdirectory 'subdir'
             sd2 = sd("subdir1/subdir2")              creates and returns handle to subdirectory 'subdir1/subdir2'
+            sd2 = sd("subdir1/subdir2", ext=".tmp")  creates and returns handle to subdirectory 'subdir1/subdir2' with extension "tmp"
+            sd2 = sd(ext=".tmp")                     returns handle to current subdirectory with extension "tmp"
 
         Parameters
         ----------
-            keyOrSub:
+            keyOrSub : str
                 identify the object requested. Should be a string, or a list.
             default:
                 If specified, this function reads 'keyOrSub' with read( keyOrSub, default )
                 If not specified, then this function calls subDir( keyOrSub ).
+            ext : str
+                Extension for a new sub-directory, or extension of the file
+                Set to None to use the directory's default.
+            fmt : Format
+                Format of the new subdirectory or of the file to be read, eg PICKLE or JSON_PICKLE.
+                Set to None to use the directory's default.
 
         Returns
         -------
@@ -814,10 +1051,10 @@ class SubDir(object):
         """
         if default == SubDir.RETURN_SUB_DIRECTORY:
             if not isinstance(keyOrSub, str):
-                _log.verify( isinstance(keyOrSub, Collection), "'keyOrSub' must be a string or an iterable object. Found type '%s;", type(keyOrSub))
-                return [ SubDir(k,parent=self) for k in keyOrSub ]
-            return SubDir(keyOrSub,parent=self)
-        return self.read( key=keyOrSub, default=default )
+                if not isinstance(keyOrSub, Collection): _log.throw("'keyOrSub' must be a string or an iterable object. Found type '%s;", type(keyOrSub))
+                return [ SubDir(k,parent=self,ext=ext,fmt=fmt) for k in keyOrSub ]
+            return SubDir(keyOrSub,parent=self,ext=ext,fmt=fmt)
+        return self.read( key=keyOrSub, default=default,ext=ext,fmt=fmt )
 
     def __getitem__( self, key ):
         """
@@ -873,6 +1110,7 @@ class SubDir(object):
         return self.delete( key=key, raiseOnError=False )
 
     # -- short cuts for manual caching --
+    # UNDER CONSTRUCTION
 
     def cache_read( self, cache_mode : CacheMode, key, default = None ):
         """
@@ -1007,4 +1245,9 @@ class SubDir(object):
             return value
 
         return wrapper
+
+SubDir.PICKLE = Format.PICKLE
+SubDir.JSON_PICKLE = Format.JSON_PICKLE
+SubDir.JSON_PLAIN = Format.JSON_PLAIN
+
 
