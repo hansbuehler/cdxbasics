@@ -2,9 +2,6 @@
 subdir
 Simple class to keep track of directory sturctures and for automated caching on disk
 Hans Buehler 2020
-
-WARNING
-This is under development. I have not figured out how to test file i/o on GitHub
 """
 
 from .logger import Logger
