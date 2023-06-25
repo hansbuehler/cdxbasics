@@ -754,6 +754,10 @@ A small number of statistical numpy functions which take a weight vector (distri
 * `std(P,x,axis)` computes the standard deviation of `x` using the distribution `P`. If `P` is None, it returns `numpy.std(x,axis)`.
 * `err(P,x,axis)` computes the standard error of `x` using the distribution `P`. If `P` is None, it returns `numpy.std(x,axis)/sqrt(x.shape[axis])`.
 
+* `quantile(P,x,quantiles,axis)` computes `P`-quantiles of `x`. If `P` is None, it returns `numpy.quantile(x,quantiles,axis)`.
+* `median(P,x,axis)` computes the `P`-median `x`. If `P` is None, it returns `numpy.median(x,axis)`.
+* `mad(P,x,axis)` computes the [median absolute deviation](https://en.wikipedia.org/wiki/Median_absolute_deviation) of `x` with respect to the distribution `P`. Note that `mad` returned by this function is scaled to be an estimator of `std`.
+
 Two further functions are used to compute binned statistics:
 
 * `mean_bins(x,bins,axis,P)` computes the means of `x` over equidistant `bins` using the distribition `P`.
