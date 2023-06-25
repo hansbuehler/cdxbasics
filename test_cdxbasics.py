@@ -14,6 +14,7 @@ import cdxbasics.subdir as mdl_subdir
 import cdxbasics.logger as mdl_logger
 import cdxbasics.prettydict as prettydict
 import cdxbasics.verbose as verbose
+import cdxbasics.version as ver
 import datetime as datetime
 import numpy as np
 if False:
@@ -49,6 +50,7 @@ OrderedDict = prettydict.OrderedDict
 Config = config.Config
 Float = config.Float
 Int = config.Int
+version = ver.version
 
 mdl_subdir._log.setLevel(Logger.CRITICAL+1)   # no logging in testing
 
@@ -589,6 +591,36 @@ class CDXBasicsTest(unittest.TestCase):
         print("\nVerbose='quiet'")
         context = Context('quiet')
         f_main(context)
+
+@version("1.0")
+def f(x):
+    return x
+@version("2.0", dependencies=[f])
+def g1(x):
+    return f(x)
+@version("2.1", dependencies=[f])
+def g2(x):
+    return f(x)
+class A(object):
+    @version("2.2")
+    def r1(self, x):
+        return x
+    @version("2.3", dependencies=['A.r1', 'g1'])
+    def r2(self, x):
+        return x
+@version("3.0", dependencies=['g1', g2, 'A.r1', A.r2])
+def h(x,y):
+    a = A()
+    return g1(x)+g2(y)+a.r1(x)+a.r2(y)
+
+class CDXBasicsVersionTest(unittest.TestCase):
+
+    def test_version(self):
+        # test dependency
+        self.assertEqual( h.version.input, "3.0" )
+        self.assertEqual( h.version.full, "3.0 { A.r1: 2.2, A.r2: 2.3 { A.r1: 2.2, g1: 2.0 { f: 1.0 } }, g1: 2.0 { f: 1.0 }, g2: 2.1 { f: 1.0 } }" )
+        self.assertEqual( h.version.unique_id48, "3.0 f8e5a74446bc8a1c6234289a4a363658ae219c81dc349fa5" )
+
 
 # testing our auto-caching
 # need to auto-clean up

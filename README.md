@@ -861,4 +861,63 @@ The purpose of initializing functions usually with `quiet` is that they can be u
 
 ## version
 
-Framework to keep track of versions of functions, and their dependencies. Main use case is a data pipeline where a changfe in version of down a dependency tree should trigger an update of the "full" version of the respective top level calculation.
+Framework to keep track of versions of functions, and their dependencies. Main use case is a data pipeline where a change in version of down a dependency tree should trigger an update of the "full" version of the respective top level calculation.
+
+The framework relies on the `@version` decorator which works for both classes and functions.
+Applied to either a function or class it will add a member `version` which has the following properties:
+
+* `version.input`: the input version as defined with `@version`.
+* `version.full`: a fully qualified version with all dependent functions and classes in human readable form.
+* `version.unique_id48`, `version.unique_id64`: unique hashes of `version.full` of 48 or 64 characters, respectively. 
+* `version.dependencies`: a hierarchical list of dependencies.
+
+Note that dependencies and all other information will only be resolved upon a first call to any of the properties. 
+
+Usage is straight forward:
+
+    from cdxbasics.version import version
+
+    @version("0.0.1")
+    def f(x):
+        return x
+
+    print( f.version.input ) --> 0.0.1
+    print( f.version.full ) --> 0.0.1
+
+Dependencies are declared with the `dependencies` keyword:
+
+    @version("0.0.2", dependencies=[f])
+    def g(x):
+        return f(x)
+
+    print( g.version.input ) --> 0.0.2
+    print( g.version.full ) --> 0.0.2 { f: 0.0.01 }
+
+You have access to `version` from within the function:
+
+    @version("0.0.2", dependencies=[f])
+    def g(x):
+        print(g.version.full) --> 0.0.2 { f: 0.0.01 }
+        return f(x)
+
+This works with classes, too:
+
+    @version("0.0.3", dependencies=[f] )
+    class A(object):
+        def h(self, x):
+            return f(x)
+
+    print( A.version.input ) --> 0.0.3
+    print( A.version.full ) --> 0.0.3 { f: 0.0.01 }
+
+    a = A()
+    print( a.version.input ) --> 0.0.3
+    print( a.version.full ) --> 0.0.3 { f: 0.0.01 }
+
+You can also use strings to refer to dependencies. This does not work with locally defined functions yet.
+
+    @version("0.0.4", dependencies=['f'])
+    def r(x)
+        return x
+
+    print( r.version.full ) --> 0.0.4 { f: 0.0.01 }
