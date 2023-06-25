@@ -153,6 +153,8 @@ class SubDir(object):
     RETURN_SUB_DIRECTORY = __RETURN_SUB_DIRECTORY
     DEFAULT_FORMAT = Format.PICKLE
 
+    MAX_VERSION_BINARY_LEN = 128
+
     def __init__(self, name : str, parent = None, *, ext : str = None, fmt : Format = None, eraseEverything : bool = False ):
         """
         Creates a sub directory which contains pickle files with a common extension.
@@ -359,6 +361,30 @@ class SubDir(object):
         _log.throw("Unknown format '%s'", str(fmt))
 
     @staticmethod
+    def _version_to_bytes( version : str ) -> bytearray:
+        """ Convert string version to byte string of at most size MAX_VERSION_BINARY_LEN + 1 """
+        if version is None:
+            return None
+        version_    = bytearray(version,'utf-8')
+        if len(version_) >= SubDir.MAX_VERSION_BINARY_LEN: _log.throw("Cannot use version '%s': when translated into a bytearray it exceeds the maximum version lengths of '%ld' (byte string is '%s')", version, SubDir.MAX_VERSION_BINARY_LEN-1, version_ )
+        ver_        = bytearray(SubDir.MAX_VERSION_BINARY_LEN)
+        l           = len(version_)
+        ver_[0]     = l
+        ver_[1:1+l] = version_
+        assert len(ver_) == SubDir.MAX_VERSION_BINARY_LEN, ("Internal error", len(ver_), ver_)
+        return ver_
+
+    @staticmethod
+    def _bytes_to_version( bytes_ : bytearray) -> str:
+        """ Convert fixed length byte array to string version """
+        if bytes_ is None:
+            return None
+        assert len(bytes_) == SubDir.MAX_VERSION_BINARY_LEN, ("Internal error", len(bytes_))
+        l = bytes_[0]
+        s = bytes_[1:l+1]
+        return s.decode("utf-8")
+
+    @staticmethod
     def _convert_ext( ext ):
         """ Returns .ext or "" """
         assert not ext is None, "Internal error"
@@ -516,7 +542,7 @@ class SubDir(object):
             raise KeyError(key)
         return default
 
-    def read( self, key : str, default = None, raiseOnError : bool = False, *, ext : str = None, fmt : Format = None ):
+    def read( self, key : str, default = None, raiseOnError : bool = False, *, version : str = None, ext : str = None, fmt : Format = None ):
         """
         Read pickled data from 'key' if the file exists, or return 'default'
         -- Supports 'key' containing directories
@@ -555,13 +581,16 @@ class SubDir(object):
                 A core filename ("key") or a list thereof. The 'key' may contain subdirectory information '/'.
             default :
                 Default value, or default values if key is a list
-            raiseOnError:
+            raiseOnError : bool
                 Whether to raise an exception if reading an existing file failed.
                 By default this function fails silently and returns the default.
-            ext:
+            version : str
+                If not None, specifies the version of the current code base.
+                In this case, the
+            ext : str
                 Extension overwrite, or a list thereof if key is a list
                 Set to None to use directory's default
-            fmt:
+            fmt : Format
                 File format or None to use the directory's default.
                 Note that 'fmt' cannot be a list even if 'key' is
 
@@ -570,19 +599,39 @@ class SubDir(object):
             For a single 'key': Content of the file if successfully read, or 'default' otherwise.
             If 'key' is a list: list of contents.
         """
-        fmt = fmt if not fmt is None else self._fmt
+        fmt     = fmt if not fmt is None else self._fmt
+        version = str(version) if not version is None else None
         def reader( key, fullFileName, default ):
             if fmt == Format.PICKLE:
                 with open(fullFileName,"rb") as f:
+                    # handle version as byte string
+                    if not version is None:
+                        test_len     = int( f.read( 1 )[0] )
+                        test_version = f.read(test_len)
+                        test_version = test_version.decode("utf-8")
+                        if test_version != version:
+                            raise EnvironmentError("Error reading '%s': found version '%s' not '%s'" % (fullFileName,str(test_version),str(version)))
                     return pickle.load(f)
-            elif fmt == Format.JSON_PICKLE:
-                if jsonpickle is None: raise ModuleNotFoundError("jsonpickle")
-                with open(fullFileName,"rt") as f:
-                    return jsonpickle.decode( f.read() )
             else:
-                assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
-                with open(fullFileName,"rt") as f:
-                    return json.loads( f.read() )
+                with open(fullFileName,"rt",encoding="utf-8") as f:
+                    # handle versioning
+                    if not version is None:
+                        test_version = f.readline()
+                        if test_version[:2] != "# ":
+                            raise EnvironmentError("Error reading '%s': file does not appear to contain a version (it should start with '# ')" % fullFileName)
+                        test_version = test_version[2:]
+                        if test_version[-1:] == "\n":
+                            test_version = test_version[:-1]
+                        if test_version != version:
+                            raise EnvironmentError("Error reading '%s': found version '%s' not '%s'" % (fullFileName,str(test_version),str(version)))
+
+                    # read
+                    if fmt == Format.JSON_PICKLE:
+                        if jsonpickle is None: raise ModuleNotFoundError("jsonpickle")
+                        return jsonpickle.decode( f.read() )
+                    else:
+                        assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
+                        return json.loads( f.read() )
 
         return self._read( reader=reader, key=key, default=default, raiseOnError=raiseOnError, ext=ext )
 
@@ -602,7 +651,7 @@ class SubDir(object):
         See additional comments for read()
         """
         def reader( key, fullFileName, default ):
-            with open(fullFileName,"rt") as f:
+            with open(fullFileName,"rt",encoding="utf-8") as f:
                 line = f.readline()
                 if len(line) > 0 and line[-1] == '\n':
                     line = line[:-1]
@@ -669,7 +718,7 @@ class SubDir(object):
             return False
         return True
 
-    def write( self, key : str, obj, raiseOnError : bool = True, *, ext : str = None, fmt : Format = None ) -> bool:
+    def write( self, key : str, obj, raiseOnError : bool = True, *, version : str = None, ext : str = None, fmt : Format = None ) -> bool:
         """
         Pickles 'obj' into key.
         -- Supports 'key' containing directories
@@ -699,12 +748,15 @@ class SubDir(object):
                 Core filename ("key"), or list thereof
             obj :
                 Object to write, or list thereof if 'key' is a list
-            raiseOnError:
+            raiseOnError : bool
                 If False, this function will return False upon failure
-            ext :
+            version : str
+                If not None, specifies the version of the code which generated 'obj'.
+                This version will be written to the beginning of the file.
+            ext : str
                 Extension, or list thereof if 'key' is a list.
                 Set to None to use default extension.
-            fmt :
+            fmt : Format
                 Overwrite which is either PICKLE or JSON_PICKLE.
                 Use None to use the directory's default
 
@@ -712,20 +764,31 @@ class SubDir(object):
         -------
             Boolean to indicate success if raiseOnError is False.
         """
-        fmt = fmt if not fmt is None else self._fmt
+        fmt      = fmt if not fmt is None else self._fmt
+        version  = str(version) if not version is None else None
         def writer( key, fullFileName, obj ):
             try:
                 if fmt == Format.PICKLE:
                     with open(fullFileName,"wb") as f:
+                        # handle version as byte string
+                        if not version is None:
+                            version_ = bytearray(version, "utf-8")
+                            if len(version_) > 255: _log.throw("Version '%s' is way too long: its byte encoding has length %ld which does not fit into a byte", version, len(version_))
+                            len8     = bytearray(1)
+                            len8[0]  = len(version_)
+                            f.write(len8)
+                            f.write(version_)
                         pickle.dump(obj,f,-1)
-                elif fmt == Format.JSON_PICKLE:
-                    if jsonpickle is None: raise ModuleNotFoundError("jsonpickle")
-                    with open(fullFileName,"wt") as f:
-                        f.write( jsonpickle.encode(obj) )
                 else:
-                    assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
-                    with open(fullFileName,"wt") as f:
-                        f.write( json.dumps( plain(obj, sort_dicts=True, native_np=True) ) )
+                    with open(fullFileName,"wt",encoding="utf-8") as f:
+                        if not version is None:
+                            f.write("# " + version + "\n")
+                        if fmt == Format.JSON_PICKLE:
+                            if jsonpickle is None: raise ModuleNotFoundError("jsonpickle")
+                            f.write( jsonpickle.encode(obj) )
+                        else:
+                            assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
+                            f.write( json.dumps( plain(obj, sorted_dicts=True, native_np=True) ) )
             except Exception as e:
                 if raiseOnError:
                     raise e
@@ -749,7 +812,7 @@ class SubDir(object):
             line += '\n'
         def writer( key, fullFileName, obj ):
             try:
-                with open(fullFileName,"wt") as f:
+                with open(fullFileName,"wt",encoding="utf-8") as f:
                     f.write(obj)
             except Exception as e:
                 if raiseOnError:
