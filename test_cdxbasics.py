@@ -556,6 +556,32 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertAlmostEqual( cdxnp.err(P, X), 0.051947905391990054 )
         self.assertAlmostEqual( cdxnp.err(None, X), 0.17877201367820958 )
 
+        np.random.seed(112133123)
+        x = np.random.normal(size=(101,3))
+        P = np.random.uniform(size=(101,))
+        q1 = cdxnp.quantile( P, x, 0.5, axis=0 ).tolist()
+        q2 = cdxnp.quantile( P, x, 0.5, axis=0, keepdims=True ).tolist()
+        q3 = cdxnp.median( P, x, axis=0 ).tolist()
+        q4 = cdxnp.median( P, x, axis=0, keepdims=True ).tolist()
+        q1 = [ round(_, 4) for _ in q1 ]
+        q2 = [ [ round(_, 4) for _ in l ] for l in q2 ]
+        q3 = [ round(_, 4) for _ in q3 ]
+        q4 = [ [ round(_, 4) for _ in l ] for l in q4 ]
+        r1 = [0.0945, -0.5187, 0.0604]
+        r2 = [[0.0945, -0.5187, 0.0604]]
+        self.assertEqual(q1, r1)
+        self.assertEqual(q2, r2)
+        self.assertEqual(q3, r1)
+        self.assertEqual(q4, r2)
+
+        q1 = cdxnp.quantile( P, x, (0.1,0.5,0.7), axis=0 ).tolist()
+        q2 = cdxnp.quantile( P, x, (0.1,0.5,0.7), axis=0, keepdims=True ).tolist()
+        q1 = [ [ round(_, 4) for _ in l ] for l in q1 ]
+        q2 = [ [ round(_, 4) for _ in l ] for l in q2 ]
+        r = [[-1.3685, -1.3959, -0.9856], [0.0945, -0.5187, 0.0604], [0.6551, 0.3987, 0.5158]]
+        self.assertEqual(q1, r)
+        self.assertEqual(q2, r)
+
     def test_verbose(self):
 
         quiet = verbose.quiet
