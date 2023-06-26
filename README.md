@@ -755,7 +755,7 @@ A small number of statistical numpy functions which take a weight vector (distri
 * `err(P,x,axis)` computes the standard error of `x` using the distribution `P`. If `P` is None, it returns `numpy.std(x,axis)/sqrt(x.shape[axis])`.
 
 * `quantile(P,x,quantiles,axis)` computes `P`-quantiles of `x`. If `P` is None, it returns `numpy.quantile(x,quantiles,axis)`.
-* `median(P,x,axis)` computes the `P`-median `x`. If `P` is None, it returns `numpy.median(x,axis)`.
+* `median(P,x,axis)` computes the `P`-median of `x`. If `P` is None, it returns `numpy.median(x,axis)`.
 * `mad(P,x,axis)` computes the [median absolute deviation](https://en.wikipedia.org/wiki/Median_absolute_deviation) of `x` with respect to the distribution `P`. Note that `mad` returned by this function is scaled to be an estimator of `std`.
 
 Two further functions are used to compute binned statistics:
@@ -865,17 +865,17 @@ The purpose of initializing functions usually with `quiet` is that they can be u
 
 ## version
 
-Framework to keep track of versions of functions, and their dependencies. Main use case is a data pipeline where a change in version of down a dependency tree should trigger an update of the "full" version of the respective top level calculation.
+Framework to keep track of versions of functions, and their dependencies. Main use case is a data pipeline where a changes in versions =down a dependency tree should trigger an update of the "full" version of the respective top level calculation.
 
 The framework relies on the `@version` decorator which works for both classes and functions.
 Applied to either a function or class it will add a member `version` which has the following properties:
 
 * `version.input`: the input version as defined with `@version`.
 * `version.full`: a fully qualified version with all dependent functions and classes in human readable form.
-* `version.unique_id48`, `version.unique_id64`: unique hashes of `version.full` of 48 or 64 characters, respectively. 
-* `version.dependencies`: a hierarchical list of dependencies.
+* `version.unique_id48`, `version.unique_id64`: unique hashes of `version.full` of 48 or 64 characters, respectively. You can use the function `version.unique_id()` to compute hash IDs of any length.
+* `version.dependencies`: a hierarchical list of dependencies for systematic inspection.
 
-Note that dependencies and all other information will only be resolved upon a first call to any of the properties. 
+Note that dependencies and all other information will only be resolved upon a first call to any of these properties. 
 
 Usage is straight forward:
 
@@ -918,10 +918,35 @@ This works with classes, too:
     print( a.version.input ) --> 0.0.3
     print( a.version.full ) --> 0.0.3 { f: 0.0.01 }
 
-You can also use strings to refer to dependencies. This does not work with locally defined functions yet.
+You can also use strings to refer to dependencies. This functionality depends on visibility of the referred dependencies by the function in the function's `__global__` scope. Currently, it does not work with local function definitions.
 
     @version("0.0.4", dependencies=['f'])
     def r(x)
         return x
 
     print( r.version.full ) --> 0.0.4 { f: 0.0.01 }
+
+### Version aware I/O
+
+As a direct use case you can provide `version.unqiue_id48` to the `version` keyword of `SubDir.read` and `SubDir.write`. The latter will write the version string into the output file. The former will then read it back (by reading a small block of data), and check that the version written to the file matches the current version. If not, the file will be considered invalid; depending on the parameters to `read` the function will either return a default value, or will throw an exception.
+
+    from cdxbasics.util import uniqueHash48
+    from cdxbasics.version import version
+    from cdxbasics.subdir import SubDir
+
+    @version("0.0.1")
+    def f( path, x, y, z ):
+
+        unique_file = uniqueHash48( x,y,z )
+        unique_ver  = f.version.unique_id48
+        subdir      = SubDir(path)
+        data        = subdir.read( unique_file, None, version=unique_ver )
+        if not data is None:
+            return data
+
+        data = ... compute ...
+
+        subdir.write( unique_file, data, version=unique_ver )
+        return data
+
+

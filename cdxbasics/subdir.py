@@ -372,16 +372,6 @@ class SubDir(object):
         return ver_
 
     @staticmethod
-    def _bytes_to_version( bytes_ : bytearray) -> str:
-        """ Convert fixed length byte array to string version """
-        if bytes_ is None:
-            return None
-        assert len(bytes_) == SubDir.MAX_VERSION_BINARY_LEN, ("Internal error", len(bytes_))
-        l = bytes_[0]
-        s = bytes_[1:l+1]
-        return s.decode("utf-8")
-
-    @staticmethod
     def _convert_ext( ext ):
         """ Returns .ext or "" """
         assert not ext is None, "Internal error"
@@ -539,7 +529,7 @@ class SubDir(object):
             raise KeyError(key)
         return default
 
-    def read( self, key : str, default = None, raiseOnError : bool = False, *, version : str = None, ext : str = None, fmt : Format = None ):
+    def read( self, key : str, default = None, raiseOnError : bool = False, *, version : str = None, delete_wrong_version : bool = True, ext : str = None, fmt : Format = None ):
         """
         Read pickled data from 'key' if the file exists, or return 'default'
         -- Supports 'key' containing directories
@@ -584,6 +574,8 @@ class SubDir(object):
             version : str
                 If not None, specifies the version of the current code base.
                 In this case, the
+            delete_wrong_version : bool
+                If True, and if a wrong version was found, delete the file.
             ext : str
                 Extension overwrite, or a list thereof if key is a list
                 Set to None to use directory's default
@@ -599,19 +591,22 @@ class SubDir(object):
         fmt     = fmt if not fmt is None else self._fmt
         version = str(version) if not version is None else None
         def reader( key, fullFileName, default ):
+            test_version = "(unknown)"
             if fmt == Format.PICKLE:
                 with open(fullFileName,"rb") as f:
                     # handle version as byte string
+                    ok = True
                     if not version is None:
                         test_len     = int( f.read( 1 )[0] )
                         test_version = f.read(test_len)
                         test_version = test_version.decode("utf-8")
-                        if test_version != version:
-                            raise EnvironmentError("Error reading '%s': found version '%s' not '%s'" % (fullFileName,str(test_version),str(version)))
-                    return pickle.load(f)
+                        ok           = test_version == version
+                    if ok:
+                        return pickle.load(f)
             else:
                 with open(fullFileName,"rt",encoding="utf-8") as f:
                     # handle versioning
+                    ok = True
                     if not version is None:
                         test_version = f.readline()
                         if test_version[:2] != "# ":
@@ -619,16 +614,24 @@ class SubDir(object):
                         test_version = test_version[2:]
                         if test_version[-1:] == "\n":
                             test_version = test_version[:-1]
-                        if test_version != version:
-                            raise EnvironmentError("Error reading '%s': found version '%s' not '%s'" % (fullFileName,str(test_version),str(version)))
-
-                    # read
-                    if fmt == Format.JSON_PICKLE:
-                        if jsonpickle is None: raise ModuleNotFoundError("jsonpickle")
-                        return jsonpickle.decode( f.read() )
-                    else:
-                        assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
-                        return json.loads( f.read() )
+                        ok = test_version == version
+                    if ok:
+                        # read
+                        if fmt == Format.JSON_PICKLE:
+                            if jsonpickle is None: raise ModuleNotFoundError("jsonpickle")
+                            return jsonpickle.decode( f.read() )
+                        else:
+                            assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
+                            return json.loads( f.read() )
+            # delete a wrong version
+            deleted = ""
+            if delete_wrong_version:
+                try:
+                    os.remove(fullFileName)
+                    deleted = " (file was deleted)"
+                except Exception as e:
+                    deleted = " (attempt to delete file failed: %s)" % str(e)
+            raise EnvironmentError("Error reading '%s': found version '%s' not '%s'%s" % (fullFileName,str(test_version),str(version),deleted))
 
         return self._read( reader=reader, key=key, default=default, raiseOnError=raiseOnError, ext=ext )
 
