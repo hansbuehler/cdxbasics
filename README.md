@@ -1,23 +1,19 @@
 # cdxbasics
 
 Collection of basic tools for Python development.
-
 Install by
-
-    conda install cdxbasics -c hansbuehler
-
-or
 
     pip install cdxbasics
 
-## dynaplot
+
+# dynaplot
 
 Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit is making it easy to develop visualization with `matplotlib` which dynamically updates, for example during training with machine learing kits such as `tensorflow`. This has been tested with Anaconda's JupyterHub and `%matplotlib inline`. 
 
 Some users reported that the package does not work in some versions of Jupyter. In this case, please try setting `dynaplot.DynamicFig.MODE = 'canvas'`. I appreciate if you let me know whether this resolved
 the problem.
 
-#### Animated Matplotlib in Jupyter
+### Animated Matplotlib in Jupyter
 
 See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb) for some applications. 
 
@@ -48,13 +44,13 @@ See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbu
 
 See example notebook for how to use the package for lines, confidence intervals, and 3D graphs.
 
-#### Simpler sub_plot
+### Simpler sub_plot
 
 The package lets you create sub plots without having to know the number of plots in advance: you do not need to specify `rol, col, num` when calling `add_subplot`. The underlying figure object will automatically arrange them on a grid for you. 
 
     # create figure
     from cdxbasics.dynaplot import figure
-    fig = figure(col_size=4, row_size=4, col_num=3) 
+    fig = figure(col_size=4, row_size=4, col_num=3, title="Figure title") 
                                     # equivalent to matplotlib.figure
     ax  = fig.add_subplot()         # no need to specify row,col,num
     ax.plot( x, y )
@@ -68,7 +64,7 @@ The package lets you create sub plots without having to know the number of plots
     
     fig.render()                    # draws the plots
    
-#### Other features
+### Other features
 
 
 
@@ -76,22 +72,22 @@ There are a number of other functions to aid plotting
 
 * `figure()` which returns a `DynamicFig` object:
 
-    Function to replace `matplotlib.figure` which will defer creation of the figure until the first call of `render()`. The effect is that we no longer need to provide  the total number of rows and columns in advance - i.e. you won't need to call the equivalent of `fig.add_subplot(3,4,14)` but can just call `fig.add_subplot()`.
-
-    * Instead of `figsize` the function `figure()` accepts `row_size`, `col_size` and `col_nums` to dynamically generate an appropriate figure size.
+    Function to replace `matplotlib.figure()` which will defer creation of the figure until the first call of `render()`. The effect is that we no longer need to provide  the total number of rows and columns in advance - i.e. you won't need to call the equivalent of `fig.add_subplot(3,4,14)` but can just call `fig.add_subplot()`. You can also pass a `title` argument.
+    
+    Instead of `figsize` the function `figure()` accepts `row_size`, `col_size` and `col_nums` to dynamically generate an appropriate figure size.
 
     Key member functions of `DynamicFig` are:
-    * `add_subplot` to add a new plot. No arguments needed.
+    * `add_subplot()` to add a new plot without having to specify the grid, e.g. you do not need to provide any arguments. Supports an additional `title` argument for plot titles.
     * `next_row()` to skip to the next row.
     * `render()` to draw the figure. When called the first time will create all the underlying matplotlib objects. Subsequent calls will re-draw the canvas if the figure was modified. See examples in https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb
     * `close()` to close the figure. If not called, Jupyter creates an unseemly second copy of the graph when the current cell is finished running.
 
 * `color_css4, color_base, color_tableau, color_xkcd`:
 
-    Each function returns the $i$th element of the respective matplotlib color
+    Each function returns the _i_'th element of the respective matplotlib color
     table. The purpose is to simplify using consistent colors accross different plots.
     
-    Example:
+    **Example:**
     
         fig = dynaplot.figure()
         ax = fig.add_subplot()
@@ -109,7 +105,11 @@ There are a number of other functions to aid plotting
 
     Generator versions of the `color_` functions.
 
-## prettydict
+### Implementation Note
+
+The `DynamicFig` object returned by `dynaplot.figure()` will keep track of all function calls and other operations, and will defer them until the first time `render()`. It does this so it can figure out the desired layout before actually creating any plots. Each deferred function call in turn returns a deferring object. Read the Python comments in `deferred.py` for implementation details.
+
+# prettydict
 
 A number of simple extensions to standard dictionaries which allow accessing any element of the dictionary with "." notation. The purpose is to create a functional-programming style method of generating complex objects.
 
@@ -129,7 +129,7 @@ There are three versions:
 * `PrettySortedDict`:
     Pretty version of sorted dictionary.
 
-#### Assigning member functions
+### Assigning member functions
 
 "Pretty" objects also allow assigning bona fide member functions by a simple semantic of the form:
 
@@ -153,7 +153,7 @@ The reason for this is as follows: consider
     pdct.mult(3,4) --> 12
  
 
-## config
+# config
 
 Tooling for setting up program-wide configuration. Aimed at machine learning programs to ensure consistency of code accross experimentation.
 
@@ -167,7 +167,7 @@ Tooling for setting up program-wide configuration. Aimed at machine learning pro
 * Nicer synthax than dictionary notation, in particular for nested configurations.
 * Simple validation to ensure values are within a given range or from a list of options.
 
-#### Creating configs
+### Creating configs
 
 Set data with both dictionary and member notation:
         
@@ -188,7 +188,7 @@ This is equivalent to
     config.network.activation    = 'relu'
     config.network.width         = 100
 
-#### Reading a config
+### Reading a config
 
 When reading the value of a `key` from  config, `config.__call__()` uses a default value, and a cast type. It first attempts to find `key` in the `config`.
 * If `key` is found, it casts the value provided for `key` using the `cast` type and returned.
@@ -219,7 +219,7 @@ An alternative is the explicit:
     network  = config.network 
     self.depth = network('depth', 10000, int, "Depth for the network") 
             
-#### Imposing simple restrictions on values
+### Imposing simple restrictions on values
 
 We can impose simple restrictions to any values read from a config. To this end, import the respective type operators:
 
@@ -251,7 +251,7 @@ We can combine conditional expressions with the tuple notation:
     self.batch_size = network('batch_size', None, (None, Int>0), "Batch size or None for TensorFlow's default 32", help_cast="Positive integer, or None")
 
 
-#### Ensuring that we had no typos & that all provided data is meaningful
+### Ensuring that we had no typos & that all provided data is meaningful
 
 A common issue when using dictionary-based code is that we might misspell one of the parameters. Unless this is a mandatory parameter we might not notice that we have not actually changed its value in the code below.
 
@@ -319,7 +319,7 @@ produces
 You can check the status of the use of the config by using the `not_done` property.
 
 
-#### Detaching child configs and other Copy operations
+### Detaching child configs and other Copy operations
 
 You can also detach a child config, which allows you to store it for later use without triggering `done()` errors:
     
@@ -338,7 +338,7 @@ You can also detach a child config, which allows you to store it for later use w
 
 Use `copy()` to make a bona fide copy of a child, without marking the source child as 'done'. `copy()` will return a config which shares the same status as the source object. If you want an "unused" copy, use `clean_copy()`. A virtual clone is created via `clone()`. A cloned config stores information on usage in the same place for the original object. This is also the semantic of the copy constructor.
 
-#### Self-recording all available configuration parameters
+### Self-recording all available configuration parameters
 
 Once your program ran, you can read the summary of all values, their defaults, and their help texts.
 
@@ -356,7 +356,7 @@ Prints:
         config['features'] = ['time', 'spot'] # (list) Features for the agent; default: []
         config['weights'] = [1 2 3] # (asarray) Weigths for the agent; default: no initial weights
 
-#### Calling functions with named parameters:
+### Calling functions with named parameters:
 
         def create_network( depth=20, activation="relu", width=4 ):
             ...
@@ -367,14 +367,14 @@ We may use
 
 However, there is no magic - this function will mark all direct members (not children) as 'done' and will not record the default values of the function `create_network`. Therefore `usage_report` will be somewhat useless. This method will still catch unused variables as "unexpected keyword arguments". 
 
-#### Unique ID
+### Unique ID
 
 Another common use case is that we wish to cache some process in a complex operation. Assuming that the `config` describes all relevant parameters
 we can use `config.unique_id()` to obtain a unique hash ID for the given config.
 
 This can be used, for example, as file name for caching. See also `cdxbasics.subdir` below.
 
-#### Advanced **kwargs Handling
+### Advanced **kwargs Handling
 
 The `Config` class can be used to improve `kwargs` handling.
 Assume we have
@@ -401,7 +401,7 @@ Another pattern is to allow both `config` and `kwargs`:
             b = kwargs("b", 20)
             kwargs.done()
 
-## logger
+# logger
 
 Tools for defensive programming a'la the C++ ASSERT/VERIFY macros. Aim is to provide one line validation of inputs to functions with intelligible error messages:
 
@@ -412,7 +412,7 @@ Tools for defensive programming a'la the C++ ASSERT/VERIFY macros. Aim is to pro
         _log.verify( a==1, "'a' is not one but %s", a)
         _log.warn_if( a!=1, "'a' was not one but %s", a)
         
-#### Member functions; mostly self-explanatory:
+### Member functions; mostly self-explanatory:
 
 Exceptions independent of logging level
         
@@ -459,14 +459,14 @@ If-conditional functions
         prnt_if( cond, text, *args, **kwargs )      # with EOL
         write_if( cond, text, *args, **kwargs )     # without EOL
 
-## subdir
+# subdir
 
 A few tools to handle file i/o in a transparent way. The key idea is to provide transparent, concise pickle access to the file system in a manner similar to dictionary access - hence core file names are referred to as 'keys'. Files managed by `subdir` all have the same extension. From 0.2.60 `SubDir` supports different file formats:
 * PICKLE: standard pickling. Default extension 'pck'
 * JSON_PICKLE: uses the `jsonpickle` package. Default extension 'jpck'. The advantage of this format over PICKLE is that it is somewhat human-readable. However, `jsonpickle` uses compressed formats for complex objects such as `numpy` arrays, hence readablility is somewhat limited. It comes at cost of slower writing speeds.
 * JSON_PLAIN: calls `cdxbasics.util.plain()` to convert objects into plain Python objects before using `json` to write them. That means that deserialized data does not have the correct object structure. However, such files are much easier to read.
 
-#### Creating directories
+### Creating directories
 
 You can create directories using the `SubDir` class. Simply write
 
@@ -506,8 +506,8 @@ Be aware that when the operator `()` is called with two arguments, then it reads
 
 You can obtain a list of all sub directories in a directory by using `subDirs()`.
 
-#### I/O
-##### Reading
+### I/O
+#### Reading
 
 To read the data contained in a file 'file.pck' in our subdirectory with extension 'pck' use either of the following
 
@@ -545,7 +545,7 @@ Finally, you can also iterate through all existing files:
 
 To obtain a list of all files  in our directory which have the correct extension, use `keys()`.
 
-##### Writing
+#### Writing
 
 To write data, use any of
 
@@ -567,14 +567,43 @@ To write several files at once, write
 
 Note that when writing to an object, `subdir` will first write to a temporary file, and then rename this file into the target file name. The temporary file name is a `util.uniqueHash48` generated from the target file name, current time, process and thread ID, as well as the machines's UUID. This is done to reduce collisions between processes/machines accessing the same files. It does not remove collision risk entirely, though.
 
-##### Test existence of files
+#### Reading and Writing Versioned Files
+
+From 0.2.64 `SubDir` supports versioned files. If versions are used, then they *must* be used for both reading and writing.
+
+When a `version` is provided, then `write()` will write it in a block ahead of the main content of the file. In case of the PICKLE format, this is a byte string. In case of JSON_PLAIN and JSON_PICKLE this is line of text starting with `#` ahead of the file. (Note that this violated the JSON file format.)
+
+The point of writing short block ahead of the main data is that `read()` can read this version information back quickly before attempting to read the entire file. It does attempt so if its called with a `version` as well. In this case it will compare the read version with the provided version, and only return the main content of the file if versions match.
+
+**Examples:**
+
+Write a file:
+
+    from cdxbasics.subdir import sub_dir    
+    sub_dir = SubDir("!/test_version)
+    sub_dir.write("test", [1,2,3], version="0.0.1" )
+
+To read `[1,2,3]` from "test" we use the correct version:
+
+    _ = sub_dir.read("test", version="0.0.1") 
+
+We now try to use:
+
+    _ = sub_dir.read("test", version="0.0.2")
+
+This fails reading `[1,2,3]` from "test" as the versions do not match.
+Moreoever, `read()` will then attempt to delete the file "test". This can be turned off
+with the keyword `delete_wrong_version`.
+We do not do that below, so the file will be deleted, and `read()` will then return the default value `None`.
+
+### Test existence of files
 
 To test existence of 'file' in a directory, use one of
 
     subdir.exist('file')
     'file' in subdir
 
-#### Deleting files
+### Deleting files
 
 To delete a 'file', use any of the following:
 
@@ -592,47 +621,11 @@ Other file and directoru deletion methods:
 * `deleteAllContent`: delete all files with our extension, and all sub directories.
 * `eraseEverything`: delete everything
 
-#### Caching pattern:
-
-Our pattern assumes that each calcuation is determined by a number of parameters for which we can compute a unique (file) ID for caching results. Unique file IDs can be computed using `uniqueFileName48()`. Here is an example which assumes that `None` is not a valid return value for the underlying function code:
-
-
-    from cdxbasics.config import Config
-    from cdxbasics.subdir import SubDir, CacheMode, uniqueFileName48
-
-    def function_with_caching( config ):
-        # determine caching strategy
-        cache_mode = config.caching("mode", CacheMode.ON, CacheMode.MODES, "Caching strategy: " + CacheMode.HELP)
-        cache_dir  = config.caching("directory", "caching", str, "Caching directory")
-        cache_id   = config.function.unique_id(length=48)
-
-        # check whether we should delete any existing files
-        if cache_mode.delete:
-            cache_dir.delete(cache_id)
-
-        # read existing file, if desired and possible
-        data_of_my_function = cache_dir.read(cache_id) if cache_mode.read else None
-
-        # check whether we need to compute some data
-        if data_of_my_function is None:
-            ....
-            data_of_my_function = .... use config.function for settings
-            ....
-
-        # write back to disk
-        if cache_node.write:
-            cache_dir.write(cache_id, data_of_my_function)
-
-        return data_of_my_function
-
-See also the example for `CacheMode` below.
-
-
-## util
+# util
 
 A collection of utility functions.
 
-### uniqueHash
+## uniqueHash
 
     uniqueHash( *kargs, **kwargs )
     uniqueHash32( *kargs, **kwargs )
@@ -646,8 +639,6 @@ This is sometimes undesitable, for example when functions are configuration elem
 
     config = Config()
     config.f = lambda x : x**2
-
-
 
 To change this behavuour, use `uniqueHashExt( length : int, parse_functions : bool = False, parse_underscore : str = "nonee")` which returns a hash function of desired lengths with the option to parse elements starting with "`_`" as well.
 
@@ -697,7 +688,7 @@ Prototype code is to be implemented as follows:
 
         return ret
 
-### WriteLine
+## WriteLine
 
 A simple utility class to manage printing in a given line with carriage returns (`\r`).
 Essentially, it keeps track of the length what was printed so far at the current line. If a `\r` is encountered it will clear the rest of the line to avoid having residual text from the previous line.
@@ -720,7 +711,7 @@ Example 2 (line length is getting shorter)
         write("\r" + ("#" * (9-i)))
     write("\rProcess finished.\n")
 
-### Misc
+## Misc
 
 * `fmt()`: C++ style format function.
 * `plain()`: converts most combinations of standards elements or objects into plain list/dict structures.
@@ -745,7 +736,7 @@ Example 2 (line length is getting shorter)
 * `is_jupyter()` tries to assess whether the current environment is a jupyer IPython environment.
 This is experimental as it appears there is no safe way to do this. The current implemenentation checks whether the command which started the current process contains the string `jupyter`.
 
-## np
+# np
 
 A small number of statistical numpy functions which take a weight vector (distribution) into account, namely
 
@@ -765,7 +756,7 @@ Two further functions are used to compute binned statistics:
 
     
 
-## verbose
+# verbose
 
 **The `verbose` interface has changed in 0.2.36**
 
@@ -863,7 +854,7 @@ Returns
 
 The purpose of initializing functions usually with `quiet` is that they can be used accross different contexts without printing anything by default.
 
-## version
+# version
 
 Framework to keep track of versions of functions, and their dependencies. Main use case is a data pipeline where a changes in versions =down a dependency tree should trigger an update of the "full" version of the respective top level calculation.
 
@@ -926,7 +917,7 @@ You can also use strings to refer to dependencies. This functionality depends on
 
     print( r.version.full ) --> 0.0.4 { f: 0.0.01 }
 
-### Version aware I/O
+## Version aware I/O
 
 As a direct use case you can provide `version.unqiue_id48` to the `version` keyword of `SubDir.read` and `SubDir.write`. The latter will write the version string into the output file. The former will then read it back (by reading a small block of data), and check that the version written to the file matches the current version. If not, the file will be considered invalid; depending on the parameters to `read` the function will either return a default value, or will throw an exception.
 
@@ -937,16 +928,15 @@ As a direct use case you can provide `version.unqiue_id48` to the `version` keyw
     @version("0.0.1")
     def f( path, x, y, z ):
 
-        unique_file = uniqueHash48( x,y,z )
+        unique_file = uniqueHash48( x,y,z ) 
         unique_ver  = f.version.unique_id48
         subdir      = SubDir(path)
         data        = subdir.read( unique_file, None, version=unique_ver )
         if not data is None:
             return data
 
-        data = ... compute ...
+        data = compute(x,y,z)
 
         subdir.write( unique_file, data, version=unique_ver )
         return data
-
 

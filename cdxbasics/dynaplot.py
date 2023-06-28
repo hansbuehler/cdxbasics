@@ -14,22 +14,21 @@ _log = Logger(__file__)
 
 class DynamicAx(Deferred):
     """
-    Wrapper around an matplotlib axis returned
-    by DynamicFig, which is returned by figure().
-    All calls to the returned axis are delegated to
-    matplotlib with the amendmend that if any such function
-    returs a list with one member, it will just return
-    this member.
-    This caters for the very common use case plot() where
-    x,y are vectors. Assume y2 is an updated data set
-    In this case we can use
+    Wrapper around an matplotlib axis returned by DynamicFig, which is returned by figure().
 
+    All calls to the returned axis are delegated to matplotlib.
+    The results of deferred function calls are again deferred objects, allowing (mostly) to keep working in deferred mode.
+
+    figure.render()
+
+    Example
+    -------
         fig = figure()
         ax  = fig.add_subplot()
-        lns = ax.plot( x, y, ":" )    # 'lns' here is a Deferred object. Does not call plot() yet.
+        lns = ax.plot( x, y, ":" )[0] # plot() returns a deferred list, which then deferrs item acces
         fig.render()                  # renders the figure with the correct plots
                                       # and executes plot() which returns a list of Line2Ds
-        lns[0].set_ydata( y2 )        # now access result from plot
+        lns.set_ydata( y2 )           # now access result from plot
         fig.render()                  # update graph
     """
 
@@ -70,7 +69,7 @@ class DynamicAx(Deferred):
             return ax_sharey(other)
         ref_ax.sharey = types.MethodType(sharey,ref_ax)
 
-        # call all deferred functions
+        # call all deferred operations
         self._dereference( self.ax )
 
 class DynamicFig(Deferred):
