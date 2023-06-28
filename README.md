@@ -661,24 +661,27 @@ Typically, the user is allowed to set the desired `CacheMode` using a `Config` e
 
 **Prototype code is to be implemented as follows:**
 
-    from cdxbasics.util import CacheMode
+    from cdxbasics.util import CacheMode, uniqueHash48
     from cdxbasics.subdir import SubDir
     from cdxbasics.version import version
 
     @version("0.0.1")
+    def compute( *kargs, **kwargs ):
+        ... my function
+        return ...
+
     def compute_cached( *kargs, cache_mode : CacheMode, cache_dir : SubDir, **kargs ):
 
         # compute a unique hash from the input parameters.
-        # the default method used here may not work for all parameter
-        # types (most notable, uniqueHash48 will ignore members of any objects
-        # starting with '_'; see above)        
+        # the default method used here may not work for all parameter types
+        # (most notable, uniqueHash48 will ignore members of any objects starting with '_'; see above)        
 
         unique_id  = unqiueHash48( kargs, kwarg )   
 
         # obtain a unique summary of the version of this function
         # and all its dependents.
 
-        version_id = compute_cached.version.unique_id48
+        version_id = compute.version.unique_id48
 
         # delete existing cache
         # if requested by the user
@@ -700,7 +703,8 @@ Typically, the user is allowed to set the desired `CacheMode` using a `Config` e
             if not ret is None:
                 return ret                                 
         
-        # compute new object if need be
+        # compute new object
+        # using main function
 
         ret = compute( *kargs, **kwargs )
 
