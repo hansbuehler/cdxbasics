@@ -506,8 +506,7 @@ Be aware that when the operator `()` is called with two arguments, then it reads
 
 You can obtain a list of all sub directories in a directory by using `subDirs()`.
 
-### I/O
-#### Reading
+### Reading
 
 To read the data contained in a file 'file' in our subdirectory with the extension used for the sub directory, use either of the following
 
@@ -545,7 +544,7 @@ Finally, you can also iterate through all existing files:
 
 To obtain a list of all files  in our directory which have the correct extension, use `keys()`.
 
-#### Writing
+### Writing
 
 To write data, use any of
 
@@ -567,7 +566,7 @@ To write several files at once, write
 
 Note that when writing to an object, `subdir` will first write to a temporary file, and then rename this file into the target file name. The temporary file name is a `util.uniqueHash48` generated from the target file name, current time, process and thread ID, as well as the machines's UUID. This is done to reduce collisions between processes/machines accessing the same files. It does not remove collision risk entirely, though.
 
-#### Reading and Writing Versioned Files
+### Reading and Writing Versioned Files
 
 From 0.2.64 `SubDir` supports versioned files. If versions are used, then they *must* be used for both reading and writing.
 
@@ -615,7 +614,7 @@ All of these are _silent_, and will not throw errors if 'file' does not exist. I
 
     subdir.delete(file, raiseOnError=True)
 
-Other file and directoru deletion methods:
+#### Other file and directory deletion methods:
 
 * `deleteAllKeys`: delete all files in the directory, but do not delete sub directories or files with extensions different to our own.
 * `deleteAllContent`: delete all files with our extension, and all sub directories.
@@ -640,7 +639,11 @@ This is sometimes undesitable, for example when functions are configuration elem
     config = Config()
     config.f = lambda x : x**2
 
-To change this behavuour, use `uniqueHashExt( length : int, parse_functions : bool = False, parse_underscore : str = "nonee")` which returns a hash function of desired lengths with the option to parse elements starting with "`_`" as well.
+To change default behaviour, use
+
+    myUniqueHash = uniqueHashExt( length = 48, parse_functions = True, parse_underscore = "protected")
+    
+ The returned function `myUniqueHash` will parse functions, and will also include `protect` members.
 
 ## CacheMode
 
@@ -656,37 +659,60 @@ It implements the following decision matrix
 
 Typically, the user is allowed to set the desired `CacheMode` using a `Config` element. The corresponding `CacheMode` object then implements the properties `read`, `write`, `delete` and `del_incomp`.
 
-Prototype code is to be implemented as follows:
+**Prototype code is to be implemented as follows:**
 
-    def compute_cached( ..., cache_mode, cache_dir ):
+    from cdxbasics.util import CacheMode
+    from cdxbasics.subdir import SubDir
+    from cdxbasics.version import version
 
-        unique_id = unqiueHash48( ... )   # compute a unique hash for the object
+    @version("0.0.1")
+    def compute_cached( *kargs, cache_mode : CacheMode, cache_dir : SubDir, **kargs ):
 
-        # delete existing cache if requested
+        # compute a unique hash from the input parameters.
+        # the default method used here may not work for all parameter
+        # types (most notable, uniqueHash48 will ignore members of any objects
+        # starting with '_'; see above)        
+
+        unique_id  = unqiueHash48( kargs, kwarg )   
+
+        # obtain a unique summary of the version of this function
+        # and all its dependents.
+
+        version_id = compute_cached.version.unique_id48
+
+        # delete existing cache
+        # if requested by the user
+
         if cache_mode.delete:
             cache_dir.delete(unique_id)
 
         # attempt to read cache
-        ret = cache_dir.read(unique_id) if cache_mode.read else None
+        # by providing a version we ensure that changes to the function
+        # code will trigger an update of the cache by deleting any
+        # existing files with different versions
+
+        if cache_mode.read:
+            ret = cache_dir.read(unique_id, 
+                                 default=None, 
+                                 version=version_id,
+                                 delete_wrong_version=cache_model.del_incomp
+                                 )
+            if not ret is None:
+                return ret                                 
         
-        # validate cache, e.g. is it of the right version
-        if not ret is None:
-            # validate that 'ret is a valid object
-            if not is_valid(ret):
-                if cache_model.del_incomp:
-                    cache_dir.delete(unqiue_id)
-                ret = None
+        # compute new object if need be
 
-        # compute new object if need be        
-        if ret is None:
-            # compute new object
-            ret = ...
+        ret = compute( *kargs, **kwargs )
 
-        # write new object to disk
+        # write new object to disk if so desired
+        # include version
+
         if cache_mode.write:
-            cache_dir.write(unique_id, ret)
+            cache_dir.write(unique_id, ret, version=version_id )
 
         return ret
+
+A decorator with associated behaviour is being built.
 
 ## WriteLine
 
@@ -856,7 +882,7 @@ The purpose of initializing functions usually with `quiet` is that they can be u
 
 # version
 
-Framework to keep track of versions of functions, and their dependencies. Main use case is a data pipeline where a changes in versions =down a dependency tree should trigger an update of the "full" version of the respective top level calculation.
+Framework to keep track of versions of functions, and their dependencies. Main use case is a data pipeline where a changes in versions down a dependency tree should trigger an update of the "full" version of the respective top level calculation.
 
 The framework relies on the `@version` decorator which works for both classes and functions.
 Applied to either a function or class it will add a member `version` which has the following properties:
@@ -940,3 +966,4 @@ As a direct use case you can provide `version.unqiue_id48` to the `version` keyw
         subdir.write( unique_file, data, version=unique_ver )
         return data
 
+For a more advanced example with caching, [see above](#CacheMode)

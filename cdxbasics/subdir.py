@@ -529,7 +529,14 @@ class SubDir(object):
             raise KeyError(key)
         return default
 
-    def read( self, key : str, default = None, raiseOnError : bool = False, *, version : str = None, delete_wrong_version : bool = True, ext : str = None, fmt : Format = None ):
+    def read( self, key : str,
+                    default = None,
+                    raiseOnError : bool = False,
+                    *,
+                    version : str = None,
+                    ext : str = None,
+                    fmt : Format = None,
+                    delete_wrong_version : bool = True ):
         """
         Read pickled data from 'key' if the file exists, or return 'default'
         -- Supports 'key' containing directories
@@ -582,7 +589,8 @@ class SubDir(object):
                 Set to None to use directory's default
             fmt : Format
                 File format or None to use the directory's default.
-                Note that 'fmt' cannot be a list even if 'key' is
+                Note that 'fmt' cannot be a list even if 'key' is.
+                Note that changing the format does not automatically change the extension.
 
         Returns
         -------
@@ -719,7 +727,13 @@ class SubDir(object):
             return False
         return True
 
-    def write( self, key : str, obj, raiseOnError : bool = True, *, version : str = None, ext : str = None, fmt : Format = None ) -> bool:
+    def write( self, key : str,
+                     obj,
+                     raiseOnError : bool = True,
+                     *,
+                     version : str = None,
+                     ext : str = None,
+                     fmt : Format = None ) -> bool:
         """
         Pickles 'obj' into key.
         -- Supports 'key' containing directories
@@ -758,8 +772,9 @@ class SubDir(object):
                 Extension, or list thereof if 'key' is a list.
                 Set to None to use default extension.
             fmt : Format
-                Overwrite which is either PICKLE or JSON_PICKLE.
-                Use None to use the directory's default
+                Overwrite format.
+                Note that 'fmt' cannot be a list even if 'key' is.
+                Note that changing the format does not automatically change the extension.
 
         Returns
         -------
@@ -1075,7 +1090,14 @@ class SubDir(object):
 
     # -- dict-like interface --
 
-    def __call__(self, keyOrSub : str, default = RETURN_SUB_DIRECTORY, *, ext : str = None, fmt : Format = None ):
+    def __call__(self, keyOrSub : str,
+                       default = RETURN_SUB_DIRECTORY,
+                       raiseOnError : bool = False,
+                       *,
+                       version : str = None,
+                       ext : str = None,
+                       fmt : Format = None,
+                       delete_wrong_version : bool = True):
         """
         Return either the value of a sub-key (file), or return a new sub directory.
         If only one argument is used, then this function returns a new sub directory.
@@ -1099,8 +1121,27 @@ class SubDir(object):
             keyOrSub : str
                 identify the object requested. Should be a string, or a list.
             default:
-                If specified, this function reads 'keyOrSub' with read( keyOrSub, default )
+                If specified, this function reads 'keyOrSub' with read( keyOrSub, default, *kargs, **kwargs )
                 If not specified, then this function calls subDir( keyOrSub ).
+
+        The following keywords are only relevant when reading a file.
+        They echo the parameters of read()
+
+            raiseOnError : bool
+                Whether to raise an exception if reading an existing file failed.
+                By default this function fails silently and returns the default.
+            version : str
+                If not None, specifies the version of the current code base.
+                In this case, this version will be compared to the version of the file being read.
+                If they do not match, read fails (either by returning default or throwing an exception).
+            delete_wrong_version : bool
+                If True, and if a wrong version was found, delete the file.
+            ext : str
+                Extension overwrite, or a list thereof if key is a list
+                Set to None to use directory's default
+            fmt : Format
+                File format or None to use the directory's default.
+                Note that 'fmt' cannot be a list even if 'key' is
             ext : str
                 Extension for a new sub-directory, or extension of the file
                 Set to None to use the directory's default.
@@ -1118,7 +1159,13 @@ class SubDir(object):
                 if not isinstance(keyOrSub, Collection): _log.throw("'keyOrSub' must be a string or an iterable object. Found type '%s;", type(keyOrSub))
                 return [ SubDir(k,parent=self,ext=ext,fmt=fmt) for k in keyOrSub ]
             return SubDir(keyOrSub,parent=self,ext=ext,fmt=fmt)
-        return self.read( key=keyOrSub, default=default,ext=ext,fmt=fmt )
+        return self.read( key=keyOrSub,
+                          default=default,
+                          raiseOnError=raiseOnError,
+                          version=version,
+                          delete_wrong_version=delete_wrong_version,
+                          ext=ext,
+                          fmt=fmt )
 
     def __getitem__( self, key ):
         """
