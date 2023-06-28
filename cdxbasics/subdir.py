@@ -573,7 +573,8 @@ class SubDir(object):
                 By default this function fails silently and returns the default.
             version : str
                 If not None, specifies the version of the current code base.
-                In this case, the
+                In this case, this version will be compared to the version of the file being read.
+                If they do not match, read fails (either by returning default or throwing an exception).
             delete_wrong_version : bool
                 If True, and if a wrong version was found, delete the file.
             ext : str

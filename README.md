@@ -500,7 +500,7 @@ You can also use the `()` operator to generate sub directories. This operator is
 
     parent = SubDir("~/parent")
     subdir = parent("subdir")                                   # shares extension and format with parent
-    subdir = parent("subdir", ext="bin", format=SubDir.PICKLE)  # change extension and format
+    subdir = parent("subdir", ext="bin", fmt=SubDir.PICKLE)  # change extension and format
 
 Be aware that when the operator `()` is called with two arguments, then it reads files; see below.
 
@@ -509,18 +509,18 @@ You can obtain a list of all sub directories in a directory by using `subDirs()`
 ### I/O
 #### Reading
 
-To read the data contained in a file 'file.pck' in our subdirectory with extension 'pck' use either of the following
+To read the data contained in a file 'file' in our subdirectory with the extension used for the sub directory, use either of the following
 
     data = subdir.read("file")                 # returns the default if file is not found
     data = subdir.read("file", default=None)   # returns the default if file is not found
 
-This function will return `None` or the default if 'file' does not exist. You can make it throw an error by calling `subdir.read("file", throwOnError=True)` instead.
+This function will return `None` or the default if 'file' does not exist with the respective extension. You can make it throw an error by calling `subdir.read("file", throwOnError=True)` instead.
 
 You may specify a different extension:
 
     data = subdir.read("file", ext="bin")
 
-Specify a different extension and a different format. Specifying a different format for `read` does not change the extension automatically, hence you may want to set this explicitly at the same time:
+Specifying a different format for `read` does *not* change the extension automatically, hence you may want to set this explicitly at the same time:
 
     data = subdir.read("file", ext="json", fmt=Subdir.JSON_PLAIN )
 
