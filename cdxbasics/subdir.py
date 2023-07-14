@@ -495,7 +495,7 @@ class SubDir(object):
                 ext = [ ext ] * l
             else:
                 if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
-            return [ self._read(reader=reader,key=k,default=d,raiseOnError=raiseOnError,ext=e) for k, d, e in zip(key,default,ext) ]
+            return [ self._read_reader(reader=reader,key=k,default=d,raiseOnError=raiseOnError,ext=e) for k, d, e in zip(key,default,ext) ]
 
         # deleted directory?
         if self._path is None:
@@ -530,7 +530,7 @@ class SubDir(object):
         if raiseOnError:
             raise KeyError(key, fullFileName)
         return default
-        
+
     def _read( self, key : str,
                     default = None,
                     raiseOnError : bool = False,
@@ -544,6 +544,7 @@ class SubDir(object):
         """ See read() """
         fmt     = fmt if not fmt is None else self._fmt
         version = str(version) if not version is None else None
+
         def reader( key, fullFileName, default ):
             test_version = "(unknown)"
             if fmt == Format.PICKLE:
@@ -558,7 +559,7 @@ class SubDir(object):
                     if ok:
                         if check_version_only:
                             return True
-                        return pickle.load(f) 
+                        return pickle.load(f)
             else:
                 with open(fullFileName,"rt",encoding="utf-8") as f:
                     # handle versioning
@@ -580,7 +581,7 @@ class SubDir(object):
                             return jsonpickle.decode( f.read() )
                         else:
                             assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
-                            return json.loads( f.read() ) 
+                            return json.loads( f.read() )
             # delete a wrong version
             deleted = ""
             if delete_wrong_version:
@@ -699,7 +700,7 @@ class SubDir(object):
         -------
             True or False
         """
-        
+
         return self._read( key=key,default=None,raiseOnError=raiseOnError,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,check_version_only=True )
 
 
@@ -716,7 +717,7 @@ class SubDir(object):
 
         See additional comments for read()
         """
-        def reader( key, fullFileName, default, raiseOnError, check_version_only ):
+        def reader( key, fullFileName, default ):
             with open(fullFileName,"rt",encoding="utf-8") as f:
                 line = f.readline()
                 if len(line) > 0 and line[-1] == '\n':
@@ -1166,7 +1167,7 @@ class SubDir(object):
         # single key
         fullFileName = self.fullKeyName(key, ext=ext)
         return os.path.getsize(fullFileName)
-    
+
     # -- dict-like interface --
 
     def __call__(self, keyOrSub : str,
