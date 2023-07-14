@@ -570,9 +570,12 @@ Note that when writing to an object, `subdir` will first write to a temporary fi
 
 From 0.2.64 `SubDir` supports versioned files. If versions are used, then they *must* be used for both reading and writing.
 
-When a `version` is provided, then `write()` will write it in a block ahead of the main content of the file. In case of the PICKLE format, this is a byte string. In case of JSON_PLAIN and JSON_PICKLE this is line of text starting with `#` ahead of the file. (Note that this violated the JSON file format.)
+When a `version` is provided, then `write()` will write it in a block ahead of the main content of the file. In case of the PICKLE format, this is a byte string. In case of JSON_PLAIN and JSON_PICKLE this is line of text starting with `#` ahead of the file. (Note that this violates
+ the JSON file format.)
 
 The point of writing short block ahead of the main data is that `read()` can read this version information back quickly before attempting to read the entire file. It does attempt so if its called with a `version` as well. In this case it will compare the read version with the provided version, and only return the main content of the file if versions match.
+
+Use `is_version()` to check whether a given file has a specific version. This function only reads the information required to obtain the information and can be much faster than reading the whole file if the file size is big.
 
 **Examples:**
 

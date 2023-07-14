@@ -453,6 +453,40 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual(fn,fd1+"test/file.bin")
         sub.eraseEverything()
 
+        # test versioning
+        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir")
+        version = "1.0.0"
+        sub.write("test", "hans", version=version )
+        r = sub.read("test", version=version )
+        self.assertEqual(r, "hans")
+        r = sub.read("test", "nothans", version="2.0.0", delete_wrong_version=False )
+        self.assertEqual(r, "nothans")
+        self.assertTrue(sub.exists("test"))
+        r = sub.is_version("test", version=version )
+        self.assertTrue(r)
+        r = sub.is_version("test", version="2.0.0" )
+        self.assertFalse(r)
+        r = sub.read("test", "nothans", version="2.0.0", delete_wrong_version=True )
+        self.assertFalse(sub.exists("test"))
+        sub.eraseEverything()
+
+        # test JSON
+        x = np.ones((10,))
+        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", fmt=SubDir.JSON_PICKLE )
+        sub.write("test", x)
+        r = sub.read("test", None)
+        self.assertEqual( list(x), list(r) )
+        self.assertEqual(sub.ext, ".jpck")
+        sub.eraseEverything()
+
+        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", fmt=SubDir.JSON_PLAIN )
+        sub.write("test", x)
+        r = sub.read("test", None)
+        self.assertEqual( list(x), list(r) )
+        self.assertEqual(sub.ext, ".json")
+        sub.eraseEverything()
+
+
     def test_cache_mode(self):
 
         on = CacheMode("on")

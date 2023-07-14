@@ -700,7 +700,6 @@ class SubDir(object):
         -------
             True or False
         """
-
         return self._read( key=key,default=None,raiseOnError=raiseOnError,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,check_version_only=True )
 
 
