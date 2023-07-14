@@ -273,15 +273,17 @@ class SubDir(object):
             name = _remove_trailing(name)
             if name == "" and parent is None:
                 name = "."
-            if name[:1] in ['.', '!', '~']:
+            if name[:1] in ['!', '~'] or name[:2] == "./" or name == ".":
                 if len(name) > 1 and name[1] != '/': _log.throw( "If 'name' starts with '%s', then the second character must be '/' (or '\\' on windows). Found 'name' set to '%s'", name[:1], _name)
                 if name[0] == '!':
                     name = SubDir.tempDir()[:-1] + name[1:]
                 elif name[0] == ".":
                     name = SubDir.workingDir()[:-1] + name[1:]
                 else:
-                    assert name[0] == "~"
+                    assert name[0] == "~", ("Internal error", name[0] )
                     name = SubDir.userDir()[:-1] + name[1:]
+            elif name == "..":
+                _log.throw("Cannot use name '..'")
             elif not parent is None:
                 # path relative to 'parent'
                 name = (parent._path + name) if not parent.is_none else name
@@ -458,7 +460,7 @@ class SubDir(object):
 
     # -- read --
 
-    def _read( self, reader, key : str, default, raiseOnError : bool, *, ext : str = None ):
+    def _read_reader( self, reader, key : str, default, raiseOnError : bool, *, ext : str = None ):
         """
         Utility function for read() and readLine()
 
@@ -511,7 +513,7 @@ class SubDir(object):
         fullFileName = self.fullKeyName(key,ext=ext)
         if not os.path.exists(fullFileName):
             if raiseOnError:
-                raise KeyError(key)
+                raise KeyError(key,fullFileName)
             return default
         if not os.path.isfile(fullFileName): _log.throw( "Cannot read %s: object exists, but is not a file (full path %s)", key, fullFileName )
 
@@ -526,8 +528,75 @@ class SubDir(object):
             except Exception as e:
                 _log.warning("Cannot read %s; attempt to delete file failed (full path %s): %s",key,fullFileName,str(e))
         if raiseOnError:
-            raise KeyError(key)
+            raise KeyError(key, fullFileName)
         return default
+        
+    def _read( self, key : str,
+                    default = None,
+                    raiseOnError : bool = False,
+                    *,
+                    version : str = None,
+                    ext : str = None,
+                    fmt : Format = None,
+                    delete_wrong_version : bool = True,
+                    check_version_only : bool = False
+                    ):
+        """ See read() """
+        fmt     = fmt if not fmt is None else self._fmt
+        version = str(version) if not version is None else None
+        def reader( key, fullFileName, default ):
+            test_version = "(unknown)"
+            if fmt == Format.PICKLE:
+                with open(fullFileName,"rb") as f:
+                    # handle version as byte string
+                    ok = True
+                    if not version is None:
+                        test_len     = int( f.read( 1 )[0] )
+                        test_version = f.read(test_len)
+                        test_version = test_version.decode("utf-8")
+                        ok           = test_version == version
+                    if ok:
+                        if check_version_only:
+                            return True
+                        return pickle.load(f) 
+            else:
+                with open(fullFileName,"rt",encoding="utf-8") as f:
+                    # handle versioning
+                    ok = True
+                    if not version is None:
+                        test_version = f.readline()
+                        if test_version[:2] != "# ":
+                            raise EnvironmentError("Error reading '%s': file does not appear to contain a version (it should start with '# ')" % fullFileName)
+                        test_version = test_version[2:]
+                        if test_version[-1:] == "\n":
+                            test_version = test_version[:-1]
+                        ok = test_version == version
+                    if ok:
+                        if check_version_only:
+                            return ok
+                        # read
+                        if fmt == Format.JSON_PICKLE:
+                            if jsonpickle is None: raise ModuleNotFoundError("jsonpickle")
+                            return jsonpickle.decode( f.read() )
+                        else:
+                            assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
+                            return json.loads( f.read() ) 
+            # delete a wrong version
+            deleted = ""
+            if delete_wrong_version:
+                try:
+                    os.remove(fullFileName)
+                    e = None
+                except Exception as e_:
+                    e = str(e_)
+            if check_version_only:
+                return False
+            if not raiseOnError:
+                return default
+            deleted = " (file was deleted)" if e is None else " (attempt to delete file failed: %s)" % e
+            raise EnvironmentError("Error reading '%s': found version '%s' not '%s'%s" % (fullFileName,str(test_version),str(version),deleted))
+
+        return self._read_reader( reader=reader, key=key, default=default, raiseOnError=raiseOnError, ext=ext )
 
     def read( self, key : str,
                     default = None,
@@ -536,7 +605,9 @@ class SubDir(object):
                     version : str = None,
                     ext : str = None,
                     fmt : Format = None,
-                    delete_wrong_version : bool = True ):
+                    delete_wrong_version : bool = True,
+                    check_version_only : bool = False
+                    ):
         """
         Read pickled data from 'key' if the file exists, or return 'default'
         -- Supports 'key' containing directories
@@ -597,54 +668,40 @@ class SubDir(object):
             For a single 'key': Content of the file if successfully read, or 'default' otherwise.
             If 'key' is a list: list of contents.
         """
-        fmt     = fmt if not fmt is None else self._fmt
-        version = str(version) if not version is None else None
-        def reader( key, fullFileName, default ):
-            test_version = "(unknown)"
-            if fmt == Format.PICKLE:
-                with open(fullFileName,"rb") as f:
-                    # handle version as byte string
-                    ok = True
-                    if not version is None:
-                        test_len     = int( f.read( 1 )[0] )
-                        test_version = f.read(test_len)
-                        test_version = test_version.decode("utf-8")
-                        ok           = test_version == version
-                    if ok:
-                        return pickle.load(f)
-            else:
-                with open(fullFileName,"rt",encoding="utf-8") as f:
-                    # handle versioning
-                    ok = True
-                    if not version is None:
-                        test_version = f.readline()
-                        if test_version[:2] != "# ":
-                            raise EnvironmentError("Error reading '%s': file does not appear to contain a version (it should start with '# ')" % fullFileName)
-                        test_version = test_version[2:]
-                        if test_version[-1:] == "\n":
-                            test_version = test_version[:-1]
-                        ok = test_version == version
-                    if ok:
-                        # read
-                        if fmt == Format.JSON_PICKLE:
-                            if jsonpickle is None: raise ModuleNotFoundError("jsonpickle")
-                            return jsonpickle.decode( f.read() )
-                        else:
-                            assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
-                            return json.loads( f.read() )
-            # delete a wrong version
-            deleted = ""
-            if delete_wrong_version:
-                try:
-                    os.remove(fullFileName)
-                    deleted = " (file was deleted)"
-                except Exception as e:
-                    deleted = " (attempt to delete file failed: %s)" % str(e)
-            raise EnvironmentError("Error reading '%s': found version '%s' not '%s'%s" % (fullFileName,str(test_version),str(version),deleted))
-
-        return self._read( reader=reader, key=key, default=default, raiseOnError=raiseOnError, ext=ext )
+        return self._read( key=key,default=default,raiseOnError=raiseOnError,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,check_version_only=False )
 
     get = read
+
+    def is_version( self, key : str, version : str = None, raiseOnError : bool = False, *, ext : str = None, fmt : Format = None, delete_wrong_version : bool = True ):
+        """
+        Compares the version of 'key' with 'version'.
+
+        Parameters
+        ----------
+            key : str
+                A core filename ("key") or a list thereof. The 'key' may contain subdirectory information '/'.
+            version : str
+                Specifies the version of the current code base.
+            raiseOnError : bool
+                Whether to raise an exception if accessing an existing file failed (e.g. if it is a directory).
+                By default this function fails silently and returns the default.
+            delete_wrong_version : bool
+                If True, and if a wrong version was found, delete the file.
+            ext : str
+                Extension overwrite, or a list thereof if key is a list
+                Set to None to use directory's default
+            fmt : Format
+                File format or None to use the directory's default.
+                Note that 'fmt' cannot be a list even if 'key' is.
+                Note that changing the format does not automatically change the extension.
+
+        Returns
+        -------
+            True or False
+        """
+        
+        return self._read( key=key,default=None,raiseOnError=raiseOnError,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,check_version_only=True )
+
 
     def readString( self, key : str, default = None, raiseOnError : bool = False, *, ext : str = None ) -> str:
         """
@@ -659,13 +716,13 @@ class SubDir(object):
 
         See additional comments for read()
         """
-        def reader( key, fullFileName, default ):
+        def reader( key, fullFileName, default, raiseOnError, check_version_only ):
             with open(fullFileName,"rt",encoding="utf-8") as f:
                 line = f.readline()
                 if len(line) > 0 and line[-1] == '\n':
                     line = line[:-1]
                 return line
-        return self._read( reader=reader, key=key, default=default, raiseOnError=raiseOnError, ext=ext )
+        return self._read_reader( reader=reader, key=key, default=default, raiseOnError=raiseOnError, ext=ext )
 
     # -- write --
 
@@ -1030,7 +1087,7 @@ class SubDir(object):
                 ext = [ ext ] * l
             else:
                 if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
-            return [ self.getCreationTime(k,e) for k,e in zip(key,ext) ]
+            return [ self.getCreationTime(k,ext=e) for k,e in zip(key,ext) ]
         # empty directory
         if self._path is None:
             return None
@@ -1054,7 +1111,7 @@ class SubDir(object):
                 ext = [ ext ] * l
             else:
                 if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
-            return [ self.getLastModificationTime(k,e) for k,e in zip(key,ext) ]
+            return [ self.getLastModificationTime(k,ext=e) for k,e in zip(key,ext) ]
         # empty directory
         if self._path is None:
             return None
@@ -1078,7 +1135,7 @@ class SubDir(object):
                 ext = [ ext ] * l
             else:
                 if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
-            return [ self.getLastAccessTime(k,e) for k,e in zip(key,ext) ]
+            return [ self.getLastAccessTime(k,ext=e) for k,e in zip(key,ext) ]
         # empty directory
         if self._path is None:
             return None
@@ -1088,6 +1145,28 @@ class SubDir(object):
             return None
         return datetime.datetime.fromtimestamp(os.path.getatime(fullFileName))
 
+    def getFileSize( self, key : str, *, ext : str = None ) -> int:
+        """
+        Returns the file size of 'key', or None if file was not found.
+        Works with key as list.
+        See comments on os.path.getatime() for compatibility
+        """
+        # vector version
+        if not isinstance(key,str):
+            _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
+            l = len(key)
+            if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
+                ext = [ ext ] * l
+            else:
+                if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
+            return [ self.getFileSize(k,ext=e) for k,e in zip(key,ext) ]
+        # empty directory
+        if self._path is None:
+            return None
+        # single key
+        fullFileName = self.fullKeyName(key, ext=ext)
+        return os.path.getsize(fullFileName)
+    
     # -- dict-like interface --
 
     def __call__(self, keyOrSub : str,
@@ -1097,7 +1176,7 @@ class SubDir(object):
                        version : str = None,
                        ext : str = None,
                        fmt : Format = None,
-                       delete_wrong_version : bool = True):
+                       delete_wrong_version : bool = True ):
         """
         Return either the value of a sub-key (file), or return a new sub directory.
         If only one argument is used, then this function returns a new sub directory.

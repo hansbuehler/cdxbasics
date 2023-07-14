@@ -693,7 +693,9 @@ class Config(OrderedDict):
         if key[0] == "_" or key in self.__dict__:
             OrderedDict.__setattr__(self, key, value )
         elif isinstance( value, Config ):
-            _log.warn_if( len(value._recorder) > 0, "Warning: when assigning a Config to another Config, all existing usage will be reset. The 'recorder' of the assignee will be set ot the recorder of the receiving Config" )
+            _log.warn_if( len(value._recorder) > 0, "Warning: when assigning a used Config to another Config, all existing usage will be reset. "
+                                                    "The 'recorder' of the assignee will be set ot the recorder of the receiving Config. "
+                                                    "Make a 'clean_copy()' to avoid this warning.")
             value._name  = self._name + "." + key
             def update_recorder( config ):
                 config._recorder = self._recorder

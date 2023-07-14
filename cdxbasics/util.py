@@ -515,10 +515,11 @@ def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscor
                 assert not isinstance(inn, list)
                 inn_ = sorted(inn.keys())
                 for k in inn_:
-                    if pi == 0 and k[:1] == '_':
-                        continue
-                    if pi == 1 and k[:1] == '__':
-                        continue
+                    if isinstance(k,str):
+                        if pi == 0 and k[:1] == '_':
+                            continue
+                        if pi == 1 and k[:1] == '__':
+                            continue
                     update(k)
                     visit(inn[k])
                 return
