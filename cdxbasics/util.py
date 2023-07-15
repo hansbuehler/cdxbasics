@@ -149,7 +149,7 @@ def fmt_list( lst : list, none : str = "-", link : str = "and" ) -> str:
 
     Parameters
     ----------
-        lst  : list
+        lst  : list. The list() operator is applied to it, so it will resolve dictionaries and generators.
         none : string used when list was empty
         link : string used to connect the last item. Default is 'and'
                If the list is [1,2,3] then the function will return 1, 2 and 3
@@ -160,11 +160,11 @@ def fmt_list( lst : list, none : str = "-", link : str = "and" ) -> str:
     """
     if lst is None:
         return str(none)
+    lst  = list(lst)
     if len(lst) == 0:
         return none
     if len(lst) == 1:
         return str(lst[0])
-
     link = str(link) if not link is None else ""
     link = (" " + link + " ") if len(link)>0 else ", "
     s    = ""
@@ -272,8 +272,22 @@ def fmt_datetime(dt : datetime.datetime) -> str:
     if isinstance(dt, datetime.datetime):
         return "%04ld-%02ld-%02ld %02ld:%02ld:%02ld" % ( dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second )
     if isinstance(dt, datetime.date):
-        return "%04ld-%02ld-%02ld" % ( dt.year, dt.month, dt.day )
-    assert isinstance(dt, datetime.time), "'dt' must be datetime, date, or time. Found %s" % type(dt)
+        return fmt_date(dt)
+    assert isinstance(dt, datetime.time), "'dt' must be datetime.datetime, datetime.date, or datetime.time. Found %s" % type(dt)
+    return fmt_time(dt)
+
+def fmt_date(dt : datetime.date) -> str:
+    """ Returns string for 'dt' of the form YYYY-MM-DD """
+    if isinstance(dt, datetime.datetime):
+        dt = dt.date()
+    assert isinstance(dt, datetime.date), "'dt' must be datetime.date. Found %s" % type(dt)
+    return "%04ld-%02ld-%02ld" % ( dt.year, dt.month, dt.day )
+
+def fmt_time(dt : datetime.time) -> str:
+    """ Returns string for 'dt' of the form HH:MM:SS """
+    if isinstance(dt, datetime.datetime):
+        dt = dt.time()
+    assert isinstance(dt, datetime.time), "'dt' must be datetime.time. Found %s" % type(dt)
     return "%02ld:%02ld:%02ld" % ( dt.hour, dt.minute, dt.second )
 
 def fmt_now() -> str:
