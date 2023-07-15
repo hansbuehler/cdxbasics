@@ -950,6 +950,108 @@ You can also use strings to refer to dependencies. This functionality depends on
 
     print( r.version.full ) --> 0.0.4 { f: 0.0.01 }
 
+## cached
+
+Framework for caching versioned functions.
+
+The core tennets are:
+
+1. Cached functions have versions. If the version of a cached file differs from the current function version, do not use it. Versioning is implemented using `cdxbasics.version.version`.
+
+2. Ability to control the use of the cache dynamically. The user can chose to use, ignore or update the cache. This is controlled using `cdxbasics.util.CacheMode`. 
+Control extends to dependent functions, i.e. we can force an update of a top level function if a dependent function needs an update.
+
+3. Transparent tracing: by default caching will provide detailled information about what is happening. This can be controlled using the `cache_verbose` parameter to `Cache`, which uses `cdxbasics.verbose.Context`.
+
+Here are some examples for managing caching:
+
+    from cdxbasics.cached import version, cached, Cache
+    
+    # the function f,g are not cached but have versions
+    @version("0.0.1")
+    def f(x,y):
+        return x*y    
+    @version("0.0.2", dependencies=[f])
+    def g(x,y):
+        return f(-x,y)
+    
+    # the cached function 'my_func' depends on g and therefore also on f
+    @cached("0.0.3", dependencies=[g])
+    def my_func( x,y, cache=None ):
+        return g(2*x,y)
+
+    # the casched function 'my_big_func' depends on 'my_func' and therefore also on g,f
+    @cached("0.0.4", dependencies=[my_func])
+    def my_big_func(x,y,z, cache=None ):
+        r = my_func(x,y,cache=cache)
+        return r*z
+        
+    # test versioning
+    print("Version", my_big_func.version) # --> 0.0.4 { my_func: 0.0.3 { g: 0.0.2 { f: 0.0.1 } } }
+
+    # function call without caching
+    r = my_big_func(2,3,4)                # does not generate a cache: 'cache' argument not provided
+
+    # delete existing caches
+    print("\nDelete existing cache")
+    cache = Cache(cache_mode="clear")     # path defaults to !/.cached (e.g. tempdir/.cached)
+    r = my_big_func(2,3,4,cache=cache)    # generates the cache for my_big_func and my_func 
+
+    # test caching
+    print("\nGenerate new cache")
+    cache = Cache()                       # path defaults to !/.cached (e.g. tempdir/.cached)
+    r = my_big_func(2,3,4,cache=cache)    # generates the cache for my_big_func and my_func 
+    print("\nReading cache")
+    r = my_big_func(2,3,4,cache=cache)    # reads cache for my_big_func
+
+    # update
+    print("\nUpdating all cached objects")
+    cache_u = Cache(cache_mode="update")
+    r = my_big_func(2,3,4,cache=cache_u)  # updates the caches for my_big_func, my_func
+    print("\nReading cache")
+    r = my_big_func(2,3,4,cache=cache)    # reads cache for my_big_func
+
+    # update only top level cache
+    print("\nUpdating only 'my_big_func'")
+    cache_lu = Cache(cache_mode="on", update=[my_big_func] )
+    r = my_big_func(2,3,4,cache=cache_lu) # updates the cache for my_big_func using the cache for my_func
+    print("\nReading cache")
+    r = my_big_func(2,3,4,cache=cache)    # reads cached my_big_func
+
+Here is the output of above code block: it also shows the aforementioned transparent trading.
+
+    Version 0.0.4 { my_func: 0.0.3 { g: 0.0.2 { f: 0.0.1 } } }
+
+    Delete existing cache
+    00: Deleted existing 'my_big_func' cache C:/Users/hansb/AppData/Local/Temp/.cache/my_big_func_6ac240bc128ec33ca37c17c5aab243e46b976893ccf0c40a.pck
+    01:   Deleted existing 'my_func' cache C:/Users/hansb/AppData/Local/Temp/.cache/my_func_47317c662192f51fddd527cb89369f77c547fc58cca962d7.pck
+
+    Generate new cache
+    01:   Wrote 'my_func' cache C:/Users/hansb/AppData/Local/Temp/.cache/my_func_47317c662192f51fddd527cb89369f77c547fc58cca962d7.pck
+    00: Wrote 'my_big_func' cache C:/Users/hansb/AppData/Local/Temp/.cache/my_big_func_6ac240bc128ec33ca37c17c5aab243e46b976893ccf0c40a.pck
+
+    Reading cache
+    00: Successfully read cache for 'my_big_func' from 'C:/Users/hansb/AppData/Local/Temp/.cache/my_big_func_6ac240bc128ec33ca37c17c5aab243e46b976893ccf0c40a.pck'
+
+    Updating cache
+    00: Deleted existing 'my_big_func' cache C:/Users/hansb/AppData/Local/Temp/.cache/my_big_func_6ac240bc128ec33ca37c17c5aab243e46b976893ccf0c40a.pck
+    01:   Deleted existing 'my_func' cache C:/Users/hansb/AppData/Local/Temp/.cache/my_func_47317c662192f51fddd527cb89369f77c547fc58cca962d7.pck
+    01:   Wrote 'my_func' cache C:/Users/hansb/AppData/Local/Temp/.cache/my_func_47317c662192f51fddd527cb89369f77c547fc58cca962d7.pck
+    00: Wrote 'my_big_func' cache C:/Users/hansb/AppData/Local/Temp/.cache/my_big_func_6ac240bc128ec33ca37c17c5aab243e46b976893ccf0c40a.pck
+
+    Reading cache
+    00: Successfully read cache for 'my_big_func' from 'C:/Users/hansb/AppData/Local/Temp/.cache/my_big_func_6ac240bc128ec33ca37c17c5aab243e46b976893ccf0c40a.pck'
+
+    Updating only 'my_big_func'
+    00: Caching mode for function 'my_big_func' set to 'update' as it depends on 'my_big_func'
+    00: Deleted existing 'my_big_func' cache C:/Users/hansb/AppData/Local/Temp/.cache/my_big_func_6ac240bc128ec33ca37c17c5aab243e46b976893ccf0c40a.pck
+    01:   Successfully read cache for 'my_func' from 'C:/Users/hansb/AppData/Local/Temp/.cache/my_func_47317c662192f51fddd527cb89369f77c547fc58cca962d7.pck'
+    00: Wrote 'my_big_func' cache C:/Users/hansb/AppData/Local/Temp/.cache/my_big_func_6ac240bc128ec33ca37c17c5aab243e46b976893ccf0c40a.pck
+
+    Reading cache
+    00: Successfully read cache for 'my_big_func' from 'C:/Users/hansb/AppData/Local/Temp/.cache/my_big_func_6ac240bc128ec33ca37c17c5aab243e46b976893ccf0c40a.pck'
+
+
 ## Version aware I/O
 
 As a direct use case you can provide `version.unqiue_id48` to the `version` keyword of `SubDir.read` and `SubDir.write`. The latter will write the version string into the output file. The former will then read it back (by reading a small block of data), and check that the version written to the file matches the current version. If not, the file will be considered invalid; depending on the parameters to `read` the function will either return a default value, or will throw an exception.
