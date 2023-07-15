@@ -668,7 +668,12 @@ class A(object):
     @version("2.3", dependencies=['A.r1', 'g1'])
     def r2(self, x):
         return x
-@version("3.0", dependencies=['g1', g2, 'A.r1', A.r2])
+@version("XV")
+class B(object):
+    def f(self, x):
+        return x
+
+@version("3.0", dependencies=['g1', g2, 'A.r1', A.r2, B])
 def h(x,y):
     a = A()
     return g1(x)+g2(y)+a.r1(x)+a.r2(y)
@@ -678,9 +683,13 @@ class CDXBasicsVersionTest(unittest.TestCase):
     def test_version(self):
         # test dependency
         self.assertEqual( h.version.input, "3.0" )
-        self.assertEqual( h.version.full, "3.0 { A.r1: 2.2, A.r2: 2.3 { A.r1: 2.2, g1: 2.0 { f: 1.0 } }, g1: 2.0 { f: 1.0 }, g2: 2.1 { f: 1.0 } }" )
-        self.assertEqual( h.version.unique_id48, "3.0 f8e5a74446bc8a1c6234289a4a363658ae219c81dc349fa5" )
-
+        self.assertEqual( h.version.full, "3.0 { A.r1: 2.2, A.r2: 2.3 { A.r1: 2.2, g1: 2.0 { f: 1.0 } }, B: XV, g1: 2.0 { f: 1.0 }, g2: 2.1 { f: 1.0 } }" )
+        self.assertEqual( h.version.unique_id48, "3.0 7fe1f470dff524518f1d4076d519f7ecdbc34f4a3a8c6391" )
+        self.assertEqual( h.version.is_dependent( g2 ), "2.1" )
+        self.assertEqual( h.version.is_dependent( "g2" ), "2.1" )
+        self.assertEqual( h.version.is_dependent( f ), "1.0" )
+        self.assertEqual( h.version.is_dependent( "f" ), "1.0" )
+        self.assertEqual( h.version.is_dependent( B ), "XV" )
 
 # testing our auto-caching
 # need to auto-clean up

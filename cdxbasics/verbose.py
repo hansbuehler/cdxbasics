@@ -68,7 +68,7 @@ class Context(object):
             self.verbose     = verbose_or_init.verbose
             self.level       = verbose_or_init.level
             self.indent      = verbose_or_init.indent
-            self.fmt_level  = verbose_or_init.fmt_level
+            self.fmt_level   = verbose_or_init.fmt_level
             return
 
         if isinstance( verbose_or_init, str ):
