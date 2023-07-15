@@ -3,8 +3,8 @@ Version handling for functions and classes
 Hans Buehler June 2023
 """
 
-from cdxbasics.util import uniqueHash32, uniqueHash48, fmt_list
-from cdxbasics.logger import Logger
+from .util import uniqueHash32, uniqueHash48, fmt_list
+from .logger import Logger
 
 _log = Logger(__file__)
 
@@ -121,10 +121,35 @@ class Version(object):
             If the function has no dependents:
                 function_version
             If the function has dependencies 'g'
-                ( function_version, { g: g.version_full_dependencies } ]
+                ( function_version, { g: g.dependencies } ]
         """
         self._resolve_dependencies()
         return self._dependencies
+
+    def is_dependent( self, other):
+        """
+        Determines whether the current function is dependent on 'other'.
+        The parameter 'function' can be qualified name, a function, or a class.
+        
+        This function returns None if there is no dependency on 'other', 
+        or the version of the 'other' it is dependent on.
+        
+        TODO: move this to cdxbasics.version
+        """
+        other        = other.__qualname__ if not isinstance(other, str) else other
+        dependencies = self.dependencies
+        
+        def is_dependent( ddict ):
+            for k, d in ddict.items():
+                if k == other:
+                    return d if isinstance(d, str) else d[0]
+                if isinstance(d, str):
+                    continue
+                ver = is_dependent( d[1] )
+                if not ver is None:
+                    return ver
+            return None
+        return is_dependent( { self._original.__qualname__: dependencies } )
 
     def _resolve_dependencies(     self,
                                    top_context  : str = None, # top level context for error messages

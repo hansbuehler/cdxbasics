@@ -214,7 +214,7 @@ class SubDir(object):
         """
         # copy constructor support
         if isinstance(name, SubDir):
-            assert parent is None, "Internal error: copy construction does not accept additional keywords"
+            assert parent is None, "Internal error: copy construction does not accept 'parent' keyword"
             self._path = name._path
             self._ext  = name._ext if ext is None else ext
             self._fmt  = name._fmt if fmt is None else fmt
@@ -223,7 +223,7 @@ class SubDir(object):
 
         # reconstruction from a dictionary
         if isinstance(name, Mapping):
-            assert parent is None, "Internal error: dictionary construction does not accept additional keywords"
+            assert parent is None, "Internal error: dictionary construction does not accept 'parent keyword"
             self._path = name['_path']
             self._ext  = name['_ext'] if ext is None else ext
             self._fmt  = name['_fmt'] if fmt is None else fmt
@@ -604,10 +604,9 @@ class SubDir(object):
                     raiseOnError : bool = False,
                     *,
                     version : str = None,
-                    ext : str = None,
-                    fmt : Format = None,
                     delete_wrong_version : bool = True,
-                    check_version_only : bool = False
+                    ext : str = None,
+                    fmt : Format = None
                     ):
         """
         Read pickled data from 'key' if the file exists, or return 'default'

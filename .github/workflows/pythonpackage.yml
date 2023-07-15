@@ -37,4 +37,5 @@ jobs:
         pip install pandas
         pip install sortedcontainers
         pip install psutil
+        pip install jsonpickle
         pytest
