@@ -152,6 +152,10 @@ class SubDir(object):
 
     MAX_VERSION_BINARY_LEN = 128
 
+    VER_NORMAL = 0
+    VER_CHECK  = 1
+    VER_RETURN = 2
+  
     def __init__(self, name : str, parent = None, *, ext : str = None, fmt : Format = None, eraseEverything : bool = False ):
         """
         Creates a sub directory which contains pickle files with a common extension.
@@ -506,7 +510,7 @@ class SubDir(object):
         if len(key) == 0: _log.throw("'key' missing (the filename)" )
         sub, key = os.path.split(key)
         if len(sub) > 0:
-            return SubDir(self,sub)._read(reader,key,default,ext=ext)
+            return SubDir(self,sub)._read_reader(reader=reader,key=key,default=default,raiseOnError=raiseOnError,ext=ext)
         if len(key) == 0: _log.throw( "'key' %s indicates a directory, not a file", key)
 
         # does file exit?
@@ -530,7 +534,7 @@ class SubDir(object):
         if raiseOnError:
             raise KeyError(key, fullFileName)
         return default
-
+    
     def _read( self, key : str,
                     default = None,
                     raiseOnError : bool = False,
@@ -539,11 +543,12 @@ class SubDir(object):
                     ext : str = None,
                     fmt : Format = None,
                     delete_wrong_version : bool = True,
-                    check_version_only : bool = False
+                    handle_version : int = 0
                     ):
         """ See read() """
         fmt     = fmt if not fmt is None else self._fmt
         version = str(version) if not version is None else None
+        version = version if handle_version != SubDir.VER_RETURN else ""
 
         def reader( key, fullFileName, default ):
             test_version = "(unknown)"
@@ -555,9 +560,11 @@ class SubDir(object):
                         test_len     = int( f.read( 1 )[0] )
                         test_version = f.read(test_len)
                         test_version = test_version.decode("utf-8")
-                        ok           = test_version == version
+                        if handle_version == SubDir.VER_RETURN:
+                            return test_version
+                        ok = (version == "*" or test_version == version)
                     if ok:
-                        if check_version_only:
+                        if handle_version == SubDir.VER_CHECK:
                             return True
                         return pickle.load(f)
             else:
@@ -571,9 +578,11 @@ class SubDir(object):
                         test_version = test_version[2:]
                         if test_version[-1:] == "\n":
                             test_version = test_version[:-1]
-                        ok = test_version == version
+                        if handle_version == SubDir.VER_RETURN:
+                            return test_version
+                        ok = (version == "*" or test_version == version)
                     if ok:
-                        if check_version_only:
+                        if handle_version == SubDir.VER_CHECK:
                             return ok
                         # read
                         if fmt == Format.JSON_PICKLE:
@@ -590,7 +599,7 @@ class SubDir(object):
                     e = None
                 except Exception as e_:
                     e = str(e_)
-            if check_version_only:
+            if handle_version == SubDir.VER_CHECK:
                 return False
             if not raiseOnError:
                 return default
@@ -668,7 +677,7 @@ class SubDir(object):
             For a single 'key': Content of the file if successfully read, or 'default' otherwise.
             If 'key' is a list: list of contents.
         """
-        return self._read( key=key,default=default,raiseOnError=raiseOnError,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,check_version_only=False )
+        return self._read( key=key,default=default,raiseOnError=raiseOnError,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,handle_version=SubDir.VER_NORMAL )
 
     get = read
 
@@ -699,8 +708,34 @@ class SubDir(object):
         -------
             True or False
         """
-        return self._read( key=key,default=None,raiseOnError=raiseOnError,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,check_version_only=True )
+        return self._read( key=key,default=None,raiseOnError=raiseOnError,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,handle_version=SubDir.VER_CHECK )
 
+    def get_version( self, key : str, raiseOnError : bool = False, *, ext : str = None, fmt : Format = None ):
+        """
+        Returns the version ID stored in 'key'.
+        This requires that the file has previously been saved with a version.
+        Otherwise this function will return unpredictable results.
+
+        Parameters
+        ----------
+            key : str
+                A core filename ("key") or a list thereof. The 'key' may contain subdirectory information '/'.
+            raiseOnError : bool
+                Whether to raise an exception if accessing an existing file failed (e.g. if it is a directory).
+                By default this function fails silently and returns the default.
+            ext : str
+                Extension overwrite, or a list thereof if key is a list
+                Set to None to use directory's default
+            fmt : Format
+                File format or None to use the directory's default.
+                Note that 'fmt' cannot be a list even if 'key' is.
+                Note that changing the format does not automatically change the extension.
+
+        Returns
+        -------
+            Version ID.
+        """
+        return self._read( key=key,default=None,raiseOnError=raiseOnError,version="",ext=ext,fmt=fmt,delete_wrong_version=False,handle_version=SubDir.VER_RETURN )
 
     def readString( self, key : str, default = None, raiseOnError : bool = False, *, ext : str = None ) -> str:
         """

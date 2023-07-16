@@ -293,6 +293,10 @@ def cached( version       : str  = "0.0.1",
             cache          = named_arguments.get(cache_arg, None)
             wrapper.cached = False
             if not cache is None:
+                # make context tracking nicer
+                # below makes sure that if 'f' has a 'verbose' keyword,
+                # we will report at the same level, and will use the minimum
+                # verbosity level between that Context and the caching context
                 cache          = Cache(cache)
                 cache_mode     = cache.cache_mode
                 if not auto_verbose is None:
@@ -303,6 +307,7 @@ def cached( version       : str  = "0.0.1",
                     verbose = cache.cache_verbose                
 
                 # handle qualification
+                # This allows to micro-control manual updates to functions
                 if len(cache.qualify) > 0:
                     for k in cache.qualify:
                         if versioned_f.version.is_dependent( k ):
@@ -310,7 +315,7 @@ def cached( version       : str  = "0.0.1",
                             cache_mode = cache.qualify_mode
                             break
 
-                # construct file name and unique ID, based on module, functiobn, and keywords
+                # construct file name and unique ID, based on module, function, and keywords
                 # note uniqueHash() sorts dictionary keys
                 del kwargs_cache[cache_arg]
                 cache_key      = f.__qualname__[:12] + "_" + hash_function( f.__module__, f.__qualname__, kwargs_cache )
@@ -325,9 +330,14 @@ def cached( version       : str  = "0.0.1",
 
                 if exists and cache_mode.delete:
                     cache.cache_dir.delete( cache_key )
-                    cache_verbose.report(0, "Deleted existing '%s' cache %s", f.__qualname__, cache_file )
+                    cache_verbose.write( "Deleted existing '%s' cache %s", f.__qualname__, cache_file )
+                    
                 elif exists and cache_mode.read:
                     # read including checking the function version
+                    ver = cache.cache_dir.get_version( cache_key, raiseOnError=False )
+                    if not ver == wrapper.cache_version_id:
+                        verbose.write("Cache for '%s' refers to version '%s' not '%s'. %s existing cache file '%s'", 
+                                      f.__qualname__, ver, wrapper.cache_version_id, "Deleting" if cache_mode.del_incomp else "Ignoring", cache_file )
                     r = cache.cache_dir.read(cache_key,
                                              default=None,
                                              raiseOnError=False,
@@ -335,17 +345,15 @@ def cached( version       : str  = "0.0.1",
                                              delete_wrong_version=cache_mode.del_incomp )
 
                     # if it returns non-None: done
+                    if isinstance(r, tuple) and len(r) == 1:
+                        wrapper.cached = True
+                        cache_verbose.write( "Successfully read cache for '%s' from '%s' for version '%s'", f.__qualname__, cache_file, ver )
+                        return r[0]
                     if not r is None:
-                        if isinstance(r, tuple) and len(r) == 1:
-                            wrapper.cached = True
-                            cache_verbose.report(0, "Successfully read cache for '%s' from '%s'", f.__qualname__, cache_file )
-                            return r[0]
                         _log.error("Internal error while reading cache for '%s': file '%s' contained object of type '%s': %s. "
                                    "Expected 'tuple' of size 1. Deleting file.", f.__qualname__,  cache_file, type(r).__name__, str(r)[:50] )
                         del r
                         cache.cache_dir.delete( cache_key, raiseOnError=False )
-                    else:
-                        verbose.report(0, "Cache for '%s' refers to a different function version. %s file %s.", f.__qualname__, "Deleting" if cache_mode.del_incomp else "Ignoring", cache_file  )
 
             # Note that 'f' is called with a 'cache=' argument.
             # We upgrade verbosity here
@@ -358,7 +366,7 @@ def cached( version       : str  = "0.0.1",
             # write cache, if applicable
             if not cache is None and cache_mode.write:
                 cache.cache_dir.write( cache_key, (value,), version=wrapper.cache_version_id )
-                verbose.report(0, "Wrote '%s' cache %s", f.__qualname__, cache_file )
+                verbose.write( "Wrote '%s' cache %s for version '%s'", f.__qualname__, cache_file, wrapper.cache_version_id )
 
             return value
 

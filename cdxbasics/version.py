@@ -3,8 +3,12 @@ Version handling for functions and classes
 Hans Buehler June 2023
 """
 
-from .util import uniqueHash32, uniqueHash48, fmt_list
+from .util import fmt_list, uniqueHashExt
 from .logger import Logger
+
+# support for functions with underscores.
+uniqueHash32Ext = uniqueHashExt(length=32, parse_functions=False, parse_underscore="private" )
+uniqueHash48Ext = uniqueHashExt(length=48, parse_functions=False, parse_underscore="private" )
 
 _log = Logger(__file__)
 
@@ -73,11 +77,11 @@ class Version(object):
         simple version exceeds 'max_len' characters.
         """
         if max_len < 64:
-            hash_function = uniqueHash32
+            hash_function = uniqueHash32Ext
             hash_len = 32
             _log.verify( max_len >= hash_len, "'max_len' must not be smaller than %ld", hash_len)
         else:
-            hash_function = uniqueHash48
+            hash_function = uniqueHash48Ext
             hash_len = 48
 
         self._resolve_dependencies()
