@@ -653,14 +653,18 @@ To change default behaviour, use
 A simple enum-type class to help implement a standard caching pattern.
 It implements the following decision matrix
 
-|                                        |on    |gen   |off     |update   |clear   |readonly|
-|----------------------------------------|------|------|--------|---------|--------|--------|
-|load cache from disk if exists          |x     |x     |-       |-        |-       |x|
-|write updates to disk                   |x     |x     |-       |x        |-       |-|
-|delete existing object                  |-     |-     |-       |-        |x       |-|
-|delete existing object if incompatible  |x     |-     |-       |x        |x       |-|
+|                                        |on    |off     |update   |clear   |readonly|
+|----------------------------------------|------|--------|---------|--------|--------|
+|load cache from disk if exists          |x     |-       |-        |-       |x|
+|write updates to disk                   |x     |-       |x        |-       |-|
+|delete existing object                  |-     |-       |-        |x       |-|
+|delete existing object if incompatible  |x     |-       |x        |x       |-|
+
+(For debugging purposes, an additional mode `gen` behaves like `on` except that it does not delete files with the wrong version.)
 
 Typically, the user is allowed to set the desired `CacheMode` using a `Config` element. The corresponding `CacheMode` object then implements the properties `read`, `write`, `delete` and `del_incomp`.
+Caching of versioned functions with the above logic is implemented in `cdxbasics.cached`, see below. It used `cdxbasics.version` to determine the version of a function, and all its dependencies.
+
 
 **Prototype code is to be implemented as follows:**
 
@@ -674,7 +678,6 @@ Typically, the user is allowed to set the desired `CacheMode` using a `Config` e
         return ...
 
     def compute_cached( *kargs, cache_mode : CacheMode, cache_dir : SubDir, **kargs ):
-
         # compute a unique hash from the input parameters.
         # the default method used here may not work for all parameter types
         # (most notable, uniqueHash48 will ignore members of any objects starting with '_'; see above)        
@@ -950,6 +953,32 @@ You can also use strings to refer to dependencies. This functionality depends on
 
     print( r.version.full ) --> 0.0.4 { f: 0.0.01 }
 
+
+### Version aware I/O
+
+As a direct use case you can provide `version.unqiue_id48` to the `version` keyword of `SubDir.read` and `SubDir.write`. The latter will write the version string into the output file. The former will then read it back (by reading a small block of data), and check that the version written to the file matches the current version. If not, the file will be considered invalid; depending on the parameters to `read` the function will either return a default value, or will throw an exception.
+
+    from cdxbasics.util import uniqueHash48
+    from cdxbasics.version import version
+    from cdxbasics.subdir import SubDir
+
+    @version("0.0.1")
+    def f( path, x, y, z ):
+
+        unique_file = uniqueHash48( x,y,z ) 
+        unique_ver  = f.version.unique_id48
+        subdir      = SubDir(path)
+        data        = subdir.read( unique_file, None, version=unique_ver )
+        if not data is None:
+            return data
+
+        data = compute(x,y,z)
+
+        subdir.write( unique_file, data, version=unique_ver )
+        return data
+
+This functionality is used in `cdxbasics.cached`, below.
+
 ## cached
 
 Framework for caching versioned functions.
@@ -1051,28 +1080,3 @@ Here is the output of above code block: it also shows the aforementioned transpa
     Reading cache
     00: Successfully read cache for 'my_big_func' from 'C:/Users/hansb/AppData/Local/Temp/.cache/my_big_func_6ac240bc128ec33ca37c17c5aab243e46b976893ccf0c40a.pck'
 
-
-## Version aware I/O
-
-As a direct use case you can provide `version.unqiue_id48` to the `version` keyword of `SubDir.read` and `SubDir.write`. The latter will write the version string into the output file. The former will then read it back (by reading a small block of data), and check that the version written to the file matches the current version. If not, the file will be considered invalid; depending on the parameters to `read` the function will either return a default value, or will throw an exception.
-
-    from cdxbasics.util import uniqueHash48
-    from cdxbasics.version import version
-    from cdxbasics.subdir import SubDir
-
-    @version("0.0.1")
-    def f( path, x, y, z ):
-
-        unique_file = uniqueHash48( x,y,z ) 
-        unique_ver  = f.version.unique_id48
-        subdir      = SubDir(path)
-        data        = subdir.read( unique_file, None, version=unique_ver )
-        if not data is None:
-            return data
-
-        data = compute(x,y,z)
-
-        subdir.write( unique_file, data, version=unique_ver )
-        return data
-
-For a more advanced example with caching, [see above](#CacheMode)

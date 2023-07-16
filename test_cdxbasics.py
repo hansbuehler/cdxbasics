@@ -652,6 +652,13 @@ class CDXBasicsTest(unittest.TestCase):
         context = Context('quiet')
         f_main(context)
 
+        verbose1 = Context(1)
+        verbose1.level = 2
+        verbose2 = Context(2,indent=3)
+        verbose2.level = 3
+        self.assertEqual( uniqueHash( verbose1 ), uniqueHash( verbose2 ) )
+
+
 @version("1.0")
 def f(x):
     return x
@@ -1080,6 +1087,40 @@ class CDXCConfigTest(unittest.TestCase):
         idrest   = restored.unique_id()
         self.assertEqual(idrest,id2)
 
+        # unique ID test
+
+        config1 = Config()
+        config1.x = 1
+        config1.sub.y = 2
+        config2 = Config()
+        config2.x = 1
+        config2.sub.y = 3
+        self.assertNotEqual( uniqueHash(config1), uniqueHash(config2) )
+
+        config1 = Config()
+        config1.x = 1
+        config1.sub.y = 2
+        config2 = Config()
+        config2.x = 2
+        config2.sub.y = 2
+        self.assertNotEqual( uniqueHash(config1), uniqueHash(config2) )
+
+        config1 = Config()
+        config1.x = 1
+        config1.sub.y = 2
+        config2 = Config()
+        config2.x = 1
+        config2.sub.y = 2
+        self.assertEqual( uniqueHash(config1), uniqueHash(config2) )
+
+        # uniqueHash() ignores protected and private members
+        config1 = Config()
+        config1.x = 1
+        config1.sub._y = 2
+        config2 = Config()
+        config2.x = 1
+        config2.sub._y = 3
+        self.assertEqual( uniqueHash(config1), uniqueHash(config2) )
 
     def test_detach(self):
         """ testing detach/copy/clean_cooy """
