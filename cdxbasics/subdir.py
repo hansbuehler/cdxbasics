@@ -237,7 +237,7 @@ class SubDir(object):
         # parent
         if isinstance(parent, str):
             parent = SubDir( parent, ext=ext, fmt=fmt )
-        if not parent is None and not isinstance(parent, SubDir): _log.throw( "'parent' must be SubDir or None. Found object of type %s", type(parent))
+        if not parent is None and not isinstance(parent, SubDir): _log.throw( "'parent' must be SubDir, str, or None. Found object of type %s", type(parent))
 
         # operational flags
         _name  = name if not name is None else "(none)"
@@ -290,8 +290,9 @@ class SubDir(object):
                 _log.throw("Cannot use name '..'")
             elif not parent is None:
                 # path relative to 'parent'
-                name = (parent._path + name) if not parent.is_none else name
-
+                if not parent.is_none:
+                    name    = os.path.join( parent._path, name )
+                    
         # create directory/clean up
         if name is None:
             self._path = None
@@ -510,7 +511,7 @@ class SubDir(object):
         if len(key) == 0: _log.throw("'key' missing (the filename)" )
         sub, key = os.path.split(key)
         if len(sub) > 0:
-            return SubDir(self,sub)._read_reader(reader=reader,key=key,default=default,raiseOnError=raiseOnError,ext=ext)
+            return self(sub)._read_reader(reader=reader,key=key,default=default,raiseOnError=raiseOnError,ext=ext)
         if len(key) == 0: _log.throw( "'key' %s indicates a directory, not a file", key)
 
         # does file exit?
@@ -662,6 +663,7 @@ class SubDir(object):
                 If not None, specifies the version of the current code base.
                 In this case, this version will be compared to the version of the file being read.
                 If they do not match, read fails (either by returning default or throwing an exception).
+                You can specify version "*" in which case reading never fails.
             delete_wrong_version : bool
                 If True, and if a wrong version was found, delete the file.
             ext : str
@@ -690,7 +692,9 @@ class SubDir(object):
             key : str
                 A core filename ("key") or a list thereof. The 'key' may contain subdirectory information '/'.
             version : str
-                Specifies the version of the current code base.
+                Specifies the version of the current code base to compare with.
+                You can use '*' to match any version
+                
             raiseOnError : bool
                 Whether to raise an exception if accessing an existing file failed (e.g. if it is a directory).
                 By default this function fails silently and returns the default.
