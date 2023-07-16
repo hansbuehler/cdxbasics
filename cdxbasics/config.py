@@ -925,8 +925,8 @@ class Config(OrderedDict):
         Returns an MDH5 hash key for this object, based on its provided inputs /not/ based on its usage
         ** WARNING **
         By default function ignores
-         1) Config keys or children with leading '_'s unless 'parse_underscore' is set to 'protected' or 'private'.
-         2) Functions and properties unless parse_functions is True
+         1) Config keys or children with leading '_'s are ignored unless 'parse_underscore' is set to 'protected' or 'private'.
+         2) Functions and properties are ignored unless parse_functions is True
             In the latter case function code will be used to distinguish
             functions assigned to the config.
         See util.unqiueHashExt() for further information.
@@ -1024,6 +1024,17 @@ class Config(OrderedDict):
         Classic use case is to transform 'kwargs' to a Config
         """
         return kwargs if isinstance(kwargs,Config) else Config( kwargs,config_name=config_name )
+
+    # for uniqueHash
+    # --------------
+    
+    def __unique_hash__(self, length : int, parse_functions : bool, parse_underscore : str ) -> str:
+        """
+        Returns a unique hash for this object
+        This function is required because by default uniqueHash() ignores members starting with '_', which
+        in the case of Config means that no children are hashed.
+        """
+        return self.unique_id(length=length,parse_functions=parse_functions,parse_underscore=parse_underscore)
 
 to_config = Config.to_config
 

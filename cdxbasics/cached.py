@@ -120,13 +120,13 @@ class Cache( object ):
             self.cache_dir     = SubDir(cache_dir)
             self.cache_mode    = CacheMode(cache_mode)
             self.cache_verbose = Context(cache_verbose)
-            self.qualify       = list(qualify) if not qualify is None else None
+            self.qualify       = list(qualify) if not qualify is None else []            
             self.qualify_mode  = CacheMode(qualify_mode)
             return
 
         self.cache_dir     = SubDir(cache if not cache is None else "!/.cache")
         self.cache_mode    = CacheMode(cache_mode if not cache_mode is None else CacheMode.ON)
-        self.cache_verbose = Context(cache_verbose if not cache_verbose is None else Context.ALL)
+        self.cache_verbose = Context(cache_verbose if not cache_verbose is None else Context.QUIET)
         self.qualify       = qualify if not qualify is None else []
         self.qualify_mode  = CacheMode(qualify_mode if not qualify_mode is None else CacheMode.UPDATE)
 
@@ -155,8 +155,10 @@ class Cache( object ):
 
 def cached( version       : str  = "0.0.1",
             exclude       : list = [],
-            cache_arg     : str  = "cache",
             dependencies  : list = [],
+            cache_arg     : str  = "cache",
+            auto_verbose  : str  = None,
+            hash_function = uniqueHash48
             ):
     """
     Decorator for a function which is cached between function calls.
@@ -194,23 +196,79 @@ def cached( version       : str  = "0.0.1",
         def my_top_func( x,y,z, *, cache=None ):
             r = my_func( x,y,cache=cache )
             return r*z
+        
+    Handling of function arguments
+    ------------------------------
+    The decorator will use the live function arguments to compute a hash key under which
+    any cached data will be stored. To do so, it uses essentially 
+        cdxbasics.util.uniqueHash48( kargs, kwargs )
+        
+    There are a number of important points regarding the choice of this hashing function
+    1) uniqueHash48() ignores protected and private members of objects passed to it.
+       uniqueHash48() also ignores dictionary values starting with '_'.
+    2) Sometimes function parameters are not pertinent to a valid caching key, for example
+       timing or process control (such as cdxbasics.verbose.Context).
+       You can avoid hashing such parameters by using 'exclude'
+    3) To implement custom hashing, you can either
+          * Implement a different hash function and specify it via 'hash_function'.
+            The utility function cdxbasics.util.uniqueHashExt() can be used to fine-tune hashing.
+          * Implement for each affected object a __unique_hash__ member, see
+            the description of cdxbasics.util.uniqueHashExt().
+        The latter has been implemented for cdxbasics.config.Config and
+        cdxbasics.verbose.Context which means, in particular, that the latter
+        does not need to be listed in 'exclude'.
 
     Parameters
     ----------
     version : str, optional
         Version of this function. See cdxbasics.version.version.
     exclude : list, optional
-        Names of function parameters to exclude when creating the unique function ID
-    cache_arg : str, optional
-        Name of the function argument which represents the cache.
+        Names of function parameters to exclude when creating the unique function ID.
     dependencies : list,  optional
         Other versioned/cached functions or classes this function depends on.
         The function is using this information to create a fully dependent
         version tree.
         See cdxbasics.version.version for information how to access this information.
+    cache_arg : str, optional
+        Name of the function argument which represents the cache.
+        By default it is cache=
+    auto_verbose : str, optional
+        This keyword is intended to be used if the decorated function
+        itself already has a 'verbose' keyword, i.e. if it itself prints
+        progress information with cdxbasics.verbose.Context.
+        
+        Assume you have a function f such that:
+            
+            @cached("0.0.1")
+            def f(x, verbose=Context.quiet, cache=None ):
+                verbose.write("x=%(x)s", x)
+            
+        In this case there are two 'verbose's: the one of 'f', and cache.cache_verbose.
+        If not aligned, these can look unseeming.
+        Using the auto_verbose keyword resolved this issue:
+
+            @cached("0.0.1", auto_verbose="verbose")
+            def f(x, verbose=Context.quiet, cache=None ):
+                verbose.write("x=%(x)s", x)
+                
+        In this case, the 'verbose' Context for caching is set as follows:
+            cache_verbose.verbose = verbose.verbose+1:
+                The verbosity  of caching is one below that of 'f'.
+            cache_verbose.level = min( verbose.level, cache_verbose.level):
+                The display level is the minimum of both display levels.
+                That means that caching messages are only printed if both
+                cache_verbose and verbose say so.
+                
+        The 'auto_verbose' parameter is auutomaticall added to 'exclude'.
+    hash_function : optional
+        Allows the specification of a hash_function other than uniquehHash48.
+        cdxbasics.util.uniqueHashExt() allows to generate a number of such functions
+        with different behaviour.
     """
-    _exclude     = set(exclude)
     version_wrap = version_decorator( version=version, dependencies= dependencies)
+    _exclude     = set(exclude)
+    if not auto_verbose is None:
+        _exclude.add(auto_verbose)
 
     def wrap(f):
         # first wrap 'f' into a version.
@@ -237,21 +295,27 @@ def cached( version       : str  = "0.0.1",
             if not cache is None:
                 cache          = Cache(cache)
                 cache_mode     = cache.cache_mode
+                if not auto_verbose is None:
+                    verbose = Context( named_arguments.get(auto_verbose, Context.QUIET) )
+                    verbose.limit( cache.cache_verbose )
+                    verbose = verbose(1)
+                else:
+                    verbose = cache.cache_verbose                
 
                 # handle qualification
                 if len(cache.qualify) > 0:
                     for k in cache.qualify:
                         if versioned_f.version.is_dependent( k ):
-                            cache.cache_verbose.write("Caching mode for function '%s' set to '%s' as it depends on '%s'", f.__qualname__, cache.qualify_mode, k )
+                            verbose.write("Caching mode for function '%s' set to '%s' as it depends on '%s'", f.__qualname__, cache.qualify_mode, k )
                             cache_mode = cache.qualify_mode
                             break
 
                 # construct file name and unique ID, based on module, functiobn, and keywords
                 # note uniqueHash() sorts dictionary keys
                 del kwargs_cache[cache_arg]
-                cache_key      = f.__qualname__[:12] + "_" + uniqueHash48( f.__module__, f.__qualname__, kwargs_cache )
+                cache_key      = f.__qualname__[:12] + "_" + hash_function( f.__module__, f.__qualname__, kwargs_cache )
                 cache_file     = cache.cache_dir.fullKeyName( cache_key )
-                cache_verbose  = cache.cache_verbose
+                cache_verbose  = verbose
 
                 wrapper.cache_full_file = cache_file
 
@@ -281,20 +345,20 @@ def cached( version       : str  = "0.0.1",
                         del r
                         cache.cache_dir.delete( cache_key, raiseOnError=False )
                     else:
-                        cache_verbose.report(0, "Cache for '%s' refers to a different function version. %s file %s.", f.__qualname__, "Deleting" if cache_mode.del_incomp else "Ignoring", cache_file  )
+                        verbose.report(0, "Cache for '%s' refers to a different function version. %s file %s.", f.__qualname__, "Deleting" if cache_mode.del_incomp else "Ignoring", cache_file  )
 
             # Note that 'f' is called with a 'cache=' argument.
             # We upgrade verbosity here
             if not cache is None:
                kwargs[cache_arg] = cache.sub(1)
 
-            # call function. We call the versioned version which will trigger computing
+            # call function
             value = versioned_f( *kargs, **kwargs )
 
             # write cache, if applicable
             if not cache is None and cache_mode.write:
                 cache.cache_dir.write( cache_key, (value,), version=wrapper.cache_version_id )
-                cache.cache_verbose.report(0, "Wrote '%s' cache %s", f.__qualname__, cache_file )
+                verbose.report(0, "Wrote '%s' cache %s", f.__qualname__, cache_file )
 
             return value
 

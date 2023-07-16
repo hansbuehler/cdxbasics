@@ -55,7 +55,7 @@ class Context(object):
         ----------
             verbose_or_init : str, int, or Context
                 if a string: one of 'all' or 'quiet'
-                if an integer: the level at which to print. Any negative number will not print anything because the parent level is 1.
+                if an integer: the level at which to print. Any negative number will not print anything because the default level is 0.
                 if None: equivalent to displaying everything
                 if a Context: copy constructor.
             indent : int
@@ -63,7 +63,7 @@ class Context(object):
             fmt_level :
                 How to format output given level*indent
         """
-        if isinstance( verbose_or_init, Context ):
+        if isinstance( verbose_or_init, Context ) or type(verbose_or_init).__name__ == "Context":
             # copy constructor
             self.verbose     = verbose_or_init.verbose
             self.level       = verbose_or_init.level
@@ -81,13 +81,13 @@ class Context(object):
         elif not verbose_or_init is None:
             verbose_or_init = int(verbose_or_init)
 
-        indent = int(indent)
+        indent           = int(indent)
         _log.verify( indent >=0, "'indent' cannot be negative. Found %ld", indent)
 
-        self.verbose     = verbose_or_init
-        self.level       = 0
-        self.indent      = indent
-        self.fmt_level   = str(fmt_level)
+        self.verbose     = verbose_or_init    # print up to this level
+        self.level       = 0                  # current level
+        self.indent      = indent             # indentation level
+        self.fmt_level   = str(fmt_level)     # output format
 
     def write( self, message : str, *args, end : str = "\n", head : bool = True, **kwargs ):
         """
@@ -231,6 +231,26 @@ class Context(object):
             return self.sub(add_level)
         self.report( add_level, message, *args, **kwargs )
 
+    def limit(self, verbose):
+        """ Assigns the minimim verbosity of self and verbose, i.e. self.verbose = min(self.verbose,verbose) """
+        if verbose is None:
+            return self # None means accepting everything
+        if isinstance(verbose, Context) or type(verbose).__name__ == "Context":            
+            verbose = verbose.verbose
+            if verbose is None:
+                return self
+        elif verbose == self.QUIET:
+             verbose = -1
+        elif verbose == self.ALL:
+            return self
+        else:
+            verbose = int(verbose)
+        if self.verbose is None:
+            self.verbose = verbose
+        elif self.verbose > verbose:
+            self.verbose = verbose
+        return self
+
     @property
     def as_verbose(self):
         """ Return a Context at the same level as 'self' with full verbosity """
@@ -263,6 +283,13 @@ class Context(object):
         s1 = ' ' * (self.indent * (self.level + sub_level))
         s2 = self.fmt_level if self.fmt_level.find("%") == -1 else self.fmt_level % (self.level + sub_level)
         return s2+s1
+
+    def __unique_hash__( length : int, parse_functions : bool, parse_underscore : str ) -> str:
+        """
+        Compute non-hash for use with cdxbasics.util.uniqueHash()
+        This function always returns an empty string, which means that the object is never hashed.
+        """
+        return ""
 
 # Recommended default parameter 'quiet' for functions accepting a context parameter
 quiet = Context(Context.QUIET)

@@ -452,6 +452,12 @@ def _compress_function_code( f ):
 def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscore : str = "none" ):
     """
     Returns a function which generates hashes of length 'length', or of standard length if length is None
+    To support hashing directly in one of your objects, implement 
+    
+        __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
+        
+        The parameters are the same as for uniqueHashExt.
+        The function is expected to return a hashable object, ideally a string.        
 
     Parameters
     ----------
@@ -524,6 +530,10 @@ def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscor
             if not pd is None and isinstance(inn,pd.DataFrame):
                 update(inn)
                 return
+            # test presence of __unique_hash__()
+            if hasattr(inn,"__unique_hash__"):
+                visit( inn.__unique_hash__( length=length,parse_functions=parse_functions,parse_underscore=parse_underscore ) )
+                return
             # dictionaries, and similar
             if isinstance(inn,Mapping):
                 assert not isinstance(inn, list)
@@ -574,6 +584,13 @@ def uniqueHash(*args, **kwargs) -> str:
         3) Members with leading '_' are ignored (*)
         4) Functions and properties are ignored (*)
         (*) you can create a hash function with different behaviour by using uniqueHashExt()
+        
+    To support hashing directly in one of your objects, implement 
+    
+        __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
+        
+        The parameters are the same as for uniqueHashExt.
+        The function is expected to return a hashable object, ideally a string.        
     """
     return uniqueHashExt(None)(*args,**kwargs)
 
@@ -588,6 +605,13 @@ def uniqueHash32( *args, **argv ) -> str:
         3) Members with leading '_' are ignored (*)
         4) Functions and properties are ignored (*)
         (*) you can create a hash function with different behaviour by using uniqueHashExt()
+
+    To support hashing directly in one of your objects, implement 
+    
+        __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
+        
+        The parameters are the same as for uniqueHashExt.
+        The function is expected to return a hashable object, ideally a string.        
     """
     return uniqueHashExt(32)(*args,**argv)
 
@@ -602,6 +626,13 @@ def uniqueHash48( *args, **argv ) -> str:
         3) Members with leading '_' are ignored (*)
         4) Functions and properties are ignored (*)
         (*) you can create a hash function with different behaviour by using uniqueHashExt()
+
+    To support hashing directly in one of your objects, implement 
+    
+        __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
+        
+        The parameters are the same as for uniqueHashExt.
+        The function is expected to return a hashable object, ideally a string.        
     """
     return uniqueHashExt(48)(*args,**argv)
 
@@ -616,6 +647,13 @@ def uniqueHash64( *args, **argv ) -> str:
         3) Members with leading '_' are ignored (*)
         4) Functions and properties are ignored (*)
         (*) you can create a hash function with different behaviour by using uniqueHashExt()
+
+    To support hashing directly in one of your objects, implement 
+    
+        __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
+        
+        The parameters are the same as for uniqueHashExt.
+        The function is expected to return a hashable object, ideally a string.        
     """
     return uniqueHashExt(64)(*args,**argv)
 
