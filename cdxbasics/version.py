@@ -309,8 +309,15 @@ def version( version : str = "0.0.1" , dependencies : list = [] ):
         print("full version ID",g.version.unique_id48 )  -- full version ID 0.0.1 { f: 0.0.2 { h: 0.3.0 }, A.h: 0.4.1 }
     """
     def wrap(f):
-        if not getattr(f, "version", None) is None: _log.throw("@version: %s '%s' already has a member 'version'", "type" if isinstance(f, type) else "function", f.__qualname__ )
-        f.version = Version(f, version, dependencies)
+        dep = dependencies
+        existing = getattr(f, "version", None)
+        if not existing is None:
+            # auto-create dependencies to base classes
+            if existing._original == f: _log.throw("@version: %s '%s' already has a member 'version'", "type" if isinstance(f,type) else "function", f.__qualname__ )
+            if not existing._original in dependencies and not existing._original.__qualname__ in dependencies:
+                dep = list(dep)
+                dep.append( existing._original )
+        f.version = Version(f, version, dep)
         return f
     return wrap
 
