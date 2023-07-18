@@ -685,6 +685,13 @@ def h(x,y):
     a = A()
     return g1(x)+g2(y)+a.r1(x)+a.r2(y)
 
+@version("0.0.1")
+class baseA(object):
+    pass
+@version("0.0.2")
+class baseB(baseA):
+    pass
+
 class CDXBasicsVersionTest(unittest.TestCase):
 
     def test_version(self):
@@ -697,6 +704,9 @@ class CDXBasicsVersionTest(unittest.TestCase):
         self.assertEqual( h.version.is_dependent( f ), "1.0" )
         self.assertEqual( h.version.is_dependent( "f" ), "1.0" )
         self.assertEqual( h.version.is_dependent( B ), "XV" )
+
+        self.assertEqual( baseA.version.full, "0.0.1")
+        self.assertEqual( baseB.version.full, "0.0.2 { baseA: 0.0.1 }")
 
 # testing our auto-caching
 # need to auto-clean up

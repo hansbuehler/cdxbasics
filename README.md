@@ -953,6 +953,18 @@ You can also use strings to refer to dependencies. This functionality depends on
 
     print( r.version.full ) --> 0.0.4 { f: 0.0.01 }
 
+Dependencies on base classes are automatic:
+
+    @version("0.0.1")
+    class A(object):
+        pass
+
+    @version("0.0.2")
+    class B(A):
+        pass
+
+    print( A.version.full ) --> 0.0.1
+    print( B.version.full ) --> 0.0.2 { A: 0.0.1 }
 
 ### Version aware I/O
 
