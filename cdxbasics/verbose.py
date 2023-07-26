@@ -284,12 +284,25 @@ class Context(object):
         s2 = self.fmt_level if self.fmt_level.find("%") == -1 else self.fmt_level % (self.level + sub_level)
         return s2+s1
 
+    # uniqueHash
+    # ----------
+
     def __unique_hash__( self, length : int, parse_functions : bool, parse_underscore : str ) -> str:
         """
         Compute non-hash for use with cdxbasics.util.uniqueHash()
         This function always returns an empty string, which means that the object is never hashed.
         """
         return ""
+
+    # pickling
+    # --------
+
+    def __reduce__(self):
+        """ Turn off pickling; see https://docs.python.org/3/library/pickle.html#object.__reduce__ """
+        return None
+
+    def __setstate__(self, state):
+        pass
 
 # Recommended default parameter 'quiet' for functions accepting a context parameter
 quiet = Context(Context.QUIET)

@@ -1249,7 +1249,7 @@ class _Enum(_Cast):
         Raises a KeyError if the value was not found in our enum
         """
         value = self.cast(value, config_name, key_name)
-        _log.verify( value in self.enum, "Config '%s': value for key '%s' %s. Found %s", config_name, key_name, self.err_str, str(value) )
+        _log.verify( value in self.enum, "Config '%s': value for key '%s' %s. Found '%s'", config_name, key_name, self.err_str, str(value) )
         return value
 
     @property
@@ -1257,7 +1257,7 @@ class _Enum(_Cast):
         """ Nice error string """
         s = "must be one of: '" + str(self.enum[0]) + "'"
         for i in range(1,len(self.enum)-1):
-            s += ", '" + str(self.enum[i])
+            s += "', '" + str(self.enum[i])
         if len(self.enum) > 1:
             s += " or '" + str(self.enum[-1]) + "'"
         return s

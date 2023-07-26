@@ -240,6 +240,16 @@ class Version(object):
         # add our own to 'resolved dependencies'
         self._dependencies = ( self._input_version, version_dependencies ) if len(version_dependencies) > 0 else self._input_version
 
+    # uniqueHash
+    # ----------
+
+    def __unique_hash__( self, length : int, parse_functions : bool, parse_underscore : str ) -> str:
+        """
+        Compute non-hash for use with cdxbasics.util.uniqueHash()
+        This function always returns an empty string, which means that the object is never hashed.
+        """
+        return self.unique_id(max_len=length)
+    
 # =======================================================
 # @version
 # =======================================================

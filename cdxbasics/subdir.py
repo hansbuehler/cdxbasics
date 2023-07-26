@@ -5,7 +5,7 @@ Hans Buehler 2020
 """
 
 from .logger import Logger
-from .util import CacheMode, uniqueHash48, plain
+from .util import CacheMode, uniqueHash48, plain, fmt_list
 _log = Logger(__file__)
 
 import os
@@ -30,6 +30,11 @@ except ModuleNotFoundError:
     np = None
     jsonpickle = None
 
+try:
+    import blosc as blosc
+except ModuleNotFoundError:
+    blosc = None
+
 uniqueFileName48 = uniqueHash48
 
 def _remove_trailing( path ):
@@ -39,14 +44,24 @@ def _remove_trailing( path ):
     return path
 
 class Format(Enum):
-    """
-    File format for SubDir.
-    Currently supports PICKLE and JSON_PICKLE
-    """
-
+    """ File formats for SubDir """
     PICKLE = 0
     JSON_PICKLE = 1
     JSON_PLAIN = 2
+    BLOSC = 4
+    
+"""
+Use the following for config calls:
+format = subdir.mkFormat( config("format", "pickle", subdir.FORMAT_NAMES, "File format") )
+"""
+FORMAT_NAMES = [ s.lower() for s in Format.__members__ ]
+def mkFormat( name ):
+    if not name in FORMAT_NAMES:
+        _log.throw("Unknown format name '%s'. Must be one of: %s", name, fmt_list(name))
+    return Format[name.upper()]
+
+# SubDir
+# ======
 
 class SubDir(object):
     """
@@ -126,13 +141,16 @@ class SubDir(object):
                 Uses the jsonpickle package to load/write data in somewhat readable text formats.
                 Data can be loaded back from such a file, but files may not be readable (e.g. numpy arrays
                 are written in compressed form).
+            SubDir.BLOSC:
+                Uses https://www.blosc.org/python-blosc/ to compress data on-the-fly.
 
             Summary of properties:
 
-                          | Restores objects | Human readable | Speed
-             PICKLE       | yes              | no             | high
-             JSON_PLAIN   | no               | yes            | low
-             JSON_PICKLE  | yes              | limited        | low
+                          | Restores objects | Human readable | Speed | Compression
+             PICKLE       | yes              | no             | high  | no
+             JSON_PLAIN   | no               | yes            | low   | no
+             JSON_PICKLE  | yes              | limited        | low   | no
+             BLOSC        | yes              | no             | high  | yes
 
         Several other operations are supported; see help()
 
@@ -145,6 +163,7 @@ class SubDir(object):
     PICKLE = Format.PICKLE
     JSON_PICKLE = Format.JSON_PICKLE
     JSON_PLAIN = Format.JSON_PLAIN
+    BLOSC = Format.BLOSC
 
     DEFAULT_RAISE_ON_ERROR = False
     RETURN_SUB_DIRECTORY = __RETURN_SUB_DIRECTORY
@@ -362,6 +381,8 @@ class SubDir(object):
             return "json"
         if fmt == Format.JSON_PICKLE:
             return "jpck"
+        if fmt == Format.BLOSC:
+            return "zbsc"
         _log.throw("Unknown format '%s'", str(fmt))
 
     @staticmethod
@@ -553,7 +574,7 @@ class SubDir(object):
 
         def reader( key, fullFileName, default ):
             test_version = "(unknown)"
-            if fmt == Format.PICKLE:
+            if fmt == Format.PICKLE or fmt == Format.BLOSC:
                 with open(fullFileName,"rb") as f:
                     # handle version as byte string
                     ok = True
@@ -567,7 +588,14 @@ class SubDir(object):
                     if ok:
                         if handle_version == SubDir.VER_CHECK:
                             return True
-                        return pickle.load(f)
+                        if fmt == Format.BLOSC:
+                            if blosc is None: _log.throw("Package 'blosc' not found. Please pip install")
+                            data = f.read()
+                            data = blosc.decompress(data)
+                            data = pickle.loads(data)
+                        else:
+                            data = pickle.load(f)
+                        return data
             else:
                 with open(fullFileName,"rt",encoding="utf-8") as f:
                     # handle versioning
@@ -879,7 +907,7 @@ class SubDir(object):
         version  = str(version) if not version is None else None
         def writer( key, fullFileName, obj ):
             try:
-                if fmt == Format.PICKLE:
+                if fmt == Format.PICKLE or fmt == Format.BLOSC:
                     with open(fullFileName,"wb") as f:
                         # handle version as byte string
                         if not version is None:
@@ -889,7 +917,13 @@ class SubDir(object):
                             len8[0]  = len(version_)
                             f.write(len8)
                             f.write(version_)
-                        pickle.dump(obj,f,-1)
+                        if fmt == Format.BLOSC:
+                            if blosc is None: _log.throw("Could not import 'blosc'. Please pip install")
+                            obj = pickle.dumps(obj)  # returns data as a bytes object
+                            obj = blosc.compress(obj)
+                            f.write(obj)
+                        else:
+                            pickle.dump(obj,f,-1)
                 else:
                     with open(fullFileName,"wt",encoding="utf-8") as f:
                         if not version is None:
