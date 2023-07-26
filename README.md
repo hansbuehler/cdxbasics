@@ -465,6 +465,7 @@ A few tools to handle file i/o in a transparent way. The key idea is to provide 
 * PICKLE: standard pickling. Default extension 'pck'
 * JSON_PICKLE: uses the `jsonpickle` package. Default extension 'jpck'. The advantage of this format over PICKLE is that it is somewhat human-readable. However, `jsonpickle` uses compressed formats for complex objects such as `numpy` arrays, hence readablility is somewhat limited. It comes at cost of slower writing speeds.
 * JSON_PLAIN: calls `cdxbasics.util.plain()` to convert objects into plain Python objects before using `json` to write them. That means that deserialized data does not have the correct object structure. However, such files are much easier to read.
+* BLOSC: uses [blosc](https://github.com/blosc/python-blosc) to write compressed binary data. The blosc compression algorithm is very fast, hence using this mode will not usually lead to notably slower performanbce than using PICKLE.
 
 ### Creating directories
 
