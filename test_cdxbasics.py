@@ -486,6 +486,13 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual(sub.ext, ".json")
         sub.eraseEverything()
 
+        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", fmt=SubDir.BLOSC )
+        sub.write("test", x)
+        r = sub.read("test", None)
+        self.assertEqual( list(x), list(r) )
+        self.assertEqual(sub.ext, ".zbsc")
+        sub.eraseEverything()
+
 
     def test_cache_mode(self):
 
