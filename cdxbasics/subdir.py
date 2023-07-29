@@ -32,8 +32,20 @@ except ModuleNotFoundError:
 
 try:
     import blosc as blosc
+    BLOSC_MAX_BLOCK = 2147483631
+    BLOSC_MAX_USE   = 1147400000 # ... blosc really cannot handle large files
 except ModuleNotFoundError:
     blosc = None
+
+try:
+    import zlib as zlib
+except ModuleNotFoundError:
+    zlib = None
+
+try:
+    import gzip as gzip
+except ModuleNotFoundError:
+    gzip = None
 
 uniqueFileName48 = uniqueHash48
 
@@ -48,7 +60,8 @@ class Format(Enum):
     PICKLE = 0
     JSON_PICKLE = 1
     JSON_PLAIN = 2
-    BLOSC = 4
+    BLOSC = 3
+    GZIP = 4
     
 """
 Use the following for config calls:
@@ -143,6 +156,10 @@ class SubDir(object):
                 are written in compressed form).
             SubDir.BLOSC:
                 Uses https://www.blosc.org/python-blosc/ to compress data on-the-fly.
+                BLOSC is much faster than GZIP or ZLIB but is limited to 2GB data, sadly.
+            SubDir.ZLIB:
+                Uses https://docs.python.org/3/library/zlib.html to compress data on-the-fly
+                using, essentially, GZIP.
 
             Summary of properties:
 
@@ -151,6 +168,7 @@ class SubDir(object):
              JSON_PLAIN   | no               | yes            | low   | no
              JSON_PICKLE  | yes              | limited        | low   | no
              BLOSC        | yes              | no             | high  | yes
+             GZIP         | yes              | no             | high  | yes
 
         Several other operations are supported; see help()
 
@@ -164,6 +182,7 @@ class SubDir(object):
     JSON_PICKLE = Format.JSON_PICKLE
     JSON_PLAIN = Format.JSON_PLAIN
     BLOSC = Format.BLOSC
+    GZIP = Format.GZIP
 
     DEFAULT_RAISE_ON_ERROR = False
     RETURN_SUB_DIRECTORY = __RETURN_SUB_DIRECTORY
@@ -383,6 +402,8 @@ class SubDir(object):
             return "jpck"
         if fmt == Format.BLOSC:
             return "zbsc"
+        if fmt == Format.GZIP:
+            return "pgz"
         _log.throw("Unknown format '%s'", str(fmt))
 
     @staticmethod
@@ -571,13 +592,16 @@ class SubDir(object):
         fmt     = fmt if not fmt is None else self._fmt
         version = str(version) if not version is None else None
         version = version if handle_version != SubDir.VER_RETURN else ""
+        
+        if version is None and fmt in [Format.BLOSC, Format.GZIP]:
+            version == "*"
 
         def reader( key, fullFileName, default ):
             test_version = "(unknown)"
             if fmt == Format.PICKLE or fmt == Format.BLOSC:
                 with open(fullFileName,"rb") as f:
                     # handle version as byte string
-                    ok = True
+                    ok      = True
                     if not version is None:
                         test_len     = int( f.read( 1 )[0] )
                         test_version = f.read(test_len)
@@ -588,18 +612,44 @@ class SubDir(object):
                     if ok:
                         if handle_version == SubDir.VER_CHECK:
                             return True
-                        if fmt == Format.BLOSC:
+                        if fmt == Format.PICKLE:
+                            data = pickle.load(f)
+                        elif fmt == Format.BLOSC:
                             if blosc is None: _log.throw("Package 'blosc' not found. Please pip install")
-                            data = f.read()
-                            data = blosc.decompress(data)
+                            num_blocks = int.from_bytes( f.read(2), 'big', signed=False ) 
+                            data       = bytearray()
+                            for i in range(num_blocks):
+                                blockl = int.from_bytes( f.read(6), 'big', signed=False )
+                                if blockl>0:
+                                    bdata  = blosc.decompress( f.read(blockl) )
+                                    data  += bdata
+                                    del bdata
                             data = pickle.loads(data)
                         else:
-                            data = pickle.load(f)
+                            _log.throw("Unkown format '%s'", fmt)
                         return data
-            else:
+                    
+            elif fmt == Format.GZIP:
+                if gzip is None: _log.throw("Package 'gzip' not found. Please pip install")
+                with gzip.open(fullFileName,"rb") as f:
+                    # handle version as byte string
+                    ok           = True
+                    test_len     = int( f.read( 1 )[0] )
+                    test_version = f.read(test_len)
+                    test_version = test_version.decode("utf-8")
+                    if handle_version == SubDir.VER_RETURN:
+                        return test_version
+                    ok = (version == "*" or test_version == version)
+                    if ok:
+                        if handle_version == SubDir.VER_CHECK:
+                            return True
+                        data = pickle.load(f)
+                        return data
+                
+            elif fmt in [Format.JSON_PLAIN, Format.JSON_PICKLE]:
                 with open(fullFileName,"rt",encoding="utf-8") as f:
                     # handle versioning
-                    ok = True
+                    ok      = True
                     if not version is None:
                         test_version = f.readline()
                         if test_version[:2] != "# ":
@@ -618,8 +668,11 @@ class SubDir(object):
                             if jsonpickle is None: raise ModuleNotFoundError("jsonpickle")
                             return jsonpickle.decode( f.read() )
                         else:
-                            assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
+                            assert fmt == Format.JSON_PLAIN, ("Internal error: unknown Format", fmt)
                             return json.loads( f.read() )
+            else:
+                _log.throw("Unknown format '%s'", fmt )
+                    
             # delete a wrong version
             deleted = ""
             if delete_wrong_version:
@@ -905,6 +958,10 @@ class SubDir(object):
         """
         fmt      = fmt if not fmt is None else self._fmt
         version  = str(version) if not version is None else None
+        
+        if version is None and fmt in [Format.BLOSC, Format.GZIP]:
+            version = ""
+        
         def writer( key, fullFileName, obj ):
             try:
                 if fmt == Format.PICKLE or fmt == Format.BLOSC:
@@ -917,14 +974,42 @@ class SubDir(object):
                             len8[0]  = len(version_)
                             f.write(len8)
                             f.write(version_)
-                        if fmt == Format.BLOSC:
-                            if blosc is None: _log.throw("Could not import 'blosc'. Please pip install")
-                            obj = pickle.dumps(obj)  # returns data as a bytes object
-                            obj = blosc.compress(obj)
-                            f.write(obj)
-                        else:
+                        if fmt == Format.PICKLE:
                             pickle.dump(obj,f,-1)
-                else:
+                        else:
+                            assert fmt == fmt.BLOSC, ("Internal error: unknown format", fmt)
+                            if blosc is None: _log.throw("Could not import 'blosc'. Please pip install")
+                            pdata      = pickle.dumps(obj)  # returns data as a bytes object
+                            del obj
+                            len_data   = len(pdata)
+                            num_blocks = max(0,len_data-1) // BLOSC_MAX_USE + 1 
+                            f.write(num_blocks.to_bytes(2, 'big', signed=False))
+                            for i in range(num_blocks):
+                                start  = i*BLOSC_MAX_USE
+                                end    = min(len_data,start+BLOSC_MAX_USE)
+                                assert end>start, ("Internal error; nothing to write")
+                                block  = blosc.compress( pdata[start:end] )
+                                blockl = len(block)
+                                f.write( blockl.to_bytes(6, 'big', signed=False) )  
+                                if blockl > 0:
+                                    f.write( block )
+                                del block
+                            del pdata
+
+                elif fmt == Format.GZIP:
+                    if gzip is None: _log.throw("Package 'gzip' not found. Please pip install")
+                    with gzip.open(fullFileName,"wb") as f:
+                        # handle version as byte string
+                        if not version is None:
+                            version_ = bytearray(version, "utf-8")
+                            if len(version_) > 255: _log.throw("Version '%s' is way too long: its byte encoding has length %ld which does not fit into a byte", version, len(version_))
+                            len8     = bytearray(1)
+                            len8[0]  = len(version_)
+                            f.write(len8)
+                            f.write(version_)
+                        pickle.dump(obj,f,-1)
+                        
+                elif fmt in [Format.JSON_PLAIN, Format.JSON_PICKLE]:
                     with open(fullFileName,"wt",encoding="utf-8") as f:
                         if not version is None:
                             f.write("# " + version + "\n")
@@ -934,6 +1019,9 @@ class SubDir(object):
                         else:
                             assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
                             f.write( json.dumps( plain(obj, sorted_dicts=True, native_np=True) ) )
+                            
+                else:
+                    _log.throw("Internal error: invalid format '%s'", fmt)
             except Exception as e:
                 if raiseOnError:
                     raise e
