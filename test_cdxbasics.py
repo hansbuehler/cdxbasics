@@ -488,9 +488,28 @@ class CDXBasicsTest(unittest.TestCase):
 
         sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", fmt=SubDir.BLOSC )
         sub.write("test", x)
-        r = sub.read("test", None)
+        r = sub.read("test", None )
         self.assertEqual( list(x), list(r) )
         self.assertEqual(sub.ext, ".zbsc")
+        sub.write("test", x, version="1")
+        r = sub.read("test", None, version="1")
+        self.assertEqual( list(x), list(r) )
+        with self.assertRaises(Exception):
+            r = sub.read("test", None, version="2", raiseOnError=True)
+            # wrong version
+        sub.eraseEverything()
+
+        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", fmt=SubDir.GZIP )
+        sub.write("test", x)
+        r = sub.read("test", None )
+        self.assertEqual( list(x), list(r) )
+        self.assertEqual(sub.ext, ".pgz")
+        sub.write("test", x, version="1")
+        r = sub.read("test", None, version="1")
+        self.assertEqual( list(x), list(r) )
+        with self.assertRaises(Exception):
+            r = sub.read("test", None, version="2", raiseOnError=True)
+            # wrong version
         sub.eraseEverything()
 
 

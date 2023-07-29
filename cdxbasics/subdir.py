@@ -62,7 +62,7 @@ class Format(Enum):
     JSON_PLAIN = 2
     BLOSC = 3
     GZIP = 4
-    
+
 """
 Use the following for config calls:
 format = subdir.mkFormat( config("format", "pickle", subdir.FORMAT_NAMES, "File format") )
@@ -193,7 +193,7 @@ class SubDir(object):
     VER_NORMAL = 0
     VER_CHECK  = 1
     VER_RETURN = 2
-  
+
     def __init__(self, name : str, parent = None, *, ext : str = None, fmt : Format = None, eraseEverything : bool = False ):
         """
         Creates a sub directory which contains pickle files with a common extension.
@@ -330,7 +330,7 @@ class SubDir(object):
                 # path relative to 'parent'
                 if not parent.is_none:
                     name    = os.path.join( parent._path, name )
-                    
+
         # create directory/clean up
         if name is None:
             self._path = None
@@ -568,16 +568,20 @@ class SubDir(object):
         # delete existing files upon read error
         try:
             return reader( key, fullFileName, default )
-        except EOFError:
+        except EOFError as e:
             try:
                 os.remove(fullFileName)
-                _log.warning("Cannot read %s; file deleted (full path %s)",key,fullFileName)
+                _log.warning("Cannot read %s; file deleted (full path %s).\nError: %s",key,fullFileName, str(e))
             except Exception as e:
                 _log.warning("Cannot read %s; attempt to delete file failed (full path %s): %s",key,fullFileName,str(e))
-        if raiseOnError:
+        except Exception as e:
+            print(e)
+            if raiseOnError:
+                raise KeyError(key, fullFileName) from e
+        except:
             raise KeyError(key, fullFileName)
         return default
-    
+
     def _read( self, key : str,
                     default = None,
                     raiseOnError : bool = False,
@@ -592,9 +596,9 @@ class SubDir(object):
         fmt     = fmt if not fmt is None else self._fmt
         version = str(version) if not version is None else None
         version = version if handle_version != SubDir.VER_RETURN else ""
-        
+
         if version is None and fmt in [Format.BLOSC, Format.GZIP]:
-            version == "*"
+            version = ""
 
         def reader( key, fullFileName, default ):
             test_version = "(unknown)"
@@ -616,7 +620,8 @@ class SubDir(object):
                             data = pickle.load(f)
                         elif fmt == Format.BLOSC:
                             if blosc is None: _log.throw("Package 'blosc' not found. Please pip install")
-                            num_blocks = int.from_bytes( f.read(2), 'big', signed=False ) 
+                            nnbb       = f.read(2)
+                            num_blocks = int.from_bytes( nnbb, 'big', signed=False )
                             data       = bytearray()
                             for i in range(num_blocks):
                                 blockl = int.from_bytes( f.read(6), 'big', signed=False )
@@ -628,7 +633,7 @@ class SubDir(object):
                         else:
                             _log.throw("Unkown format '%s'", fmt)
                         return data
-                    
+
             elif fmt == Format.GZIP:
                 if gzip is None: _log.throw("Package 'gzip' not found. Please pip install")
                 with gzip.open(fullFileName,"rb") as f:
@@ -645,7 +650,7 @@ class SubDir(object):
                             return True
                         data = pickle.load(f)
                         return data
-                
+
             elif fmt in [Format.JSON_PLAIN, Format.JSON_PICKLE]:
                 with open(fullFileName,"rt",encoding="utf-8") as f:
                     # handle versioning
@@ -672,7 +677,7 @@ class SubDir(object):
                             return json.loads( f.read() )
             else:
                 _log.throw("Unknown format '%s'", fmt )
-                    
+
             # delete a wrong version
             deleted = ""
             if delete_wrong_version:
@@ -775,7 +780,7 @@ class SubDir(object):
             version : str
                 Specifies the version of the current code base to compare with.
                 You can use '*' to match any version
-                
+
             raiseOnError : bool
                 Whether to raise an exception if accessing an existing file failed (e.g. if it is a directory).
                 By default this function fails silently and returns the default.
@@ -958,10 +963,10 @@ class SubDir(object):
         """
         fmt      = fmt if not fmt is None else self._fmt
         version  = str(version) if not version is None else None
-        
+
         if version is None and fmt in [Format.BLOSC, Format.GZIP]:
             version = ""
-        
+
         def writer( key, fullFileName, obj ):
             try:
                 if fmt == Format.PICKLE or fmt == Format.BLOSC:
@@ -982,7 +987,7 @@ class SubDir(object):
                             pdata      = pickle.dumps(obj)  # returns data as a bytes object
                             del obj
                             len_data   = len(pdata)
-                            num_blocks = max(0,len_data-1) // BLOSC_MAX_USE + 1 
+                            num_blocks = max(0,len_data-1) // BLOSC_MAX_USE + 1
                             f.write(num_blocks.to_bytes(2, 'big', signed=False))
                             for i in range(num_blocks):
                                 start  = i*BLOSC_MAX_USE
@@ -990,7 +995,7 @@ class SubDir(object):
                                 assert end>start, ("Internal error; nothing to write")
                                 block  = blosc.compress( pdata[start:end] )
                                 blockl = len(block)
-                                f.write( blockl.to_bytes(6, 'big', signed=False) )  
+                                f.write( blockl.to_bytes(6, 'big', signed=False) )
                                 if blockl > 0:
                                     f.write( block )
                                 del block
@@ -1008,7 +1013,7 @@ class SubDir(object):
                             f.write(len8)
                             f.write(version_)
                         pickle.dump(obj,f,-1)
-                        
+
                 elif fmt in [Format.JSON_PLAIN, Format.JSON_PICKLE]:
                     with open(fullFileName,"wt",encoding="utf-8") as f:
                         if not version is None:
@@ -1019,7 +1024,7 @@ class SubDir(object):
                         else:
                             assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
                             f.write( json.dumps( plain(obj, sorted_dicts=True, native_np=True) ) )
-                            
+
                 else:
                     _log.throw("Internal error: invalid format '%s'", fmt)
             except Exception as e:
