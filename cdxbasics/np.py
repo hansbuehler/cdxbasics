@@ -37,6 +37,7 @@ def _prep_P_and_X( P : np.ndarray, x : np.ndarray, axis : int ) -> tuple:
     """
     P = np.asarray(P)
     x = np.asarray(x)
+    is_P = True
     if len(P.shape) != 1: _log.throw("'P' must be a vector. Found shape %s", P.shape)
     if not axis is None:
         if axis >= len(x.shape): _log.throw("Invalid axis %ld for 'x' with shape %s", axis, x.shape)
@@ -46,18 +47,22 @@ def _prep_P_and_X( P : np.ndarray, x : np.ndarray, axis : int ) -> tuple:
             shape = [1]*len(x.shape)
             shape[axis] = len(P)
             p = np.reshape( P, shape )
+            is_P = False
         else:
-            p - P
+            p = P
     else:
         x    = x.flatten() if len(x.shape) > 1 else x
         axis = -1
         if len(P) != len(x): _log.throw("'P' must have the same length as 'x'. Found %ld and %ld, respectively. Did you itend to use axis=None ?", len(P), len(x))
-        p = P 
+        p = P
     if np.min(p) < 0.: _log.throw("'P' cannot have negative members. Found element %g", np.min(P))
     sum_p = np.sum(p)
-    if abs(sum_p)-1. > 1E-8:
+    if abs(sum_p-1.) > 1E-8:
         if sum_p < 1E-12: _log.throw("'P' is zero")
-        P /= sum_p
+        if is_P:
+            p = p/sum_p
+        else:
+            p /= sum_p
     return p, x, axis
 
 def mean( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = False ) -> np.ndarray:
@@ -86,7 +91,8 @@ def mean( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = F
     if P is None:
         return np.mean( x, axis=axis, keepdims=keepdims )
     p, x, axis = _prep_P_and_X( P, x, axis )
-    return np.sum( p * x, axis=axis,keepdims=keepdims )
+    print("****** sum_p", np.sum(p))
+    return np.sum( p*x, axis=axis,keepdims=keepdims )
 
 def var( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = False ) -> np.ndarray:
     """
@@ -116,7 +122,7 @@ def var( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = Fa
         return np.var( x, axis=axis, keepdims=keepdims )
     p, x, axis = _prep_P_and_X( P, x, axis )
     m = np.sum( p * x, axis=axis,keepdims=keepdims )
-    return np.sum( p * (( x - m ) ** 2), axis=axis,keepdims=keepdims ) 
+    return np.sum( p * (( x - m ) ** 2), axis=axis,keepdims=keepdims )
 
 def std( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = False ) -> np.ndarray:
     """

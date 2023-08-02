@@ -607,8 +607,9 @@ class CDXBasicsTest(unittest.TestCase):
 
         P = np.exp( np.linspace(-10.,-1.,10) )
         X = np.sin( np.linspace(-1,+1,10) )
+        mean = np.sum( P*X ) / np.sum(P)
 
-        self.assertAlmostEqual( cdxnp.mean(P, X), 0.7503180149251274 )
+        self.assertAlmostEqual( cdxnp.mean(P, X), mean )
         self.assertAlmostEqual( cdxnp.mean(None, X), 0. )
         self.assertAlmostEqual( cdxnp.var(P, X), 0.02698584874615149 )
         self.assertAlmostEqual( cdxnp.var(None, X), 0.3195943287456196 )
