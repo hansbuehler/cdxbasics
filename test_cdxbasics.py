@@ -474,6 +474,7 @@ class CDXBasicsTest(unittest.TestCase):
         x = np.ones((10,))
         sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", fmt=SubDir.JSON_PICKLE )
         sub.write("test", x)
+        r = sub.read("test", None, raiseOnError=True)
         r = sub.read("test", None)
         self.assertEqual( list(x), list(r) )
         self.assertEqual(sub.ext, ".jpck")
