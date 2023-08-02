@@ -1331,6 +1331,12 @@ class SubDir(object):
         # single key
         fullFileName = self.fullKeyName(key, ext=ext)
         return os.path.getsize(fullFileName)
+    
+    def rename( self, source : str, target : str, *, ext : str = None ):
+        """ Rename "source" key into "target" key. Function will raise an exception if not successful """
+        src_full = self.fullKeyName( source, ext=ext )
+        tar_full = self.fullKeyName( target, ext=ext )
+        os.rename(src_full, tar_full)
 
     # -- dict-like interface --
 
