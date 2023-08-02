@@ -38,4 +38,5 @@ jobs:
         pip install sortedcontainers
         pip install psutil
         pip install jsonpickle
+        pip install blosc
         pytest
