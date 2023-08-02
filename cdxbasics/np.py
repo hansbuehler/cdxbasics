@@ -45,16 +45,20 @@ def _prep_P_and_X( P : np.ndarray, x : np.ndarray, axis : int ) -> tuple:
         if P.shape != x.shape:
             shape = [1]*len(x.shape)
             shape[axis] = len(P)
-            P = np.reshape( P, shape )
+            p = np.reshape( P, shape )
+        else:
+            p - P
     else:
         x    = x.flatten() if len(x.shape) > 1 else x
         axis = -1
         if len(P) != len(x): _log.throw("'P' must have the same length as 'x'. Found %ld and %ld, respectively. Did you itend to use axis=None ?", len(P), len(x))
-    if np.min(P) < 0.: _log.throw("'P' cannot have negative members. Found element %g", np.min(P))
-    sum_P = np.sum(P)
-    if sum_P < 1E-12: _log.throw("'P' is zero")
-    P /= sum_P
-    return P, x, axis
+        p = P 
+    if np.min(p) < 0.: _log.throw("'P' cannot have negative members. Found element %g", np.min(P))
+    sum_p = np.sum(p)
+    if abs(sum_p)-1. > 1E-8:
+        if sum_p < 1E-12: _log.throw("'P' is zero")
+        P /= sum_p
+    return p, x, axis
 
 def mean( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = False ) -> np.ndarray:
     """
@@ -81,9 +85,8 @@ def mean( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = F
     """
     if P is None:
         return np.mean( x, axis=axis, keepdims=keepdims )
-    P, x, axis = _prep_P_and_X( P, x, axis )
-    sumP       = np.sum(P)
-    return np.sum( P * x, axis=axis,keepdims=keepdims ) / sumP
+    p, x, axis = _prep_P_and_X( P, x, axis )
+    return np.sum( p * x, axis=axis,keepdims=keepdims )
 
 def var( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = False ) -> np.ndarray:
     """
@@ -111,9 +114,9 @@ def var( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = Fa
     """
     if P is None:
         return np.var( x, axis=axis, keepdims=keepdims )
-    P, x, axis = _prep_P_and_X( P, x, axis )
-    m = mean(P,x,axis,keepdims=True)
-    return np.sum( P * (( x - m ) ** 2), axis=axis,keepdims=keepdims ) / np.sum(P)
+    p, x, axis = _prep_P_and_X( P, x, axis )
+    m = np.sum( p * x, axis=axis,keepdims=keepdims )
+    return np.sum( p * (( x - m ) ** 2), axis=axis,keepdims=keepdims ) 
 
 def std( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = False ) -> np.ndarray:
     """
@@ -201,14 +204,14 @@ def quantile( P : np.ndarray, x : np.ndarray, quantiles : np.ndarray, axis : int
     if P is None:
         x = x.flatten() if axis is None else x
         return np.quantile( x, quantiles, axis if not axis is None else -1, keepdims=keepdims )
-    P, x, axis = _prep_P_and_X( P, x, axis )
-    P = P.flatten()
+    p, x, axis = _prep_P_and_X( P, x, axis )
+    p = P.flatten()
 
     def pfunc( vec, *args, **kwargs ):
-        assert len(vec) == len(P), ("Internal error", len(vec), len(P) )
+        assert len(vec) == len(p), ("Internal error", len(vec), len(p) )
         ixs      = np.argsort( vec )
         vec      = vec[ixs]
-        dst      = np.cumsum( P[ixs] )
+        dst      = np.cumsum( p[ixs] )
         dst[1:]  = 0.5 * ( dst[1:] + dst[:-1] )
         dst[0]   = dst[0] / 2.
         return np.interp( quantiles, dst, vec, left=vec[0], right=vec[-1] )
