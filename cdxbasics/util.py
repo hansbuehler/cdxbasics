@@ -482,7 +482,7 @@ def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscor
     parse_underscore = str(parse_underscore)
     if parse_underscore == "none":
         pi = 0
-    elif parse_underscore == "protect":
+    elif parse_underscore == "protected":
         pi = 1
     else:
         assert parse_underscore == "private", "'parse_underscore' must be 'none', 'private', or 'protected'. Found '%s'" % parse_underscore

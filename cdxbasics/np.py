@@ -91,7 +91,6 @@ def mean( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = F
     if P is None:
         return np.mean( x, axis=axis, keepdims=keepdims )
     p, x, axis = _prep_P_and_X( P, x, axis )
-    print("****** sum_p", np.sum(p))
     return np.sum( p*x, axis=axis,keepdims=keepdims )
 
 def var( P : np.ndarray, x : np.ndarray, axis : int = None, keepdims : bool = False ) -> np.ndarray:
