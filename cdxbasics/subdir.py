@@ -886,7 +886,7 @@ class SubDir(object):
         fullFileName = self.fullKeyName(key,ext=ext)
         tmp_file     = uniqueHash48( [ key, uuid.getnode(), os.getpid(), threading.get_ident(), datetime.datetime.now() ] )
         tmp_i        = 0
-        fullTmpFile  = self.fullKeyName(tmp_file) + ".tmp"
+        fullTmpFile  = self.fullKeyName(tmp_file,ext="tmp" if not ext=="tmp" else "_tmp") 
         while os.path.exists(fullTmpFile):
             fullTmpFile = self.fullKeyName(tmp_file) + "." + str(tmp_i) + ".tmp"
             tmp_i       += 1
