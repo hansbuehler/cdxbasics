@@ -203,7 +203,8 @@ class Version(object):
                 str_dep   = dep
 
                 # expand global lookup with 'self' if present
-                source    = self._original.__globals__
+                source    = getattr(self._original,"__globals__", None)      
+                if source is None: _log.throw("Cannot resolve dependency for string reference '%s': object of type '%s' has no __globals__ to look up in", dep, type(self._original).__name__ )
                 src_name  = "global name space"
                 self_     = getattr(self._original,"__self__" if not isinstance(self._original,type) else "__dict__", None)
                 if not self_ is None:

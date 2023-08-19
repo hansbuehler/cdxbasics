@@ -5,8 +5,10 @@ Hans Buehler 2023
 
 from .logger import Logger
 import numpy as np
+from scipy.stats import norm
 import math as math
 from collections.abc import Mapping
+from cdxbasics.prettydict import PrettyOrderedDict
 _log = Logger(__file__)
 
 # ------------------------------------------------
@@ -351,8 +353,6 @@ def mean_std_bins( x : np.ndarray, bins : int, axis : int = None, P : np.ndarray
         stds  = np.asarray( std( P[ixs[i]:ixs[i+1]], x[ixs[i]:ixs[i+1]], axis=axis) for i in range(len(ixs)-1))
     return means, stds
 
-
-
 def np_european(   *,
                    ttm : np.ndarray,
                    vols : np.ndarray,
@@ -370,16 +370,7 @@ def np_european(   *,
         dfrho is sensitivity with respect to DF
         voltheta is with respect to time-decay in the vol term only, as F and DF contain their own time
         vega is with respect to vol (as usual)
-    """
-    # ensure we can handle inactive options
-    assert np.min( ttm ) >= 0., ("European error: 'ttm' cannot be negative; found", np.min(ttm))
-    assert np.min( K ) > 0., ("European error: 'K' must be positive; found", np.min(K))
-    assert np.min( DF ) > 0., ("European error: 'DF' must be positive; found", np.min(DF))
-    assert np.min( F ) > 0., ("European error: 'F' must be positive; found", np.min(F))
-    assert np.min( vols ) >= 0., ("European error: 'vols' cannot be negative; found", np.min(ttm))
-    assert np.max( np.abs(cp)-1. ) <1E-12, ("European error: 'cp' must be +1 (call) or -1 (put); found max{ |cp|-1 }:", np.max( np.abs(cp)-1. ))
 
-    """
     https://en.wikipedia.org/wiki/Greeks_(finance)
     Note that we compute delta, gamma, theta with respect to the forward
     
@@ -421,6 +412,36 @@ def np_european(   *,
         d/dvol BS = DF F N'(d1) d/dvol d1 - DF K N'(d2) d/dvol d2
                   = DF F N'(d1) ( d/dvol d1 - d/dvol d2 )
                   = DF F N'(d1) \sqrt T
+
+    Parameters
+    ----------
+        ttm : time to maturity in years >=0 
+        vols : implied volatilities >=0
+        K    : strikes >0
+        cp   : 1 for call -1 for put
+        DF   : discount factor >0
+        F    : forward >0
+        price_only : if True, return price, otherwise return dictionary
+        
+    Returns
+    -------
+    Price if price_only is True, otherwise dictionary 
+                       price
+                       vega
+                       fdelta
+                       fgamma
+                       voltheta
+                       dfrho
+    """
+    # ensure we can handle inactive options
+    assert np.min( ttm ) >= 0., ("European error: 'ttm' cannot be negative; found", np.min(ttm))
+    assert np.min( K ) > 0., ("European error: 'K' must be positive; found", np.min(K))
+    assert np.min( DF ) > 0., ("European error: 'DF' must be positive; found", np.min(DF))
+    assert np.min( F ) > 0., ("European error: 'F' must be positive; found", np.min(F))
+    assert np.min( vols ) >= 0., ("European error: 'vols' cannot be negative; found", np.min(ttm))
+    assert np.max( np.abs(cp)-1. ) <1E-12, ("European error: 'cp' must be +1 (call) or -1 (put); found max{ |cp|-1 }:", np.max( np.abs(cp)-1. ))
+
+    """
         
     """         
     intrinsic = np.maximum( DF*cp*( F - K ), 0. )
@@ -457,7 +478,8 @@ def np_european(   *,
     voltheta  = np.where( is_intr, 0.,        voltheta )
     dfrho     = np.where( is_intr, intrinsic/DF, dfrho )
     
-    return pdct(       price=price,
+    return PrettyOrderedDict(
+                       price=price,
                        vega=vega,
                        fdelta=fdelta,
                        fgamma=fgamma,
