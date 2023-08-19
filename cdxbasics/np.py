@@ -5,11 +5,15 @@ Hans Buehler 2023
 
 from .logger import Logger
 import numpy as np
-from scipy.stats import norm
 import math as math
 from collections.abc import Mapping
 from cdxbasics.prettydict import PrettyOrderedDict
 _log = Logger(__file__)
+
+try:
+    from scipy.stats import norm
+except ModuleNotFoundError:
+    norm = None
 
 # ------------------------------------------------
 # Basic help
@@ -433,6 +437,8 @@ def np_european(   *,
                        voltheta
                        dfrho
     """
+    if norm is None: raise ModuleNotFoundError("scipy")
+    
     # ensure we can handle inactive options
     assert np.min( ttm ) >= 0., ("European error: 'ttm' cannot be negative; found", np.min(ttm))
     assert np.min( K ) > 0., ("European error: 'K' must be positive; found", np.min(K))
