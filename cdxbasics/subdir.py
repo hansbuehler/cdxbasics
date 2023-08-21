@@ -20,6 +20,7 @@ import datetime
 from collections.abc import Collection, Mapping
 from enum import Enum
 import json as json
+import platform as platform
 
 try:
     import numpy as np
@@ -293,6 +294,10 @@ class SubDir(object):
         if not name is None:
             if not isinstance(name, str): _log.throw( "'name' must be string. Found object of type %s", type(name))
             name   = name.replace('\\','/')
+            
+            # avoid windows file names on Linux
+            if platform.system() != "Windows" and name[1:3] == ":/":
+                _log.error("Detected use of windows-style drive declaration %s in path %s.", name[:3], name )
 
             # extract extension information
             ext_i = name.find(";*.")
