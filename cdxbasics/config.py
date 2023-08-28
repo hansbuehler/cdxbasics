@@ -128,10 +128,8 @@ class Config(OrderedDict):
         Parameters
         ----------
             *args : list
-                List of dictionaries to update() for.
-                If the first element is a config, and no other parameters
-                are passed, then this object will be full copy of that config.
-                It shares all usage recording.
+                List of dictionaries to update() with, iteratively.
+                If the first element is a config, and no other parameters are passed, then this object will be full copy of that config. It shares all usage recording. See copy().
             config_name : str, optional
                 Name of the configuration for report_usage. Default is 'config'
             **kwargs : dict
@@ -146,7 +144,7 @@ class Config(OrderedDict):
             self._children       = source._children
             self.update(source)
             return
-
+        
         OrderedDict.__init__(self)
         self._done           = set()
         self._name           = config_name if not config_name is None else "config"
@@ -154,7 +152,8 @@ class Config(OrderedDict):
         self._recorder       = SortedDict()
         self._recorder._name = self._name
         for k in args:
-            self.update(k)
+            if not k is None:
+                self.update(k)
         self.update(kwargs)
 
     # Information
@@ -1018,12 +1017,43 @@ class Config(OrderedDict):
     # -------
 
     @staticmethod
-    def to_config( kwargs, config_name = "kwargs"):
+    def to_config( kwargs : dict, config_name : str = "kwargs"):
         """
         Makes sure an object is a config, and otherwise tries to convert it into one
         Classic use case is to transform 'kwargs' to a Config
         """
         return kwargs if isinstance(kwargs,Config) else Config( kwargs,config_name=config_name )
+
+    @staticmethod
+    def config_kwargs( config, kwargs : dict, config_name : str = "kwargs"):
+        """
+        Default implementation for a usage pattern where the user can use both a 'config' and kwargs
+        Example
+        
+        def f(config, **kwargs):
+            config = Config.config_kwargs( config, kwargs )
+            ...
+            x = config("x", 1, ...)
+            
+        and then one can use eigher
+        
+            config = Config()
+            config.x = 1
+            f(config)
+
+        or
+
+            f(x=1)        
+                    
+        """
+        if isinstance(config, Config):
+            if len(kwargs) > 0:
+                config = config.detach()
+                config.update(kwargs)
+        else:
+            if not isinstance(config,Config): _log.throw("'config' must be a Config or None. Found type '%s'", type(config).__name__)
+            config = Config.to_config( kwargs=kwargs, config_name=config_name )
+        return config
 
     # for uniqueHash
     # --------------
