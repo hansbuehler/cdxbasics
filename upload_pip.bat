@@ -9,7 +9,7 @@ cd C:\Users\hansb\OneDrive\Python3\packages\cdxbasics
 if exist dist rmdir /Q /S dist
 mkdir dist
 call conda activate base
-call pip install twine 
+call pip install -q twine 
 call python pip_modify_setup.py 
 call python setup.py sdist bdist_wheel
 call python -m twine upload dist\*
