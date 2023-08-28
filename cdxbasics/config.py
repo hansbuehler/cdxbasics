@@ -144,7 +144,7 @@ class Config(OrderedDict):
             self._children       = source._children
             self.update(source)
             return
-        
+
         OrderedDict.__init__(self)
         self._done           = set()
         self._name           = config_name if not config_name is None else "config"
@@ -1029,35 +1029,35 @@ class Config(OrderedDict):
         """
         Default implementation for a usage pattern where the user can use both a 'config' and kwargs
         Example
-        
+
         def f(config, **kwargs):
             config = Config.config_kwargs( config, kwargs )
             ...
             x = config("x", 1, ...)
-            
+
         and then one can use eigher
-        
+
             config = Config()
             config.x = 1
             f(config)
 
         or
 
-            f(x=1)        
-                    
+            f(x=1)
+
         """
         if isinstance(config, Config):
             if len(kwargs) > 0:
                 config = config.detach()
                 config.update(kwargs)
         else:
-            if not isinstance(config,Config): _log.throw("'config' must be a Config or None. Found type '%s'", type(config).__name__)
+            if not isinstance(config,None): _log.throw("'config' must be a Config or None. Found type '%s'", type(config).__name__)
             config = Config.to_config( kwargs=kwargs, config_name=config_name )
         return config
 
     # for uniqueHash
     # --------------
-    
+
     def __unique_hash__(self, length : int, parse_functions : bool, parse_underscore : str ) -> str:
         """
         Returns a unique hash for this object
