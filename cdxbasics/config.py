@@ -1051,7 +1051,7 @@ class Config(OrderedDict):
                 config = config.detach()
                 config.update(kwargs)
         else:
-            if not isinstance(config,None): _log.throw("'config' must be a Config or None. Found type '%s'", type(config).__name__)
+            if not config is None: _log.throw("'config' must be a Config or None. Found type '%s'", type(config).__name__)
             config = Config.to_config( kwargs=kwargs, config_name=config_name )
         return config
 
