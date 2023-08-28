@@ -15,7 +15,7 @@ call python setup.py sdist bdist_wheel
 call python -m twine upload dist\*
 rmdir /Q /S dist
 
-pip install --upgrade cdxbasicsa
+pip install --upgrade cdxbasics
 
 echo =====================================================================================
 echo GIT upload
