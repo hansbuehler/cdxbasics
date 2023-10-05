@@ -1,6 +1,16 @@
 """
-dynafig
+dynaplot
 Dynamic matplotlib in jupyer notebooks
+
+    from dynaplot import figure
+    
+    fig = figure()
+    ax = fig.add_subplot()
+    ax.plot(x,y)
+    ax = fig.add_subplot()
+    ax.plot(x,z)
+    fig.close()
+
 Hans Buehler 2022
 """
 import matplotlib.pyplot as plt
@@ -14,21 +24,19 @@ _log = Logger(__file__)
 
 class DynamicAx(Deferred):
     """
-    Wrapper around an matplotlib axis returned by DynamicFig, which is returned by figure().
+    Wrapper around a matplotlib axis returned by DynamicFig (which in turn is returned by figure()).
 
     All calls to the returned axis are delegated to matplotlib.
     The results of deferred function calls are again deferred objects, allowing (mostly) to keep working in deferred mode.
-
-    figure.render()
 
     Example
     -------
         fig = figure()
         ax  = fig.add_subplot()
-        lns = ax.plot( x, y, ":" )[0] # plot() returns a deferred list, which then deferrs item acces
+        lns = ax.plot( x, y, ":" )    # the matplotlib plot() calls is deferred
         fig.render()                  # renders the figure with the correct plots
                                       # and executes plot() which returns a list of Line2Ds
-        lns.set_ydata( y2 )           # now access result from plot
+        lns[0].set_ydata( y2 )        # now access result from plot
         fig.render()                  # update graph
     """
 
@@ -84,7 +92,12 @@ class DynamicFig(Deferred):
             we will use
 
         render():
-            Use instead of plt.show()
+            Use instead of plt.show().
+            Elements of the figure may still be modified ("animated") after this point.
+
+        close():
+            Closes the figure. No further calls to elements of the figure allowed.
+            Call this to avoud duplicate images in jupyter.
 
         next_row()
             Skip to next row, if not already in the first column.
@@ -103,13 +116,20 @@ class DynamicFig(Deferred):
                        **fig_kwargs ):
         """
         Setup object with a given output geometry.
+        By default the "figsize" of the figure will be derived from the number of plots vs col_nums, row_size and col_size.
+        If 'figsize' is specificed as part of fig_kwargs, then ow_size and col_size are ignored.
 
-        Paraneters
+        Once the figure is constructed,
+        1) Use add_subplot() to add plots
+        2) Call render() to place those plots. Post render, plots can be updated ("animated").
+        3) Call close() to close the figure and avoid duplicate copies in jupyter.
+        
+        Parameters
         ----------
             row_size : int, optional
                 Size for a row for matplot lib. Default is 5
             col_size : int, optional
-                Size for a column for matplot luib. Default is 4
+                Size for a column for matplot lib. Default is 4
             col_nums : int, optional
                 How many columns. Default is 5
             title : str, optional
@@ -119,7 +139,8 @@ class DynamicFig(Deferred):
                 tight : bool, optional (False)
                     Short cut for tight_layout
                     https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.figure.html#
-                It is recommended not to use 'figsize'
+                By default, 'figsize' is derived from col_size and row_size. If 'figsize' is specified,
+                those two values are ignored.
         """
         Deferred.__init__(self, "figure")
         self.hdisplay   = None
@@ -154,7 +175,10 @@ class DynamicFig(Deferred):
         ----------
             new_row : bool, optional
                 Whether to force a new row. Default is False
-            kwargs : other arguments to be passed to matplotlib's add_subplot, for example projection='3d'
+            title : str, options
+                Optional title for the plot.
+            kwargs : 
+                other arguments to be passed to matplotlib's add_subplot, for example projection='3d'
         """
         _log.verify( not self.closed, "Cannot call add_subplot() after close() was called")
         _log.verify( self.fig is None, "Cannot call add_subplot() after render() was called")
@@ -188,7 +212,7 @@ class DynamicFig(Deferred):
         ----------
             draw : bool
                 If False, then the figure is created, but not drawn.
-                This can be used e.g. when you are planning to save the figure to a file.
+                This is used in savefig() and to_buytes().
         """
         _log.verify( not self.closed, "Cannot call render() after close() was called")
         if self.this_row == 0 and self.this_col == 0:
@@ -226,12 +250,11 @@ class DynamicFig(Deferred):
         """
         Saves the figure to a file.
         https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.savefig.html
-        This is just a short cut which calls render() first.
 
         Parameters
         ----------
             fname : filename or file-like object, c.f. https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.savefig.html
-            silent_close : if True, call close() without rendering the figure.
+            silent_close : if True, call close(). Unless the figure was drawn before, this means that the figure will not be displayed in jupyter.
             kwargs : to be passed to https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.savefig.html
         """
         _log.verify( not self.closed, "Cannot call savefig() after close() was called")
@@ -253,7 +276,7 @@ class DynamicFig(Deferred):
 
         Parameters
         ----------
-            silent_close : if False, call render() and then close the figure. Else just close.
+            silent_close : if True, call close(). Unless the figure was drawn before, this means that the figure will not be displayed in jupyter.
         """
         _log.verify( not self.closed, "Cannot call savefig() after close() was called")
         img_buf = io.BytesIO()
@@ -268,18 +291,17 @@ class DynamicFig(Deferred):
 
     def close(self, render : bool = True ):
         """
-        Close down the figure. Does not clear the figure.
-        Call this to remove the resiudal print in jupyter at the end of your animation
+        Closes the figure. Does not clear the figure.
+        Call this to avoid a duplicate in jupyter output cells.
 
         Parameters
         ----------
-            render : if True, this function will call render() before closing the figure
+            render : if True, this function will call render() before closing the figure.
         """
         if not self.closed:
             if render: self.render()
             plt.close(self.fig)
         self.closed = True
-
 
 def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kwargs ) -> DynamicFig:
     """
@@ -303,6 +325,7 @@ def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kw
                 lns = ax.plot( x, y, ":" )
                 fig.render() # --> draw graph
 
+                # "animate"
                 lns.set_ydata( y2 )
                 fig.render() # --> change graph
 
@@ -311,15 +334,24 @@ def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kw
             Call repeatedly if the underlying graphs are modified
             as per example above.
             No further add_subplots() are recommended
+
+        close():
+            Close the figure.
+            Call this to avoid duplicate copies of the figure in jupyter
+            
         The object will also defer all other function calls to the figure
         object; most useful for: suptitle, supxlabel, supylabel
         https://matplotlib.org/stable/gallery/subplots_axes_and_figures/figure_title.html
+
+        By default the "figsize" of the figure will be derived from the number of plots vs col_nums, row_size and col_size.
+        If 'figsize' is specificed as part of fig_kwargs, then ow_size and col_size are ignored.
+        
     Paraneters
     ----------
         row_size : int, optional
             Size for a row for matplot lib. Default is 5
         col_size : int, optional
-            Size for a column for matplot luib. Default is 4
+            Size for a column for matplot lib. Default is 4
         col_nums : int, optional
             How many columns. Default is 5
         fig_kwargs :
@@ -327,7 +359,8 @@ def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kw
             tight : bool, optional (False)
                 Short cut for tight_layout
                 https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.figure.html#
-            It is recommended not to use 'figsize'
+            By default, 'figsize' is derived from col_size and row_size. If 'figsize' is specified,
+            those two values are ignored.
 
     Returns
     -------
