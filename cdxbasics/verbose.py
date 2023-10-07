@@ -146,7 +146,7 @@ class Context(object):
         """
         message = self.fmt( level, message, *args, head=head, **kwargs )
         if not message is None:
-            print(message,end=end,flush=end!='\n')
+            print(message,end=end,flush=True)
 
     def fmt( self, level : int, message : str, *args, head : bool = True, **kwargs ) -> str:
         """
