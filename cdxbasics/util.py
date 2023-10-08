@@ -230,6 +230,15 @@ def fmt_big_number( number : int ) -> str:
         return "%gK" % number
     return str(number)
 
+def fmt_digits( uint, seperator : str = "," ):
+    if uint < 0:
+        return "-" + fmt_digits( -uint, seperator )
+    assert uint >= 0
+    if uint < 1000:
+        return "%ld" % uint
+    else:
+        return fmt_digits(uint//1000, seperator) + ( seperator + "%03ld" % (uint % 1000) )
+
 def fmt_big_byte_number( byte_cnt : int, add_B_to_string = False ) -> str:
     """
     Return a formatted big number string, e.g. 12.35M instead of all digits.
