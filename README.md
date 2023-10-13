@@ -1135,8 +1135,7 @@ Writes the contents of a large `numpy.ndarray` or `ndsharedarray` file directly 
 
 ### `shared_fromfile`, `np_fromfile`
 Reads back data written with `tofile` into a new array. The caller has to specify the `dtype`, but the shape of the data is read from the file.
-
-The function `shared_fromfile` will attempt to create a new shared array with the data from the file. It will fail 
+The function `shared_fromfile` will attempt to create a new shared array with the data from the file. This function will fail with an `FileExistsError` exception (on Linux) if a shared memory block with the respective name already exists.
 
 ### `readinto`
 Reads back data written with `tofile` into an existing array. Shape and dtype of the array provided must match those of the file being read.
