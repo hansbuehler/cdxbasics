@@ -1093,3 +1093,59 @@ Here is the output of above code block: it also shows the aforementioned transpa
     Reading cache
     00: Successfully read cache for 'my_big_func' from 'C:/Users/hansb/AppData/Local/Temp/.cache/my_big_func_6ac240bc128ec33ca37c17c5aab243e46b976893ccf0c40a.pck'
 
+# sharedarray
+
+Implementation of numpy arrays on shared memory, following essentially https://docs.python.org/3/library/multiprocessing.shared_memory.html.
+
+## `sharedarray()`
+
+The primary interface is the function `sharedmemory` which can be used to either create or connect to a named shared array buffer. This functon retruns an `ndsharedmemory`
+array which is *not* a full wrapper around `np.ndarray`. While it manages to delegate some functionality to `ndarray` transparently, it is advisable to use its `array` property to access the underlying `ndarray`.
+Self-evidently, any changes to the array which are supposed to be shared must be made in place.
+```
+    sharedarray( name   : str,
+                 shape  : tuple, 
+                 create : bool,
+                 dtype  = np.float32, 
+                 full   = None,
+                 *,
+                 raiseOnError : bool = False,
+                 verbose      : Context = None ):
+```
+See `help(sharedarray)` for details on how this function operates.
+                 
+### Naming
+
+`sharedarray` will use a user-specified `name` to generate an internal name. The internal name is essentially the name provided by the user amended by shape and dtype.
+* Once created, this shared memory block is accessible accross the system.
+* Attempting to create a second array with the same internal name will fail.
+* In order to delete an array, you need to ensure deletion of the object, and might have to call Python's garbage collector with `gc.collect()`.
+
+### Size of shared memory under Linux
+When using Linux, available shared memory can be assess with `findmnt -o AVAIL,USED /dev/shm`. You can increase this by `sudo vi  /etc/fstab` and add
+ ```
+none     /run/shm     tmpfs     rw,noexec,nosuid,nodev,size=200gb     0     0
+```
+You will have to then re-mount, for example `sudo mount -o remount /run/shm`.
+
+## Disk I/O
+Shared memory tends to be used for large chunks of data. In such cases it is not efficient to first load data into non-shared numpy arrays, and then copy it into shared memory.
+To this end, the module contains the functions `shared_fromfile`, `np_fromfile`, `readinto`, and `tofile`. 
+
+### `tofile`
+Writes the contents of a large `numpy.ndarray` or `ndsharedarray` file directly to disk in system-dependent binary format using a `ByteArray` view on the array. Data is written in chunkcs of 1GB to work around limitations for writing more than 2GB on Linux systems. This i/o is materially faster than standard `pickle` for numpy arrays.
+
+### `shared_fromfile`, `np_fromfile`
+Reads back data written with `tofile` into a new array. The caller has to specify the `dtype`, but the shape of the data is read from the file.
+
+The function `shared_fromfile` will attempt to create a new shared array with the data from the file. It will fail 
+
+### `readinto`
+Reads back data written with `tofile` into an existing array. Shape and dtype of the array provided must match those of the file being read.
+
+
+
+
+
+
+
