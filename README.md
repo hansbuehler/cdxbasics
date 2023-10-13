@@ -1097,9 +1097,7 @@ Here is the output of above code block: it also shows the aforementioned transpa
 
 Implementation of numpy arrays on shared memory, following essentially https://docs.python.org/3/library/multiprocessing.shared_memory.html.
 
-## `sharedarray()`
-
-The primary interface is the function `sharedmemory` which can be used to either create or connect to a named shared array buffer. This functon retruns an `ndsharedmemory`
+The primary interface is the function `sharedarray` which can be used to either create or connect to a named shared array buffer. This functon retruns an `ndsharedarray`
 array which is *not* a full wrapper around `np.ndarray`. While it manages to delegate some functionality to `ndarray` transparently, it is advisable to use its `array` property to access the underlying `ndarray`.
 Self-evidently, any changes to the array which are supposed to be shared must be made in place.
 ```
