@@ -420,3 +420,155 @@ def shared_fromfile( file, name, dtype=np.float32 ):
     
 
 
+
+
+"""
+Experimental
+"""
+
+def write_int64(f,x):
+    """ Write integer 'x' to file 'f' (64 bit) """
+    x = int(x).to_bytes(8,"big")
+    w = f.write( x )
+    if w!=len(x):
+        raise EOFError("Wrote only %ld bytes instead of %ld for 'int64'" % ( w, len(x) ) )
+        
+def write_int32(f,x):
+    """ Write integer 'x' to file 'f' (32 bit) """
+    x = int(x).to_bytes(4,"big")
+    w = f.write( x )
+    if w!=len(x):
+        raise EOFError("Wrote only %ld bytes instead of %ld for 'int32'" % ( w, len(x) ) )
+        
+def write_int16(f,x):
+    """ Write integer 'x' to file 'f' (16 bit) """
+    x = int(x).to_bytes(2,"big")
+    w = f.write( x )
+    if w!=len(x):
+        raise EOFError("Wrote only %ld bytes instead of %ld for 'int16'" % ( w, len(x) ) )
+        
+def write_shape(f,x):
+    """ Writes a shape tuple 'x' into file 'f'. Assumes 'length' fits into a 32 bit integer, while each element is 64 bit """
+    x = tuple(x)
+    write_int32(f,len(x))
+    for i in x:
+        write_int64(f,i)
+
+def write_string(f,x):
+    """ Write string 'x' into file 'f'. Assumes the string's length fits into 32 bit """
+    x = str(x).encode()
+    assert isinstance(x, bytes), ("Internal error", type(x))
+    write_int32(f,len(x))
+    w = f.write(x)
+    if w!=len(x):
+        raise EOFError("Wrote only %ld bytes instead of %ld for 'str'" % ( w, len(x) ) )
+
+def write_array(f,x):
+    """ write numpy array 'x' into file 'f' """
+    
+    if not x.data.contiguous:
+        #array    = np.ascontiguousarray( array, dtype=array.dtype ) if not array.data.contiguous else array
+        _log.warn("Array is not 'contiguous'. Is that an issue??")
+
+    shape    = tuple(x.shape)
+    dsize    = int(x.dtype.itemsize)   
+    assert dsize == x.itemsize
+
+    write_shape(f,shape)
+    write_string(f,str(x.dtype))
+    write_int32(f,dsize)
+
+    length   = int( np.product( [ int(i) for i in shape ], dtype=np.uint64 ) )
+    x        = np.reshape( x, (length,) )  # this operation should not reallocate any memory        
+    max_size = int(1024*1024*1024//dsize)
+    num      = int(length-1)//max_size+1
+    saved    = 0
+    for j in range(num):
+        s   = j*max_size
+        e   = min(s+max_size, length)
+        bts = x.data[s:e]
+        nw  = f.write( bts )
+        if nw != (e-s)*dsize:
+            raise EOFError("Wrote only %s bytes instead of %s for 'array'" % ( fmt_digits(nw),fmt_digits((e-s)*dsize) ) )
+        saved += nw
+    if saved != length*dsize:
+        raise EOFError("Write error: %s bytes were written in total, but expected %s bytes to be written" % ( fmt_digits(saved), fmt_digits(length*dsize)) )
+
+def write_array_dict( f, x ):
+    """ Write dictionary 'x' of numpy arrays to 'f' """
+    write_int32(f,len(x))
+    for k,v in x.items():
+        write_string(f,k)
+        write_array(f,v)
+        
+def read_int64(f):
+    """ Read 64 bit int from 'f' """
+    x = f.read(8)
+    if len(x) != 8:
+        raise EOFError("Could not read 8 bytes. Only read %ld bytes" % len(x))
+    return int.from_bytes(x,"big")
+def read_int32(f):
+    """ Read 32 bit int from 'f' """
+    x = f.read(4)
+    if len(x) != 4:
+        raise EOFError("Could not read 4 bytes. Only read %ld bytes" % len(x))
+    return int.from_bytes(x,"big")
+def read_int16(f):
+    """ Read 16 bit int from 'f' """
+    x = f.read(2)
+    if len(x) != 2:
+        raise EOFError("Could not read 2 bytes. Only read %ld bytes" % len(x))
+    return int.from_bytes(x,"big")
+
+def read_shape(f):
+    """ Reads a shape tuple fromn 'f' """
+    l = read_int32(f)
+    return tuple( [ read_int64(f) for i in range(l) ] )  
+
+def read_string(f):
+    """ Reads a string from 'f' """
+    l = read_int32(f)
+    x = f.read(l)
+    if len(x) != l:
+        raise EOFError("Could not read %ld bytes of a string. Only read %ld bytes" % (l,len(x)))
+    return x.decode()
+
+def read_array(f,construct=None):
+    """ Reads an array from 'f' """
+    
+    shape       = read_shape(f)
+    dtype_str   = read_string(f)
+    dtype_size  = read_int32(f)
+
+    dtype       = np.dtype(dtype_str)
+    if dtype_size != dtype.itemsize:
+        raise RuntimeError("Error reading array: array was understood to have dtype '%s' which has size %ld. However, size %ld was found on disk" % (dtype, dtype.itemsize, dtype_size))
+
+    length   = int( np.product( [ int(i) for i in shape ], dtype=np.uint64 ) )
+    array    = construct( shape=shape, dtype=dtype ) if not construct is None else np.empty( shape=shape, dtype=dtype )
+    array    = np.reshape( array, (length,) )  # no copy
+ 
+    # read rest
+    max_size = int(1024*1024*1024//dtype_size)
+    num      = int(length-1)//max_size+1
+    read     = 0
+    for j in range(num):
+        s   = j*max_size
+        e   = min(s+max_size, length)
+        nr  = f.readinto( array.data[s:e] )
+        if nr != (e-s)*dtype_size:
+            raise EOFError("Read error: %s bytes were read, but expected %s bytes to be read" % ( fmt_digits(nr),fmt_digits((e-s)*dtype_size) ) )
+        read += nr
+    if read != length*dtype_size:
+        raise EOFError("Read error: %s bytes were read in total, but expected %s bytes to be read", ( fmt_digits(read), fmt_digits(length*dtype_size)))
+    return np.reshape( array, shape )  # no copy
+
+def read_array_dict(f, construct=None):
+    l = read_int32(f)
+    x = {}
+    for i in range(l):
+        k = read_string(f)
+        v = read_array(f, construct=construct)
+        x[k] = v
+    return x
+

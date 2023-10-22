@@ -453,14 +453,14 @@ def np_european(   *,
     intrinsic = np.maximum( DF*cp*( F - K ), 0. )
     intr_dlt  = np.where( cp > 0., np.where( F>K, DF, 0., ), np.where( F<K, -DF, 0.) )
     is_intr   = ttm*vols*vols < 1E-8
-    ttm       = np.where( is_intr, ttm, 1. )
-    vols      = np.where( is_intr, vols, 1. )
+    ttm       = np.where( is_intr, 1., ttm )
+    vols      = np.where( is_intr, 1., vols )
     e         = np.log( F / K )
     assert not np.any(~np.isfinite(e)), ("Error computing European prices: logF/K returned NaN's:", F[~np.isfinite(e)], K[~np.isfinite(e)] )
     sqrtTTM   = np.sqrt( ttm )
     r         = - np.log( DF ) / ttm
-    d1        = ( e + r * ttm + 0.5 * vols * vols * ttm  ) / ( vols *sqrtTTM )
-    d2        = ( e + r * ttm - 0.5 * vols * vols * ttm  ) / ( vols *sqrtTTM )
+    d1        = ( e + r * ttm + 0.5 * vols * vols * ttm  ) / ( vols*sqrtTTM )
+    d2        = ( e + r * ttm - 0.5 * vols * vols * ttm  ) / ( vols*sqrtTTM )
     N1        = norm.cdf( d1 )
     N2        = norm.cdf( d2 )
     n1        = norm.pdf( d1 )
