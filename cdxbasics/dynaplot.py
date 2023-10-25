@@ -15,11 +15,13 @@ Hans Buehler 2022
 """
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from matplotlib.artist import Artist
 from IPython import display
 import io as io
 import types as types
 from .deferred import Deferred
 from .logger import Logger
+from collections.abc import Collection
 _log = Logger(__file__)
 
 class DynamicAx(Deferred):
@@ -288,6 +290,11 @@ class DynamicFig(Deferred):
         data = img_buf.getvalue()
         img_buf.close()
         return data
+    
+    @staticmethod
+    def store():
+        """ Create a FigStore(). Such a store allows managing graphical elements (artists) dynamically """
+        return FigStore()
 
     def close(self, render : bool = True ):
         """
@@ -369,7 +376,97 @@ def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kw
     """
     return DynamicFig( row_size=row_size, col_size=col_size, col_nums=col_nums, **fig_kwargs )
 
+# ----------------------------------------------------------------------------------
+# Utility class for animated content
+# ----------------------------------------------------------------------------------
 
+class FigStore( object ):
+    """
+    Utility class to manage dynamic content by removing old graphical elements (instead of using element-specifc update).
+    Allows implementing a fairly cheap dynamic pattern:
+        
+        from cdxbasics.dynaplot import figure
+        import time as time
+        
+        fig = figure()
+        ax = fig.add_subplot()
+        store = fig.store()
+        
+        x = np.linspace(-2.,+2,21)
+        
+        for i in range(10):
+            store.remove()
+            store += ax.plot( x, np.sin(x+float(i)) )
+            fig.render()
+            time.sleep(1)
+            
+        fig.close()    
+    """
+
+    def __init__(self):
+        """ Create FigStore() objecy """
+        self._elements = []
+
+    def add(self, element : Artist):
+        """
+        Add an element to the store.
+        The same operation is available using +=
+        
+        Parameters
+        ----------
+            element :
+                Graphical matplot element derived from matplotlib.artist.Artist, e.g. Line2D
+                or
+                Collection of the above
+                or
+                None
+                
+        Returns
+        -------
+            self, such that a.add(x).add(y).add(z) works
+        """
+        if element is None:
+            return self
+        if isinstance(element, Artist):
+            self._elements.append( element )
+            return self
+        if isinstance(element, Deferred):
+            self._elements.append( element )
+            return self
+        if not isinstance(element,Collection):
+            _log.throw("Cannot add element of type '%s' as it is not derived from matplotlib.artist.Artist, nor is it a Collection", type(element).__name__)
+        for l in element:
+            self += l
+        return self
+
+    def __iadd__(self, element : Artist):
+        """ += operator replacement for 'add' """
+        return self.add(element)
+
+    def remove(self):
+        """
+        Removes all elements by calling their remove() function:
+        https://matplotlib.org/stable/api/_as_gen/matplotlib.artist.Artist.remove.html#matplotlib.artist.Artist.remove
+        """
+        def rem(e):
+            if isinstance(e, Artist):
+                e.remove()
+                return
+            if isinstance(e,Collection):
+                for l in e:
+                    rem(l)
+                return
+            if isinstance(e, Deferred):
+                if not e._was_executed:
+                    _log.throw("Error: remove() was called before the figure was rendered. Call figure.render() before removing elements.")
+                rem( e.cdx_deferred_result )
+                return
+            if not e is None:
+                _log.throw("Cannot remove() element of type '%s' as it is not derived from matplotlib.artist.Artist, nor is it a Collection", type(e).__name__)
+    
+        for e in self._elements:
+            rem(e)
+        self._elements = []
 
 # ----------------------------------------------------------------------------------
 # color management

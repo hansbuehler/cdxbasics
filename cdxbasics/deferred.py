@@ -111,7 +111,7 @@ class Deferred(object):
         self._caught       = []
 
     @property
-    def _result(self):
+    def cdx_deferred_result(self):
         """ Returns the result of the deferred action """
         if not self._was_executed: _log.throw( "Deferred action %s has not been executed yet", self._info )
         return self._live
@@ -177,7 +177,7 @@ class Deferred(object):
     def __call__(self, *kargs, **kwargs):
         """ Deferred call () """
         if self._was_executed:
-            return self._result(*kargs, **kwargs)
+            return self.cdx_deferred_result(*kargs, **kwargs)
         deferred = Deferred( typ=Deferred.TYPE_CALL, ref=(kargs,kwargs), info="%s(%s)" % (self._info, "..." if len(kwargs)+len(kargs)>0 else "") )
         self._caught.append( deferred )
         return deferred
@@ -185,7 +185,7 @@ class Deferred(object):
     def __getitem__(self, key):
         """ Deferred reading item [] """
         if self._was_executed:
-            return self._result[key]
+            return self.cdx_deferred_result[key]
         deferred = Deferred( typ=Deferred.TYPE_ITEM, ref=key, info="%s[%s]" % (self._info, str(key)))
         self._caught.append( deferred )
         return deferred
@@ -193,7 +193,7 @@ class Deferred(object):
     def __setitem__(self, key, value):
         """ Deferred item assignment [] """
         if self._was_executed:
-            self._result[key] = value
+            self.cdx_deferred_result[key] = value
         else:
             deferred = Deferred( typ=Deferred.TYPE_SET_ITEM, ref=(key, value), info="%s[%s] = %s" % (self._info, str(key), str(value)[:100]))
             self._caught.append( deferred )
@@ -202,7 +202,7 @@ class Deferred(object):
         """ Deferred attribute access """
         attr = str(attr)
         if self._was_executed:
-            return getattr(self._result,attr)
+            return getattr(self.cdx_deferred_result,attr)
         deferred = Deferred( typ=Deferred.TYPE_ATTR, ref=attr, info="%s.%s" % (self._info,attr))
         self._caught.append( deferred )
         return deferred
@@ -211,7 +211,7 @@ class Deferred(object):
         """ Deferred attribute access """
         attr = str(attr)
         if self._was_executed:
-            self._result.__setattr__(attr, value)
+            self.cdx_deferred_result.__setattr__(attr, value)
         else:
             deferred = Deferred( typ=Deferred.TYPE_SET_ATTR, ref=(attr,value), info="%s.%s = %s" % (self._info,attr,str(value)[:100]))
             self._caught.append( deferred )
