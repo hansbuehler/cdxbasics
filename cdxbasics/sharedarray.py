@@ -79,22 +79,32 @@ class ndsharedarray( object ):
 
     def __del__(self):
         """ Ensure shared memory is released """
+        self.close(unlink=False)
+            
+    def close(self, unlink : bool = False):
+        """
+        Closes the shared memory file. 
+        Optionally calls unlink()
+        NOTE: unlink destroys the file and should be called after all procssess called close() ... don't ask.
+        c.f. https://docs.python.org/3/library/multiprocessing.shared_memory.html
+        """
         if '_shared' in self.__dict__:
             if not self._verbose is None:
-                self._verbose.write("Deleting %s #%ld", self._id, self._serial  )
+                self._verbose.write("Closing %s #%ld (do %sunlink)", self._id, self._serial, "" if unlink else "not " )
             try:
                 self._shared.close()
             except FileNotFoundError:
                 pass
-            try:
-               self._shared.unlink()
-            except FileNotFoundError:
-                pass
+            if unlink:
+                try:
+                    self._shared.unlink()
+                except FileNotFoundError:
+                    pass
             del self._shared
-            
+
     def __str__(self) -> str: #NOQA
         return "ndsharedarray( " + self._id + ")" + str(self._array) 
-    
+
     # Basic
     # -----
     
@@ -416,11 +426,6 @@ def shared_fromfile( file, name, dtype=np.float32 ):
     def construct(shape):
         return ndsharedarray( name=name, shape=shape, dtype=dtype, create=True )
     return _fromfile( file, construct=construct )
-    
-    
-
-
-
 
 """
 Experimental
