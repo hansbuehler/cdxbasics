@@ -272,7 +272,7 @@ def tofile( file, array ):
     
     Parameters
     ----------
-        file  : file description passed to open()
+        file  : file name passed to open()
         array : numpy or sharedarray
     """
     if not array.data.contiguous:
@@ -318,7 +318,7 @@ def _fromfile( file  : str, *,
     
     Parameters
     ----------
-        file  : file description passed to open()
+        file  : file name passed to open()
         array : target array to write into. 
         construct : if array is None, call this function construct(shape) to construct a new array
 
@@ -383,7 +383,7 @@ def readinto( file, array ):
 
     Parameters
     ----------
-        file  : file description passed to open()
+        file  : file name passed to open()
         array : target array to write into. This array must have the same shape and dtype as the source data.
 
     Returns
@@ -399,7 +399,7 @@ def np_fromfile( file, dtype ) -> np.ndarray:
 
     Parameters
     ----------
-        file  : file description passed to open()
+        file  : file name passed to open()
         dtype : target dtype
 
     Returns
@@ -416,7 +416,7 @@ def shared_fromfile( file, name, dtype=np.float32 ):
 
     Parameters
     ----------
-        file  : file description passed to open()
+        file  : file name passed to open()
         name  : memory name
         dtype : target dtype
 
