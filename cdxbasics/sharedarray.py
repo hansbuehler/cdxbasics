@@ -88,6 +88,7 @@ class ndsharedarray( object ):
         NOTE: unlink destroys the file and should be called after all procssess called close() ... don't ask.
         c.f. https://docs.python.org/3/library/multiprocessing.shared_memory.html
         """
+        self._array = None
         if '_shared' in self.__dict__:
             if not self._verbose is None:
                 self._verbose.write("Closing %s #%ld (do %sunlink)", self._id, self._serial, "" if unlink else "not " )
@@ -431,42 +432,86 @@ def shared_fromfile( file, name, dtype=np.float32 ):
 Experimental
 """
 
+
+def f_write(f, x : bytes, name : str = None, nbytes = None):
+    """
+    Write 'x' to file 'f' of length 'ln' if provided; othewise len(x).
+    In case of an error message report 'name' which defaults to type(x).__name__
+    """
+    if nbytes is None:
+        nbytes = len(x)
+    w = f.write(x)
+    if w!=nbytes:
+        if name is None:
+            name = type(x).__name__
+        raise EOFError("Wrote only %ld bytes instead of %ld for %s" % ( w, nbytes, name if not name is None else type(x).__name__) )
+
+def f_read(f, nbytes : int, name : str) -> bytes:
+    """
+    Write 'x' to file 'f' of length 'ln' if provided; othewise len(x).
+    In case of an error message report 'name' which defaults to type(x).__name__
+    """
+    x = f.read(nbytes)
+    if len(x) != nbytes:
+        raise EOFError("Read only %ld bytes instead of %ld for %s" % (len(x),nbytes,name))
+    return x
+
+
+"""
+Integers
+"""
+
+
 def write_int64(f,x):
     """ Write integer 'x' to file 'f' (64 bit) """
     x = int(x).to_bytes(8,"big")
-    w = f.write( x )
-    if w!=len(x):
-        raise EOFError("Wrote only %ld bytes instead of %ld for 'int64'" % ( w, len(x) ) )
-        
+    f_write(f,x,"int64")
+def read_int64(f):
+    """ Read 64 bit int from 'f' """
+    x = f_read(f,8,"int64")
+    return int.from_bytes(x,"big")     
 def write_int32(f,x):
     """ Write integer 'x' to file 'f' (32 bit) """
     x = int(x).to_bytes(4,"big")
-    w = f.write( x )
-    if w!=len(x):
-        raise EOFError("Wrote only %ld bytes instead of %ld for 'int32'" % ( w, len(x) ) )
-        
+    f_write(f,x,"int32")
+def read_int32(f):
+    """ Read 32 bit int from 'f' """
+    x = f_read(f,4,"int32")
+    return int.from_bytes(x,"big")     
 def write_int16(f,x):
     """ Write integer 'x' to file 'f' (16 bit) """
     x = int(x).to_bytes(2,"big")
-    w = f.write( x )
-    if w!=len(x):
-        raise EOFError("Wrote only %ld bytes instead of %ld for 'int16'" % ( w, len(x) ) )
-        
-def write_shape(f,x):
-    """ Writes a shape tuple 'x' into file 'f'. Assumes 'length' fits into a 32 bit integer, while each element is 64 bit """
-    x = tuple(x)
-    write_int32(f,len(x))
-    for i in x:
-        write_int64(f,i)
-
+    f_write(f,x,"int16")
+def read_int16(f):
+    """ Read 16 bit int from 'f' """
+    x = f_read(f,2,"int16")
+    return int.from_bytes(x,"big")     
+  
 def write_string(f,x):
     """ Write string 'x' into file 'f'. Assumes the string's length fits into 32 bit """
     x = str(x).encode()
     assert isinstance(x, bytes), ("Internal error", type(x))
     write_int32(f,len(x))
-    w = f.write(x)
-    if w!=len(x):
-        raise EOFError("Wrote only %ld bytes instead of %ld for 'str'" % ( w, len(x) ) )
+    f_write(f,x,"str")
+def read_string(f):
+    """ Reads a string from 'f' """
+    l = read_int32(f)
+    x = f_read(f,l,"str")
+    return x.decode()
+
+def write_shape(f,x):
+    """
+    Writes a shape tuple 'x' into file 'f'.
+    Assumes 'length' fits into a 32 bit integer, while each element is 64 bit
+    """
+    x = tuple(x)
+    write_int32(f,len(x))
+    for i in x:
+        write_int64(f,i)
+def read_shape(f):
+    """ Reads a shape tuple from 'f' """
+    l = read_int32(f)
+    return tuple( [ read_int64(f) for i in range(l) ] )  
 
 def write_array(f,x):
     """ write numpy array 'x' into file 'f' """
@@ -475,17 +520,19 @@ def write_array(f,x):
         #array    = np.ascontiguousarray( array, dtype=array.dtype ) if not array.data.contiguous else array
         _log.warn("Array is not 'contiguous'. Is that an issue??")
 
-    shape    = tuple(x.shape)
-    dsize    = int(x.dtype.itemsize)   
-    assert dsize == x.itemsize
+    shape      = tuple(x.shape)
+    dtype_size = int(x.dtype.itemsize)   
+    dtype_str  = str(x.dtype)
+    assert dtype_size == x.itemsize
+    assert len(dtype_str) > 0, x.dtype
 
     write_shape(f,shape)
-    write_string(f,str(x.dtype))
-    write_int32(f,dsize)
+    write_string(f,dtype_str)
+    write_int32(f,dtype_size)
 
     length   = int( np.product( [ int(i) for i in shape ], dtype=np.uint64 ) )
-    x        = np.reshape( x, (length,) )  # this operation should not reallocate any memory        
-    max_size = int(1024*1024*1024//dsize)
+    x        = x.reshape( (length,) )  # this operation should not reallocate any memory        
+    max_size = int(1024*1024*1024//dtype_size)
     num      = int(length-1)//max_size+1
     saved    = 0
     for j in range(num):
@@ -493,65 +540,25 @@ def write_array(f,x):
         e   = min(s+max_size, length)
         bts = x.data[s:e]
         nw  = f.write( bts )
-        if nw != (e-s)*dsize:
-            raise EOFError("Wrote only %s bytes instead of %s for 'array'" % ( fmt_digits(nw),fmt_digits((e-s)*dsize) ) )
+        if nw != (e-s)*dtype_size:
+            raise EOFError("Wrote only %s bytes instead of %s for 'array'" % ( fmt_digits(nw),fmt_digits((e-s)*dtype_size) ) )
         saved += nw
-    if saved != length*dsize:
-        raise EOFError("Write error: %s bytes were written in total, but expected %s bytes to be written" % ( fmt_digits(saved), fmt_digits(length*dsize)) )
-
-def write_array_dict( f, x ):
-    """ Write dictionary 'x' of numpy arrays to 'f' """
-    write_int32(f,len(x))
-    for k,v in x.items():
-        write_string(f,k)
-        write_array(f,v)
-        
-def read_int64(f):
-    """ Read 64 bit int from 'f' """
-    x = f.read(8)
-    if len(x) != 8:
-        raise EOFError("Could not read 8 bytes. Only read %ld bytes" % len(x))
-    return int.from_bytes(x,"big")
-def read_int32(f):
-    """ Read 32 bit int from 'f' """
-    x = f.read(4)
-    if len(x) != 4:
-        raise EOFError("Could not read 4 bytes. Only read %ld bytes" % len(x))
-    return int.from_bytes(x,"big")
-def read_int16(f):
-    """ Read 16 bit int from 'f' """
-    x = f.read(2)
-    if len(x) != 2:
-        raise EOFError("Could not read 2 bytes. Only read %ld bytes" % len(x))
-    return int.from_bytes(x,"big")
-
-def read_shape(f):
-    """ Reads a shape tuple fromn 'f' """
-    l = read_int32(f)
-    return tuple( [ read_int64(f) for i in range(l) ] )  
-
-def read_string(f):
-    """ Reads a string from 'f' """
-    l = read_int32(f)
-    x = f.read(l)
-    if len(x) != l:
-        raise EOFError("Could not read %ld bytes of a string. Only read %ld bytes" % (l,len(x)))
-    return x.decode()
-
+    if saved != length*dtype_size:
+        raise EOFError("Write error: %s bytes were written in total, but expected %s bytes to be written" % ( fmt_digits(saved), fmt_digits(length*dtype_size)) )
 def read_array(f,construct=None):
     """ Reads an array from 'f' """
     
     shape       = read_shape(f)
     dtype_str   = read_string(f)
     dtype_size  = read_int32(f)
-
+    
     dtype       = np.dtype(dtype_str)
     if dtype_size != dtype.itemsize:
         raise RuntimeError("Error reading array: array was understood to have dtype '%s' which has size %ld. However, size %ld was found on disk" % (dtype, dtype.itemsize, dtype_size))
 
     length   = int( np.product( [ int(i) for i in shape ], dtype=np.uint64 ) )
     array    = construct( shape=shape, dtype=dtype ) if not construct is None else np.empty( shape=shape, dtype=dtype )
-    array    = np.reshape( array, (length,) )  # no copy
+    array    = array.reshape( (length,) )  # no copy
  
     # read rest
     max_size = int(1024*1024*1024//dtype_size)
@@ -566,14 +573,107 @@ def read_array(f,construct=None):
         read += nr
     if read != length*dtype_size:
         raise EOFError("Read error: %s bytes were read in total, but expected %s bytes to be read", ( fmt_digits(read), fmt_digits(length*dtype_size)))
-    return np.reshape( array, shape )  # no copy
+    return array.reshape( shape )  # no copy
+    
 
-def read_array_dict(f, construct=None):
-    l = read_int32(f)
-    x = {}
-    for i in range(l):
-        k = read_string(f)
-        v = read_array(f, construct=construct)
-        x[k] = v
-    return x
+def write_dtype(f,x):
+    x = np.array([x])
+    write_array(f, x)
+def read_dtype(f):
+    x = read_array(f)
+    return x[0]
+
+CPXL_ARRAY     = 0
+CPXL_STRING    = 1
+CPXL_DICT      = 2
+CPXL_LIST      = 3
+CPXL_TUPLE     = 4
+CPXL_INT       = 5
+CPXL_DTYPE     = 6
+
+from collections.abc import Mapping, Sequence 
+
+def write_complex( f, x ):
+    """ Write dictionary 'x' of numpy arrays to 'f' """
+    if isinstance(x, np.ndarray):
+        write_int16(f, CPXL_ARRAY)
+        write_array(f, x)
+        return
+
+    if isinstance(x, str):
+        write_int16(f, CPXL_STRING)
+        write_string(f, x)
+        return
+    
+    if isinstance(x, Mapping):
+        write_int16(f, CPXL_DICT)
+        write_int32(f,len(x))
+        for k,v in x.items():
+            write_complex(f,k)
+            write_complex(f,v)
+        return
+    
+    if isinstance(x, tuple):
+        write_int16(f, CPXL_TUPLE)
+        write_int32(f,len(x))
+        for v in x:
+            write_complex(f,v)
+        return
+    
+    if isinstance(x, (list, Sequence)):
+        write_int16(f, CPXL_LIST)
+        write_int32(f,len(x))
+        for v in x:
+            write_complex(f,v)
+        return
+        
+    if isinstance(x, int):
+        write_int16(f, CPXL_INT)
+        write_int64(f,x)
+        return
+        
+    # in all other cases: use numpy serialization
+    write_int16(f, CPXL_DTYPE)
+    write_dtype(f,x)
+
+def read_complex(f, construct=None):
+    """ Read a complex type of numpy arrays: dicts, lists, and tuples of arrays """
+    
+    cplx = read_int16(f)
+    
+    if cplx == CPXL_ARRAY:
+        return read_array(f, construct=construct)
+    
+    if cplx == CPXL_STRING:
+        return read_string(f)
+    
+    if cplx == CPXL_DICT:
+        l = read_int32(f)
+        d = {}
+        for i in range(l):
+            n = read_complex(f)
+            v = read_complex(f,construct=construct)
+            d[n] = v
+        return d
+
+    if cplx == CPXL_TUPLE:
+        l = read_int32(f)
+        x = [ read_complex(f,construct=construct) for _ in range(l) ]
+        return tuple(x)
+        
+    if cplx == CPXL_LIST:
+        l = read_int32(f)
+        return [ read_complex(f,construct=construct) for _ in range(l) ]
+        return tuple(x)
+
+    if cplx == CPXL_INT:
+        return read_int64(f)
+
+    # read any other type using     
+    if cplx != CPXL_DTYPE: raise EOFError("Internal error: unknown type code %ld" % cplx)
+    return read_dtype(f)
+        
+    
+    
+
 
