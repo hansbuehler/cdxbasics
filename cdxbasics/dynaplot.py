@@ -167,7 +167,10 @@ class DynamicFig(Deferred):
         """ Ensure the figure is closed """
         self.close()
 
-    def add_subplot(self, new_row : bool = False, title : str = None, **kwargs) -> DynamicAx:
+    def add_subplot(self, title    : str = None, 
+                          new_row  : bool = None, 
+                          position = None,
+                          **kwargs) -> DynamicAx:
         """
         Add a subplot.
         This function will return a wrapper which defers the creation of the actual sub plot
@@ -175,16 +178,32 @@ class DynamicFig(Deferred):
 
         Parameters
         ----------
-            new_row : bool, optional
-                Whether to force a new row. Default is False
             title : str, options
                 Optional title for the plot.
+            new_row : bool, optional
+                Whether to force a new row. Default is False
             kwargs : 
-                other arguments to be passed to matplotlib's add_subplot, for example projection='3d'
+                other arguments to be passed to matplotlib's add_subplot https://matplotlib.org/stable/api/figure_api.html#matplotlib.figure.Figure.add_subplot
+                Common use cases
+                    projection='3d'
+                    subplotspec='' when using https://matplotlib.org/stable/api/_as_gen/matplotlib.gridspec.GridSpec.html
+                    
         """
         _log.verify( not self.closed, "Cannot call add_subplot() after close() was called")
         _log.verify( self.fig is None, "Cannot call add_subplot() after render() was called")
-        _log.verify( isinstance(new_row, bool), "Parameter 'new_row' should be a bool, but found type %s. Did you misspell the function call?", type(new_row).__name__ )
+
+        # backward compatibility:
+        # previous versions has "new_row" first.
+        if isinstance(title, bool):
+            _log.verify( new_row is None or isinstance(new_row, str), "Backward compatibility warning: if 'title' is a bool, then 'new_row' must be None or a string")
+            _       = new_row
+            new_row = title
+            title   = _
+        else:
+            title   = str(title) if not title is None else None
+            new_row = bool(new_row) if not new_row is None else False
+            
+        
         if (self.this_col >= self.col_nums) or ( new_row and not self.this_col == 0 ):
             self.this_col = 0
             self.this_row = self.this_row + 1
