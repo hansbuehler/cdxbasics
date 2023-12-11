@@ -304,6 +304,55 @@ class Context(object):
     def __setstate__(self, state):
         pass
 
+class CRMan(object):
+    """
+    Simple utility class for printing output with \r.
+    
+    This function is a simple fix to the problem that jupyter print() does not allow to clear the residual line with the common ANSI escape codes.
+    This function here a simple tracker which tracks how many characters where printed.
+    
+    Instead of
+        verbose.write( "\rmessage 1111", end='' )
+        verbose.write( "\rmessage 222", end='' )
+        verbose.write( "\rmessage 33", end='' )
+        verbose.write( "\rmessage 4", end='' )
+        
+        which gives "message 4321"
+
+    Write
+        crman = CRMan()        
+        verbose.write( crman("message 111111"), end='' )
+        verbose.write( crman("message 2222"), end='' )
+        verbose.write( crman("message 33"), end='' )
+        verbose.write( crman("message 1"), end='' )
+
+        which gives "message 1"
+    """
+    
+    def __init__(self):
+        """ See help(CRMan) """
+        self._num = 0
+    def __call__(self, message):
+        """ Returns a string which first clears all known characters and then writes '\r' + message """
+        assert not '\r' in message, "'message' should not contain \\r"
+        lines = message.split('\n')
+        if len(lines) == 0:
+            """ line feed """
+            act_msg   = "\r" + (' '*self._num) + "\r" + message       
+            self._num = max(self._num, len(message))
+            return act_msg
+        else:
+            act_msg   = "\r" + (' '*self._num) + "\r" + lines[0]
+            self._num = len(lines[-1])
+            return act_msg
+            
+    def reset(self):
+        """ Reset object to zero """
+        self._num = 0
+    
+
+
+
 # Recommended default parameter 'quiet' for functions accepting a context parameter
 quiet = Context(Context.QUIET)
 Context.quiet = quiet
