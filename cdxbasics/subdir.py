@@ -479,6 +479,7 @@ class SubDir(object):
         if len(ext) > 0 and key[-len(ext):] != ext:
             return self._path + key + ext
         return self._path + key
+    fullFileName = fullKeyName
 
     @staticmethod
     def tempDir() -> str:
@@ -1093,8 +1094,9 @@ class SubDir(object):
                     keys.append( entry.name[:-ext_l] )
                 else:
                     keys.append( entry.name )
-        return keys
-
+        return keys    
+    files = keys
+    
     def subDirs(self) -> list:
         """
         Returns a list of all sub directories
@@ -1615,5 +1617,41 @@ class SubDir(object):
 SubDir.PICKLE = Format.PICKLE
 SubDir.JSON_PICKLE = Format.JSON_PICKLE
 SubDir.JSON_PLAIN = Format.JSON_PLAIN
+
+
+if False:
+    # Linux    
+    import os
+    fd = os.open("/tmp/hans.test", os.O_CREAT|os.O_WRONLY)
+    os.lockf(fd, os.F_TLOCK, 1)
+
+
+    # http://timgolden.me.uk/pywin32-docs/Windows_NT_Files_.2d.2d_Locking.html
+
+    import win32file as win32file
+    import win32con
+    import pywintypes
+    import win32security
+    import win32api
+    
+    highbits=0xffff0000 #high-order 32 bits of byte range to lock
+    file="H:/temp/lock.test"
+    secur_att = win32security.SECURITY_ATTRIBUTES()
+    secur_att.Initialize()
+    
+    hfile=win32file.CreateFile( file,
+        win32con.GENERIC_READ|win32con.GENERIC_WRITE,
+        win32con.FILE_SHARE_READ|win32con.FILE_SHARE_WRITE,
+        secur_att,
+        win32con.OPEN_ALWAYS,
+        win32con.FILE_ATTRIBUTE_NORMAL , 0 )
+    
+    ov=pywintypes.OVERLAPPED() #used to indicate starting region to lock
+    win32file.LockFileEx(hfile,win32con.LOCKFILE_EXCLUSIVE_LOCK|win32con.LOCKFILE_FAIL_IMMEDIATELY,0,highbits,ov)
+
+    win32api.Sleep(4000) #do something here
+    win32file.UnlockFileEx(hfile,0,highbits,ov)    
+    hfile.Close()
+
 
 
