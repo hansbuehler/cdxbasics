@@ -358,12 +358,12 @@ def mean_std_bins( x : np.ndarray, bins : int, axis : int = None, P : np.ndarray
     return means, stds
 
 def np_european(   *,
-                   ttm : np.ndarray,
+                   ttm  : np.ndarray,
                    vols : np.ndarray,
-                   K : np.ndarray,
-                   cp : np.ndarray,
-                   DF : np.ndarray = 1.,
-                   F : np.ndarray = 1., 
+                   K    : np.ndarray,
+                   cp   : np.ndarray,
+                   DF   : np.ndarray = 1.,
+                   F    : np.ndarray = 1., 
                    price_only : bool = False) -> dict:
     """
     European option pricer
@@ -465,7 +465,7 @@ def np_european(   *,
     N2        = norm.cdf( d2 )
     n1        = norm.pdf( d1 )
     cp0       = 0.5 * (1. - cp)   # 0 for call 1 for put
-    price     = DF * ( F * N1 - K * N2 + cp0 * ( K - F ) )
+    price     = DF * ( F * N1 - K * N2 + cp0 * ( F - K ) )
     assert not np.any(~np.isfinite(price)), ("Error computing European prices: NaN's returned:", price)
     fdelta    = DF * ( N1 - cp0 )
     vega      = DF * F * n1 * sqrtTTM
