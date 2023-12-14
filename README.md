@@ -798,7 +798,7 @@ For derivative pricing:
 Hard efficency numpy file i/io functions. They offer reading/writing numpy arrays in their native byte form from and to disk.
 
 * `tofile(file,array)` writes a numpy `array` in an efficient native binary format to `file` without buffering.
-* `fromfile(file, dtype)` reads from a numpy binary file into a new numpy array given a known dtype.
+* `fromfile(file, dtype)` reads from a numpy binary file into a new numpy array given a known dtype. This function allows reading files of more than 2GB under linux.
 * `readinto(file, array)` reads `file` into an existing target `array`.
 * `readfromfile(file, target)` reads `file` into an existing numpy array, or into a new one.
 
