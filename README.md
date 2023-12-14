@@ -725,7 +725,7 @@ Caching of versioned functions with the above logic is implemented in `cdxbasics
 
 A decorator with associated behaviour is being built.
 
-## WriteLine
+## WriteLine (superseded by crman.CRMan)
 
 A simple utility class to manage printing in a given line with carriage returns (`\r`).
 Essentially, it keeps track of the length what was printed so far at the current line. If a `\r` is encountered it will clear the rest of the line to avoid having residual text from the previous line.
