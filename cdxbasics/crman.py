@@ -61,7 +61,7 @@ class CRMan(object):
         else:
             line = line[icr+1:]
         if len(self._current) > 0:
-            output    += '\r' + ' '*len(self._current) + '\r'
+            output    += '\r' + ' '*len(self._current) + '\r' + '\33[2K' + '\r'
         output        += line
         self._current = line
             
