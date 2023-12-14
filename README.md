@@ -725,7 +725,7 @@ Caching of versioned functions with the above logic is implemented in `cdxbasics
 
 A decorator with associated behaviour is being built.
 
-## WriteLine
+## WriteLine (superseded by crman.CRMan)
 
 A simple utility class to manage printing in a given line with carriage returns (`\r`).
 Essentially, it keeps track of the length what was printed so far at the current line. If a `\r` is encountered it will clear the rest of the line to avoid having residual text from the previous line.
@@ -774,7 +774,6 @@ Example 2 (line length is getting shorter)
 This is experimental as it appears there is no safe way to do this. The current implemenentation checks whether the command which started the current process contains the string `jupyter`.
 
 # np
-
 A small number of statistical numpy functions which take a weight vector (distribution) into account, namely
 
 * `mean(P,x,axis)` computes the mean of `x` using the distribution `P`. If `P` is None, it returns `numpy.mean(x,axis)`.
@@ -791,11 +790,22 @@ Two further functions are used to compute binned statistics:
 * `mean_bins(x,bins,axis,P)` computes the means of `x` over equidistant `bins` using the distribition `P`.
 * `mean_std_bins(x,bins,axis,P)` computes the means and standard deviations of `x` over equidistant `bins` using the distribition `P`.
 
-    
+For derivative pricing:
+
+* `np_european(...)` computes European option prices and greeks.
+
+# npio (experimental)
+Hard efficency numpy file i/io functions. They offer reading/writing numpy arrays in their native byte form from and to disk.
+
+* `tofile(file,array)` writes a numpy `array` in an efficient native binary format to `file` without buffering.
+* `fromfile(file, dtype)` reads from a numpy binary file into a new numpy array given a known dtype. This function allows reading files of more than 2GB under linux.
+* `readinto(file, array)` reads `file` into an existing target `array`.
+* `readfromfile(file, target)` reads `file` into an existing numpy array, or into a new one.
 
 # verbose
 
 **The `verbose` interface has changed in 0.2.36**
+Since 0.2.95 verbose is using `CRMan` to manage messages containing '\r'.  
 
 This module provides the `Context` utility class for printing 'verbose' information, with indentation depending on the detail level.
 
