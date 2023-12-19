@@ -70,6 +70,7 @@ class Context(object):
             self.level       = verbose_or_init.level
             self.indent      = verbose_or_init.indent
             self.fmt_level   = verbose_or_init.fmt_level
+            self.crman       = CRMan()
             return
 
         if isinstance( verbose_or_init, str ):
