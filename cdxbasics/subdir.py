@@ -353,6 +353,24 @@ class SubDir(object):
                 if eraseEverything:
                     self.eraseEverything(keepDirectory = True)
 
+    @staticmethod
+    def expandStandardRoot( name ):
+        """
+        Expands 'name' by a standardized root directory if provided:
+        If 'name' starts with -> return
+            ! -> tempDir()
+            . -> workingDir()
+            ~ -> userDir()
+        """        
+        if len(name) < 2 or name[0] not in ['.','!','~'] or name[1] not in ["\\","/"]:
+            return name
+        if name[0] == '!':
+            return SubDir.tempDir() + name[2:]
+        elif name[0] == ".":
+            return SubDir.workingDir() + name[2:]
+        else:
+            return SubDir.userDir() + name[2:]
+
     # -- self description --
 
     def __str__(self) -> str: # NOQA
@@ -445,9 +463,9 @@ class SubDir(object):
         _log.verify( ext[0] != "~", "Extension '%s' cannot start with '~' (this symbol indicates the user's directory)", ext)
         return "." + ext
 
-    def fullKeyName(self, key : str, *, ext : str = None) -> str:
+    def fullFileName(self, key : str, *, ext : str = None) -> str:
         """
-        Returns fully qualified key name.
+        Returns fully qualified file name.
         The function tests that 'key' does not contain directory information.
 
         If 'self' is None, then this function returns None
@@ -463,6 +481,8 @@ class SubDir(object):
         Returns
         -------
             Fully qualified system file name
+        
+        [This function has an alias 'fullKeyName' for backward compatibility]
         """
         if self._path is None or key is None:
             return None
@@ -479,7 +499,7 @@ class SubDir(object):
         if len(ext) > 0 and key[-len(ext):] != ext:
             return self._path + key + ext
         return self._path + key
-    fullFileName = fullKeyName
+    fullKeyName = fullFileName
 
     @staticmethod
     def tempDir() -> str:

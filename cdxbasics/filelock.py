@@ -7,6 +7,7 @@ Hans Buehler 2020
 from .logger import Logger
 from .verbose import Context
 from .util import datetime, fmt_datetime, fmt_seconds
+from .subdir import SubDir
 _log = Logger(__file__)
 
 import os
@@ -57,6 +58,7 @@ class FileLock(object):
         ----------
             filename :
                 Filename of the lock. On Unix /dev/shm/ can be used to refer to share memory
+                'filename' may start with '!/' to refer to the temp directory, or '~/' to refer to the user directory.
             acquire :
                 Whether to aquire the lock upon initialization
             release_on_exit :
@@ -72,7 +74,7 @@ class FileLock(object):
         ----------
             See acquire()
         """        
-        self._filename       = filename
+        self._filename       = SubDir.expandStandardRoot(filename)
         self._fd             = None
         self._pid            = os.getpid()
         self._cnt            = 0
