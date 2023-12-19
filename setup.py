@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="cdxbasics",
-    version="0.2.98",  # will auto-update via pip_modify_setup.py
+    version="0.2.99",  # will auto-update via pip_modify_setup.py
     author="Hans Buehler",
     author_email="github@buehler.london",
     description="Basic Python tools",
