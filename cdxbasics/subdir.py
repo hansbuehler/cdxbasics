@@ -294,7 +294,7 @@ class SubDir(object):
         if not name is None:
             if not isinstance(name, str): _log.throw( "'name' must be string. Found object of type %s", type(name))
             name   = name.replace('\\','/')
-            
+
             # avoid windows file names on Linux
             if platform.system() != "Windows" and name[1:3] == ":/":
                 _log.error("Detected use of windows-style drive declaration %s in path %s.", name[:3], name )
@@ -361,7 +361,7 @@ class SubDir(object):
             ! -> tempDir()
             . -> workingDir()
             ~ -> userDir()
-        """        
+        """
         if len(name) < 2 or name[0] not in ['.','!','~'] or name[1] not in ["\\","/"]:
             return name
         if name[0] == '!':
@@ -481,7 +481,7 @@ class SubDir(object):
         Returns
         -------
             Fully qualified system file name
-        
+
         [This function has an alias 'fullKeyName' for backward compatibility]
         """
         if self._path is None or key is None:
@@ -912,7 +912,7 @@ class SubDir(object):
         fullFileName = self.fullKeyName(key,ext=ext)
         tmp_file     = uniqueHash48( [ key, uuid.getnode(), os.getpid(), threading.get_ident(), datetime.datetime.now() ] )
         tmp_i        = 0
-        fullTmpFile  = self.fullKeyName(tmp_file,ext="tmp" if not ext=="tmp" else "_tmp") 
+        fullTmpFile  = self.fullKeyName(tmp_file,ext="tmp" if not ext=="tmp" else "_tmp")
         while os.path.exists(fullTmpFile):
             fullTmpFile = self.fullKeyName(tmp_file) + "." + str(tmp_i) + ".tmp"
             tmp_i       += 1
@@ -1087,7 +1087,7 @@ class SubDir(object):
 
     # -- iterate --
 
-    def keys(self, *, ext : str = None ) -> list:
+    def files(self, *, ext : str = None ) -> list:
         """
         Returns a list of keys in this subdirectory with the current extension, or the specified extension.
 
@@ -1098,6 +1098,8 @@ class SubDir(object):
         If 'ext' is None, the directory's default extension will be used
 
         This function ignores directories.
+
+        [This function has an alias 'keys']
         """
         if self._path is None:
             return []
@@ -1114,9 +1116,9 @@ class SubDir(object):
                     keys.append( entry.name[:-ext_l] )
                 else:
                     keys.append( entry.name )
-        return keys    
-    files = keys
-    
+        return keys
+    keys = files
+
     def subDirs(self) -> list:
         """
         Returns a list of all sub directories
@@ -1358,7 +1360,7 @@ class SubDir(object):
         # single key
         fullFileName = self.fullKeyName(key, ext=ext)
         return os.path.getsize(fullFileName)
-    
+
     def rename( self, source : str, target : str, *, ext : str = None ):
         """ Rename "source" key into "target" key. Function will raise an exception if not successful """
         src_full = self.fullKeyName( source, ext=ext )
@@ -1640,7 +1642,7 @@ SubDir.JSON_PLAIN = Format.JSON_PLAIN
 
 
 if False:
-    # Linux    
+    # Linux
     import os
     fd = os.open("/tmp/hans.test", os.O_CREAT|os.O_WRONLY)
     os.lockf(fd, os.F_TLOCK, 1)
@@ -1653,24 +1655,24 @@ if False:
     import pywintypes
     import win32security
     import win32api
-    
+
     highbits=0xffff0000 #high-order 32 bits of byte range to lock
     file="H:/temp/lock.test"
     secur_att = win32security.SECURITY_ATTRIBUTES()
     secur_att.Initialize()
-    
+
     hfile=win32file.CreateFile( file,
         win32con.GENERIC_READ|win32con.GENERIC_WRITE,
         win32con.FILE_SHARE_READ|win32con.FILE_SHARE_WRITE,
         secur_att,
         win32con.OPEN_ALWAYS,
         win32con.FILE_ATTRIBUTE_NORMAL , 0 )
-    
+
     ov=pywintypes.OVERLAPPED() #used to indicate starting region to lock
     win32file.LockFileEx(hfile,win32con.LOCKFILE_EXCLUSIVE_LOCK|win32con.LOCKFILE_FAIL_IMMEDIATELY,0,highbits,ov)
 
     win32api.Sleep(4000) #do something here
-    win32file.UnlockFileEx(hfile,0,highbits,ov)    
+    win32file.UnlockFileEx(hfile,0,highbits,ov)
     hfile.Close()
 
 

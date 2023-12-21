@@ -461,16 +461,18 @@ If-conditional functions
 
 # subdir
 
-A few tools to handle file i/o in a transparent way. The key idea is to provide transparent, concise pickle access to the file system in a manner similar to dictionary access - hence core file names are referred to as 'keys'. Files managed by `subdir` all have the same extension. From 0.2.60 `SubDir` supports different file formats:
+A few tools to handle file i/o in a transparent way. The key idea is to provide transparent, concise pickle access to the file system in a manner similar to dictionary access - hence core file names are referred to as 'keys'. Files managed by `subdir` all have the same extension. From 0.2.60 `SubDir` supports different file formats specified with the `fmt=` keyword to `SubDir`:
+
 * PICKLE: standard pickling. Default extension 'pck'
 * JSON_PICKLE: uses the `jsonpickle` package. Default extension 'jpck'. The advantage of this format over PICKLE is that it is somewhat human-readable. However, `jsonpickle` uses compressed formats for complex objects such as `numpy` arrays, hence readablility is somewhat limited. It comes at cost of slower writing speeds.
 * JSON_PLAIN: calls `cdxbasics.util.plain()` to convert objects into plain Python objects before using `json` to write them. That means that deserialized data does not have the correct object structure. However, such files are much easier to read.
-* BLOSC: uses [blosc](https://github.com/blosc/python-blosc) to write compressed binary data. The blosc compression algorithm is very fast, hence using this mode will not usually lead to notably slower performanbce than using PICKLE.
+* BLOSC: uses [blosc](https://github.com/blosc/python-blosc) to write compressed binary data. The blosc compression algorithm is very fast, hence using this mode will not usually lead to notably slower performanbce than using PICKLE but will generate smaller files, depending on your data structure.
 
 ### Creating directories
 
 You can create directories using the `SubDir` class. Simply write
 
+    from cdxbasics.subdir import SubDir
     subdir = SubDir("my_directory")      # relative to current working directory
     subdir = SubDir("./my_directory")    # relative to current working directory
     subdir = SubDir("~/my_directory")    # relative to home directory
@@ -478,29 +480,34 @@ You can create directories using the `SubDir` class. Simply write
 
 You can specify a parent for relative path names:
 
+    from cdxbasics.subdir import SubDir
     subdir = SubDir("my_directory", "~")      # relative to home directory
     subdir2 = SubDir("my_directory", subdir)  # subdir2 is relative to `subdir`
 
 Change the extension to `bin`
 
+    from cdxbasics.subdir import SubDir
     subdir = SubDir("~/my_directory;*.bin")     
     subdir = SubDir("~/my_directory", ext="bin")    
     subdir = SubDir("my_directory", "~", ext="bin")    
 
 You can turn off extension management by setting the extension to "":
 
+    from cdxbasics.subdir import SubDir
     subdir = SubDir("~/my_directory", ext="")
 
 You may specify the file format; in this case the extension will be automaticall set to `pck`, `jpck` or `json`, respectively. See discussion above about the relative merits of each format:
 
+    from cdxbasics.subdir import SubDir
     subdir = SubDir("~/my_directory", fmt=SubDir.PICKLE)
     subdir = SubDir("~/my_directory", fmt=SubDir.JSON_PICKLE)
     subdir = SubDir("~/my_directory", fmt=SubDir.JSON_PLAIN)
 
 You can also use the `()` operator to generate sub directories. This operator is overloaded: for a single argument, it creates a relative sub-directory:
 
+    from cdxbasics.subdir import SubDir
     parent = SubDir("~/parent")
-    subdir = parent("subdir")                                   # shares extension and format with parent
+    subdir = parent("subdir")                                # shares extension and format with parent
     subdir = parent("subdir", ext="bin", fmt=SubDir.PICKLE)  # change extension and format
 
 Be aware that when the operator `()` is called with two arguments, then it reads files; see below.
@@ -543,7 +550,7 @@ Finally, you can also iterate through all existing files:
         data = subdir.read(file)
         ...
 
-To obtain a list of all files  in our directory which have the correct extension, use `keys()`.
+To obtain a list of all files in our directory which have the correct extension, use `files()` or `keys()`.
 
 ### Writing
 
@@ -567,26 +574,30 @@ To write several files at once, write
 
 Note that when writing to an object, `subdir` will first write to a temporary file, and then rename this file into the target file name. The temporary file name is a `util.uniqueHash48` generated from the target file name, current time, process and thread ID, as well as the machines's UUID. This is done to reduce collisions between processes/machines accessing the same files. It does not remove collision risk entirely, though.
 
+### Filenames
+
+`SubDir` handles core file names for you as "keys" and adds directories and extensions as required. You can obtain the full qualified filename given a "key" by calling `fullFileName()`
+or `fullKeyName()`.
+
 ### Reading and Writing Versioned Files
 
 From 0.2.64 `SubDir` supports versioned files. If versions are used, then they *must* be used for both reading and writing.
 
-When a `version` is provided, then `write()` will write it in a block ahead of the main content of the file. In case of the PICKLE format, this is a byte string. In case of JSON_PLAIN and JSON_PICKLE this is line of text starting with `#` ahead of the file. (Note that this violates
+If `version=` is provided, then `write()` will write it in a block ahead of the main content of the file. In case of the PICKLE format, this is a byte string. In case of JSON_PLAIN and JSON_PICKLE this is line of text starting with `#` ahead of the file. (Note that this violates
  the JSON file format.)
+The point of writing short block ahead of the main data is that `read()` can read this version information back quickly before attempting to read the entire file. `read()` does attempt so if its called with `version=` as well. In this case it will compare the read version with the provided version, and only return the main content of the file if versions match.
 
-The point of writing short block ahead of the main data is that `read()` can read this version information back quickly before attempting to read the entire file. It does attempt so if its called with a `version` as well. In this case it will compare the read version with the provided version, and only return the main content of the file if versions match.
-
-Use `is_version()` to check whether a given file has a specific version. This function only reads the information required to obtain the information and can be much faster than reading the whole file if the file size is big.
+Use `is_version()` to check whether a given file has a specific version. This function only reads the information required to obtain the information and will be much faster than reading the whole file if the file size is big.
 
 **Examples:**
 
-Write a file:
+Writing a versioned file:
 
     from cdxbasics.subdir import sub_dir    
     sub_dir = SubDir("!/test_version)
     sub_dir.write("test", [1,2,3], version="0.0.1" )
 
-To read `[1,2,3]` from "test" we use the correct version:
+To read `[1,2,3]` from "test" we need to use the correct version:
 
     _ = sub_dir.read("test", version="0.0.1") 
 
@@ -598,6 +609,12 @@ This fails reading `[1,2,3]` from "test" as the versions do not match.
 Moreoever, `read()` will then attempt to delete the file "test". This can be turned off
 with the keyword `delete_wrong_version`.
 We do not do that below, so the file will be deleted, and `read()` will then return the default value `None`.
+
+You can ignoore the version used to write a file by using `*` as version: 
+
+    _ = sub_dir.read("test", version="*")
+
+Note that reading files which have been written with a version back without `version=` keyword will fail because `SubDir` will only append additional information to the chosen file format if required.
 
 ### Test existence of files
 
@@ -625,6 +642,65 @@ All of these are _silent_, and will not throw errors if 'file' does not exist. I
 * `eraseEverything`: delete everything
 
 # filelock
+
+A system wide resource lock using a simplistic but robust implementation via a file lock.
+
+## FileLock
+
+The `FileLock` represents a lock implemented using a file with exclusive access under both Linux and Windows. The `filename` supports short-hand root directory references to the current temp directory (`!/`) or the user directory (`~/`).
+
+### Classic Form
+
+Simplest form - will throw an exception if the lock could not be attained:
+
+    from cdxbasics.filelock import FileLock
+    fl = FileLock("!/resource.lock", acquire=True, wait=False)
+
+With timeout up to 5*10 seconds:
+
+    from cdxbasics.filelock import FileLock
+    fl = FileLock("!/resource.lock", acquire=True, wait=True, timeout_seconds=5, timeout_repeat=10 )
+
+Wait forever
+
+    from cdxbasics.filelock import FileLock
+    fl = FileLock("!/resource.lock", acquire=True, wait=True, timeout_seconds=5, timeout_repeat=None )
+
+A more verbose use case is to not automatically aqcuire the lock upon construction.
+In this case call `acquire()` to obtain a lock:
+
+    from cdxbasics.filelock import FileLock
+    fl = FileLock("!/resource.lock")
+
+    if not fl.acquire():
+        print("Failed to acquire lock")
+        return
+
+    ...
+
+    fl.release()
+
+The lock will keep count of the number of times `acquire` and `release` are called, respectively. The number of current (net) acquisitions can be obtained using the `num_acquisitions` property.
+
+Note that a `FileLock` will by default release the lock upon destruction of the lock. However, due to Python's garbage collection that even might not be immediate. To enforce releasing a lock use `release()`. This is handled more elegantly by using it as a context manager:
+
+### FileLock Context Manager
+
+A better method is to use `FileLock` is as a context manager in which case the lock will be released upon leaving the while block.
+*Note that unless `acquire` is set to `True` the lock is not obtained.*
+
+    from cdxbasics.filelock import FileLock
+    with FileLock("!/resource.lock", acquire=True):
+        ...
+        ...
+
+
+### Debugging FileLock
+
+To debug usage of the lock one may use a `Context` object from the `verbose` sub-module. To display all verbose information, pass `None`:
+
+    from cdxbasics.filelock import FileLock
+    fl = FileLock("!/resource.lock", aqcuire=True, verbose=None )
 
 
 
@@ -661,7 +737,7 @@ It implements the following decision matrix
 |                                        |on    |off     |update   |clear   |readonly|
 |----------------------------------------|------|--------|---------|--------|--------|
 |load cache from disk if exists          |x     |-       |-        |-       |x|
-|write updates to disk                   |x     |-       |x        |-       |-|
+|write updates to di.sk                   |x     |-       |x        |-       |-|
 |delete existing object                  |-     |-       |-        |x       |-|
 |delete existing object if incompatible  |x     |-       |x        |x       |-|
 
@@ -767,12 +843,14 @@ Example 2 (line length is getting shorter)
 
 * `fmt_list()` returns a nicely formatted list, e.g. `fmt_list([1,2,3])` returns `1, 2 and 3`.
 
-* `fmt_dict()` returns a nicely formatted dictrionary, e.g. `fmt_dict({'a':1,'b':'test'})` returns `a: 1, b: test`.
+* `fmt_dict()` returns a nicely formatted dictionary, e.g. `fmt_dict({'a':1,'b':'test'})` returns `a: 1, b: test`.
 * `fmt_seconds()` returns string for seconds, e.g. `fmt_seconds(10)` returns `10s` while `fmt_seconds(61)` returns `1:00`.
-* `fmt_big_number()` converts a large integer into an abbreviated string with terminating `K`, `M`, `B`, `T` as appropriate, using base 10.<br>
-   For example `fmt_big_number(12345)` returns `12.35K`. 
-* `fmt_big_byte_number()` converts a large integer into an abbreviated string with terminating `K`, `M`, `G`, `T` as appropriate, here using base 16.<br>For example `fmt_big_byte_number(12345)` returns `12.06K`. 
-* `fmt_datetime()` returns a nicely formatted daytime code in natural order e.g. YYYY-MM-DD HH:SS.<br>It returns the respective simplification if just a `date` or `time` is passed instead of a `datetime`.
+* `fmt_digits()` inserts ',' or another separator in thousands, i.e. `fmt_digits(12345)` returns `12,345`.
+* `fmt_big_number()` converts a large integer into an abbreviated string with terminating `K`, `M`, `B`, `T` as appropriate, using base 10. For example `fmt_big_number(12345)` returns `12.35K`. 
+* `fmt_big_byte_number()` converts a large integer into an abbreviated string with terminating `K`, `M`, `G`, `T` as appropriate, here using base 16. For example `fmt_big_byte_number(12345)` returns `12.06K`. 
+* `fmt_date()` returns a date string in natural order e.g. YYYY-MM-DD.
+* `fmt_time()` returns a time string in natural order HH:MM:SS. The colon can be changed into another character if required, e.g. for file names.
+* `fmt_datetime()` returns a datetime string in natural order e.g. YYYY-MM-DD HH:SS. It returns the respective simplification if just a `date` or `time` is passed instead of a `datetime`.
  
 * `is_jupyter()` tries to assess whether the current environment is a jupyer IPython environment.
 This is experimental as it appears there is no safe way to do this. The current implemenentation checks whether the command which started the current process contains the string `jupyter`.
@@ -799,10 +877,10 @@ For derivative pricing:
 * `np_european(...)` computes European option prices and greeks.
 
 # npio (experimental)
-Hard efficency numpy file i/io functions. They offer reading/writing numpy arrays in their native byte form from and to disk.
+Hard efficency numpy file i/io functions. They offer unbuffereed reading/writing numpy arrays in their native byte form from and to disk. 
 
-* `tofile(file,array)` writes a numpy `array` in an efficient native binary format to `file` without buffering.
-* `fromfile(file, dtype)` reads from a numpy binary file into a new numpy array given a known dtype. This function allows reading files of more than 2GB under linux.
+* `tofile(file,array)` writes a numpy `array` in an efficient native binary format to `file` without buffering. The [unbuffered 2GB Linux write limit](https://man7.org/linux/man-pages/man2/write.2.html) is circumvented.
+* `fromfile(file, dtype)` reads from a numpy binary file into a new numpy array given a known dtype. The [unbuffered 2GB Linux read limit](https://man7.org/linux/man-pages/man2/read.2.html) is circumvented.
 * `readinto(file, array)` reads `file` into an existing target `array`.
 * `readfromfile(file, target)` reads `file` into an existing numpy array, or into a new one.
 
@@ -1106,57 +1184,4 @@ Here is the output of above code block: it also shows the aforementioned transpa
 
     Reading cache
     00: Successfully read cache for 'my_big_func' from 'C:/Users/hansb/AppData/Local/Temp/.cache/my_big_func_6ac240bc128ec33ca37c17c5aab243e46b976893ccf0c40a.pck'
-
-# sharedarray
-
-Implementation of numpy arrays on shared memory, following essentially https://docs.python.org/3/library/multiprocessing.shared_memory.html.
-
-The primary interface is the function `sharedarray` which can be used to either create or connect to a named shared array buffer. This functon retruns an `ndsharedarray`
-array which is *not* a full wrapper around `np.ndarray`. While it manages to delegate some functionality to `ndarray` transparently, it is advisable to use its `array` property to access the underlying `ndarray`.
-Self-evidently, any changes to the array which are supposed to be shared must be made in place.
-```
-    sharedarray( name   : str,
-                 shape  : tuple, 
-                 create : bool,
-                 dtype  = np.float32, 
-                 full   = None,
-                 *,
-                 raiseOnError : bool = False,
-                 verbose      : Context = None ):
-```
-See `help(sharedarray)` for details on how this function operates.
-                 
-### Naming
-
-`sharedarray` will use a user-specified `name` to generate an internal name. The internal name is essentially the name provided by the user amended by shape and dtype.
-* Once created, this shared memory block is accessible accross the system.
-* Attempting to create a second array with the same internal name will fail.
-* In order to delete an array, you need to ensure deletion of the object, and might have to call Python's garbage collector with `gc.collect()`.
-
-### Size of shared memory under Linux
-When using Linux, available shared memory can be assess with `findmnt -o AVAIL,USED /dev/shm`. You can increase this by `sudo vi  /etc/fstab` and add
- ```
-none     /run/shm     tmpfs     rw,noexec,nosuid,nodev,size=200gb     0     0
-```
-You will have to then re-mount, for example `sudo mount -o remount /run/shm`.
-
-## Disk I/O
-Shared memory tends to be used for large chunks of data. In such cases it is not efficient to first load data into non-shared numpy arrays, and then copy it into shared memory.
-To this end, the module contains the functions `shared_fromfile`, `np_fromfile`, `readinto`, and `tofile`. 
-
-### `tofile`
-Writes the contents of a large `numpy.ndarray` or `ndsharedarray` file directly to disk in system-dependent binary format using a `ByteArray` view on the array. Data is written in chunkcs of 1GB to work around limitations for writing more than 2GB on Linux systems. This i/o is materially faster than standard `pickle` for numpy arrays.
-
-### `shared_fromfile`, `np_fromfile`
-Reads back data written with `tofile` into a new array. The caller has to specify the `dtype`, but the shape of the data is read from the file.
-The function `shared_fromfile` will attempt to create a new shared array with the data from the file. This function will fail with an `FileExistsError` exception (on Linux) if a shared memory block with the respective name already exists.
-
-### `readinto`
-Reads back data written with `tofile` into an existing array. Shape and dtype of the array provided must match those of the file being read.
-
-
-
-
-
-
 

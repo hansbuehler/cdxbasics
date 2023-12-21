@@ -231,6 +231,7 @@ def fmt_big_number( number : int ) -> str:
     return str(number)
 
 def fmt_digits( uint, seperator : str = "," ):
+    """ String representation of 'uint' with 1000 separators """
     if uint < 0:
         return "-" + fmt_digits( -uint, seperator )
     assert uint >= 0
@@ -273,17 +274,17 @@ def fmt_big_byte_number( byte_cnt : int, add_B_to_string = False ) -> str:
 
     return s if not add_B_to_string else s+"B"
 
-def fmt_datetime(dt : datetime.datetime) -> str:
+def fmt_datetime(dt : datetime.datetime, time_seperator : str = ':') -> str:
     """
     Returns string for 'dt' of the form YYYY-MM-DD HH:MM:SS" if 'dt' is a datetime,
     or a the respective version for time or date.
     """
     if isinstance(dt, datetime.datetime):
-        return "%04ld-%02ld-%02ld %02ld:%02ld:%02ld" % ( dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second )
+        return "%04ld-%02ld-%02ld %02ld%s%02ld%s%02ld" % ( dt.year, dt.month, dt.day, dt.hour, time_seperator, dt.minute, time_seperator, dt.second )
     if isinstance(dt, datetime.date):
         return fmt_date(dt)
     assert isinstance(dt, datetime.time), "'dt' must be datetime.datetime, datetime.date, or datetime.time. Found %s" % type(dt)
-    return fmt_time(dt)
+    return fmt_time(dt,seperator=time_seperator)
 
 def fmt_date(dt : datetime.date) -> str:
     """ Returns string for 'dt' of the form YYYY-MM-DD """
@@ -292,12 +293,12 @@ def fmt_date(dt : datetime.date) -> str:
     assert isinstance(dt, datetime.date), "'dt' must be datetime.date. Found %s" % type(dt)
     return "%04ld-%02ld-%02ld" % ( dt.year, dt.month, dt.day )
 
-def fmt_time(dt : datetime.time) -> str:
+def fmt_time(dt : datetime.time, seperator : str = ':') -> str:
     """ Returns string for 'dt' of the form HH:MM:SS """
     if isinstance(dt, datetime.datetime):
         dt = dt.time()
     assert isinstance(dt, datetime.time), "'dt' must be datetime.time. Found %s" % type(dt)
-    return "%02ld:%02ld:%02ld" % ( dt.hour, dt.minute, dt.second )
+    return "%02ld%s%02ld%s%02ld" % ( dt.hour, seperator, dt.minute, seperator, dt.second )
 
 def fmt_now() -> str:
     """ Returns string for 'now' """
@@ -461,12 +462,12 @@ def _compress_function_code( f ):
 def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscore : str = "none" ):
     """
     Returns a function which generates hashes of length 'length', or of standard length if length is None
-    To support hashing directly in one of your objects, implement 
-    
+    To support hashing directly in one of your objects, implement
+
         __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
-        
+
         The parameters are the same as for uniqueHashExt.
-        The function is expected to return a hashable object, ideally a string.        
+        The function is expected to return a hashable object, ideally a string.
 
     Parameters
     ----------
@@ -593,13 +594,13 @@ def uniqueHash(*args, **kwargs) -> str:
         3) Members with leading '_' are ignored (*)
         4) Functions and properties are ignored (*)
         (*) you can create a hash function with different behaviour by using uniqueHashExt()
-        
-    To support hashing directly in one of your objects, implement 
-    
+
+    To support hashing directly in one of your objects, implement
+
         __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
-        
+
         The parameters are the same as for uniqueHashExt.
-        The function is expected to return a hashable object, ideally a string.        
+        The function is expected to return a hashable object, ideally a string.
     """
     return uniqueHashExt(None)(*args,**kwargs)
 
@@ -615,12 +616,12 @@ def uniqueHash32( *args, **argv ) -> str:
         4) Functions and properties are ignored (*)
         (*) you can create a hash function with different behaviour by using uniqueHashExt()
 
-    To support hashing directly in one of your objects, implement 
-    
+    To support hashing directly in one of your objects, implement
+
         __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
-        
+
         The parameters are the same as for uniqueHashExt.
-        The function is expected to return a hashable object, ideally a string.        
+        The function is expected to return a hashable object, ideally a string.
     """
     return uniqueHashExt(32)(*args,**argv)
 
@@ -636,12 +637,12 @@ def uniqueHash48( *args, **argv ) -> str:
         4) Functions and properties are ignored (*)
         (*) you can create a hash function with different behaviour by using uniqueHashExt()
 
-    To support hashing directly in one of your objects, implement 
-    
+    To support hashing directly in one of your objects, implement
+
         __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
-        
+
         The parameters are the same as for uniqueHashExt.
-        The function is expected to return a hashable object, ideally a string.        
+        The function is expected to return a hashable object, ideally a string.
     """
     return uniqueHashExt(48)(*args,**argv)
 
@@ -657,12 +658,12 @@ def uniqueHash64( *args, **argv ) -> str:
         4) Functions and properties are ignored (*)
         (*) you can create a hash function with different behaviour by using uniqueHashExt()
 
-    To support hashing directly in one of your objects, implement 
-    
+    To support hashing directly in one of your objects, implement
+
         __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
-        
+
         The parameters are the same as for uniqueHashExt.
-        The function is expected to return a hashable object, ideally a string.        
+        The function is expected to return a hashable object, ideally a string.
     """
     return uniqueHashExt(64)(*args,**argv)
 
