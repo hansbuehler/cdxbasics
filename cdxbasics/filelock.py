@@ -47,6 +47,7 @@ class FileLock(object):
     def __init__(self, filename, * ,
                        acquire         : bool = False,
                        release_on_exit : bool = True,
+                       wait            : bool = True,  
                        timeout_seconds : int = 0, 
                        timeout_retry  : int = 5,
                        verbose         : Context = Context.quiet ):
@@ -63,8 +64,15 @@ class FileLock(object):
                 Whether to aquire the lock upon initialization
             release_on_exit :
                 Whether to auto-release the lock upon exit.
-            timeout_seconds, timeout_retry:
-                Parameters passed to acquire() if acquire is True
+            wait :
+                If False, return immediately if the lock cannot be acquired.
+                If True, wait with below parameters
+            timeout_seconds :
+                Number of seconds to wait before retrying.
+                Set to 0 to fail immediately
+            timeout_retry :
+                How many times to retry before timing out.
+                Set to None to retry indefinitely.
             verbose :
                 Context which will print out operating information of the lock. This is helpful for debugging.
                 In particular, it will track __del__() function calls.
@@ -72,7 +80,9 @@ class FileLock(object):
                 
         Exceptions
         ----------
-            See acquire()
+            If acquire is True, then this constructor may raise an exception:
+                TimeoutError if 'timeout_seconds' > 0 and 'wait' is True, or
+                BlockingIOError if 'timeout_seconds' == 0 or 'wait' is False.
         """        
         self._filename       = SubDir.expandStandardRoot(filename)
         self._fd             = None
@@ -82,7 +92,7 @@ class FileLock(object):
         self.verbose         = verbose if not verbose is None else Context(None)
         self.release_on_exit = release_on_exit
         FileLock.__LOCK_ID   +=1  
-        if acquire: self.acquire( timeout_seconds=timeout_seconds, timeout_retry=timeout_retry, raise_on_fail=True )
+        if acquire: self.acquire( wait=wait, timeout_seconds=timeout_seconds, timeout_retry=timeout_retry, raise_on_fail=True )
         
     def __del__(self):#NOQA
         if self.release_on_exit and not self._fd is None:
@@ -110,7 +120,8 @@ class FileLock(object):
         """ Return filename """
         return self._filename
 
-    def acquire(self, *, timeout_seconds : int = 1, 
+    def acquire(self,    wait = True, 
+                      *, timeout_seconds : int = 1, 
                          timeout_retry   : int = 5,
                          raise_on_fail: bool = True) -> int:
         """
@@ -118,23 +129,30 @@ class FileLock(object):
         
         Parameters
         ----------
+            wait :
+                If False, return immediately if the lock cannot be acquired.
+                If True, wait with below parameters
             timeout_seconds :
-                Number of seconds to wait before retrying. Set to None or 0 to fail immediately.
+                Number of seconds to wait before retrying.
+                Set to 0 to fail immediately
             timeout_retry :
-                How many times to retry before timing out
+                How many times to retry before timing out.
+                Set to None to retry indefinitely.
             raise_on_fail :
-                If the function fails to lock the file, raise an Exception
+                If the function fails to obtain the lock, raise an Exception:
                 This will be either of type
-                    TimeoutError if timeout_seconds > 0, or
-                    BlockingIOError otherwise.
+                    TimeoutError if 'timeout_seconds' > 0 and 'wait' is True, or
+                    BlockingIOError if 'timeout_seconds' == 0 or 'wait' is False.
                 
         Returns
         -------
             Number of total locks the current process holds, or 0 if the function
             failed to attain a lock.
         """
+        timeout_seconds = int(timeout_seconds) if wait else 0
+        timeout_retry   = int(timeout_retry) if not timeout_retry is None else None
         assert not self._filename is None, ("self._filename is None. That probably means this object was deleted.")
-        assert timeout_seconds is None or timeout_seconds>=0, ("'timeout_seconds' cannot be negative")
+        assert timeout_seconds>=0, ("'timeout_seconds' cannot be negative")
 
         if not self._fd is None:
             self._cnt += 1
@@ -143,7 +161,8 @@ class FileLock(object):
         assert self._cnt == 0
         self._cnt = 0            
         
-        for i in range(timeout_retry):
+        i = 0
+        while True:
             self.verbose.write("\r%s: acquire(): locking '%s' [%s]... ", self._lid, self._filename, "windows" if IS_WINDOWS else "linux", end='')
             if not IS_WINDOWS:
                 # Linux
@@ -180,25 +199,32 @@ class FileLock(object):
                     if e.winerror not in [17,33]:
                         self.verbose.write("failed: %s", str(e), head=False)
                         raise e
+                        
             if not self._fd is None:
                 # success
                 self._cnt = 1
                 self.verbose.write("done; lock counter set to 1", head=False)
                 return self._cnt
 
-            if timeout_seconds is None or timeout_seconds <= 0:
+            if timeout_seconds <= 0:
                 break
+            
+            if not timeout_retry is None:
+                i += 1       
+                if i>timeout_retry:
+                    break
+                self.verbose.write("locked; waiting %s (%ld/%ld)", fmt_seconds(timeout_seconds), i+1, timeout_retry, head=False)
+            else:
+                self.verbose.write("locked; waiting %s", fmt_seconds(timeout_seconds), head=False)
                 
-            self.verbose.write("locked; waiting %s (%ld/%ld)", fmt_seconds(timeout_seconds), i+1, timeout_retry, head=False)
             time.sleep(timeout_seconds)
             
-        if raise_on_fail:
-            if timeout_seconds == 0:
-                self.verbose.write("failed.", head=False)
-                raise BlockingIOError(self._filename)
-            else:
-                self.verbose.write("timed out. Cannot access lock.", head=False)
-                raise TimeoutError(self._filename, dict(timeout_retry=timeout_retry, timeout_seconds=timeout_seconds))
+        if timeout_seconds == 0:
+            self.verbose.write("failed.", head=False)
+            if raise_on_fail: raise BlockingIOError(self._filename)
+        else:
+            self.verbose.write("timed out. Cannot access lock.", head=False)
+            if raise_on_fail: raise TimeoutError(self._filename, dict(timeout_retry=timeout_retry, timeout_seconds=timeout_seconds))
         return 0
 
     def release(self, *, force : bool = False ):
