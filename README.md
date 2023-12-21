@@ -624,6 +624,10 @@ All of these are _silent_, and will not throw errors if 'file' does not exist. I
 * `deleteAllContent`: delete all files with our extension, and all sub directories.
 * `eraseEverything`: delete everything
 
+# filelock
+
+
+
 # util
 
 A collection of utility functions.
