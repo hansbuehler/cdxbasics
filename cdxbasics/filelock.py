@@ -48,8 +48,8 @@ class FileLock(object):
                        acquire         : bool = False,
                        release_on_exit : bool = True,
                        wait            : bool = True,
-                       timeout_seconds : int = 0,
-                       timeout_retry  : int = 5,
+                       timeout_seconds : int = None,
+                       timeout_retry   : int = None,
                        verbose         : Context = Context.quiet ):
         """
         Initialize new lock with name 'filename'
@@ -65,11 +65,13 @@ class FileLock(object):
             release_on_exit :
                 Whether to auto-release the lock upon exit.
             wait :
-                If False, return immediately if the lock cannot be acquired.
+                If False, return immediately if the lock cannot be acquired. 
                 If True, wait with below parameters
             timeout_seconds :
                 Number of seconds to wait before retrying.
-                Set to 0 to fail immediately
+                Set to 0 to fail immediately.
+                If set to None, then its value will depend on 'wait'.
+                If wait is True, then timeout_seconds==1; if wait is False, then timeout_seconds==0
             timeout_retry :
                 How many times to retry before timing out.
                 Set to None to retry indefinitely.
@@ -92,7 +94,11 @@ class FileLock(object):
         self.verbose         = verbose if not verbose is None else Context(None)
         self.release_on_exit = release_on_exit
         FileLock.__LOCK_ID   +=1
-        if acquire: self.acquire( wait=wait, timeout_seconds=timeout_seconds, timeout_retry=timeout_retry, raise_on_fail=True )
+        
+        if acquire: self.acquire( wait=wait, 
+                                  timeout_seconds=timeout_seconds, 
+                                  timeout_retry=timeout_retry, 
+                                  raise_on_fail=True )
 
     def __del__(self):#NOQA
         if self.release_on_exit and not self._fd is None:
@@ -130,11 +136,13 @@ class FileLock(object):
         Parameters
         ----------
             wait :
-                If False, return immediately if the lock cannot be acquired.
+                If False, return immediately if the lock cannot be acquired. 
                 If True, wait with below parameters
             timeout_seconds :
                 Number of seconds to wait before retrying.
-                Set to 0 to fail immediately
+                Set to 0 to fail immediately.
+                If set to None, then its value will depend on 'wait'.
+                If wait is True, then timeout_seconds==1; if wait is False, then timeout_seconds==0
             timeout_retry :
                 How many times to retry before timing out.
                 Set to None to retry indefinitely.
@@ -153,6 +161,11 @@ class FileLock(object):
         timeout_retry   = int(timeout_retry) if not timeout_retry is None else None
         assert not self._filename is None, ("self._filename is None. That probably means this object was deleted.")
         assert timeout_seconds>=0, ("'timeout_seconds' cannot be negative")
+
+        if timeout_seconds is None:
+            timeout_seconds  = 0 if not wait else 1
+        else:
+            assert not wait or timeout_seconds>0, "Using 'timeout_seconds==0' and 'wait=True' is inconsistent."
 
         if not self._fd is None:
             self._cnt += 1
