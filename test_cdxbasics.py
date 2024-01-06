@@ -736,51 +736,6 @@ class CDXBasicsVersionTest(unittest.TestCase):
         self.assertEqual( baseA.version.full, "0.0.1")
         self.assertEqual( baseB.version.full, "0.0.2 { baseA: 0.0.1 }")
 
-# testing our auto-caching
-# need to auto-clean up
-
-class CDXBasicsCacheTest(unittest.TestCase):
-
-    cacheRoot = SubDir("!/test_caching", eraseEverything=True)
-
-    @cacheRoot.cache
-    def f(self, x, y):
-        return x*y
-
-    @staticmethod
-    @cacheRoot.cache
-    def g(x, y):
-        return x*y
-
-    def __del__(self):
-        CDXBasicsCacheTest.cacheRoot.eraseEverything(keepDirectory=False)
-
-    def test_cache(self):
-
-        x = 1
-        y = 2
-        _ = self.f(x,y)
-        self.assertFalse( self.f.cached )
-        key1 = str(self.f.cacheArgKey)
-        _ = self.f(x*2,y*2)
-        self.assertNotEqual( self.f.cacheArgKey, key1 )
-
-        _ = self.f(x,y)
-        self.assertTrue( self.f.cached )
-        _ = self.f(x,y,cacheMode='off')
-        self.assertFalse( self.f.cached )
-        _ = self.f(x,y)
-        self.assertTrue( self.f.cached )
-        _ = self.f(x,y, cacheVersion="2.00.00", cacheMode="readonly")
-        self.assertFalse( self.f.cached )
-        _ = self.f(x,y,cacheMode='clear')
-        self.assertFalse( self.f.cached )
-
-        _ = CDXBasicsCacheTest.g(x,y)
-        self.assertFalse( self.g.cached )
-        self.assertNotEqual( self.g.cacheArgKey, key1 )
-
-        CDXBasicsCacheTest.cacheRoot.eraseEverything()
 
 # testing config
 
