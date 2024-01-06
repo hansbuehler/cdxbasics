@@ -157,14 +157,14 @@ class FileLock(object):
             Number of total locks the current process holds, or 0 if the function
             failed to attain a lock.
         """
-        timeout_seconds = int(timeout_seconds) if wait else 0
+        timeout_seconds = int(timeout_seconds) if not timeout_seconds is None else None
         timeout_retry   = int(timeout_retry) if not timeout_retry is None else None
         assert not self._filename is None, ("self._filename is None. That probably means this object was deleted.")
-        assert timeout_seconds>=0, ("'timeout_seconds' cannot be negative")
 
         if timeout_seconds is None:
             timeout_seconds  = 0 if not wait else 1
         else:
+            assert timeout_seconds>=0, ("'timeout_seconds' cannot be negative")
             assert not wait or timeout_seconds>0, "Using 'timeout_seconds==0' and 'wait=True' is inconsistent."
 
         if not self._fd is None:
@@ -269,15 +269,16 @@ class FileLock(object):
         err = ""
         if not IS_WINDOWS:
             # Linux
+            # Locks on Linxu are remarably shaky.
+            # In particular, it is possible to remove a locked file.
+            try:
+                os.remove(self._filename)
+            except:
+                pass
             try:
                 os.close(self._fd)
             except:
                 err = "*** WARNING: could not close file."
-                pass
-            try:
-                os.remove(self._filename)
-            except:
-                err = "*** WARNING: could not delete file." if err == "" else err
                 pass
         else:
             try:

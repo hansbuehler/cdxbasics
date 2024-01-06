@@ -10,7 +10,7 @@ import hashlib as hashlib
 import inspect as inspect
 import psutil as psutil
 from collections.abc import Mapping, Collection
-from .prettydict import PrettyDict
+from .prettydict import PrettyDict, OrderedDict
 import sys as sys
 import time as time
 from sortedcontainers import SortedDict
@@ -135,8 +135,19 @@ def write(text : str,*args,**kwargs) -> str:
     """ Prints a fmt() string without EOL, e.g. uses print(fmt(..),end='') """
     print(_fmt(text,args,kwargs),end='')
 
-def fmt_seconds( seconds : int ) -> str:
+def fmt_seconds( seconds : float, *, eps : float = 1E-8 ) -> str:
     """ Print nice format string for seconds, e.g. '23s' for seconds=23, or 1:10 for seconds=70 """
+    assert eps>=0., ("'eps' must not be negative")
+    if seconds < -eps:
+        return "-" + fmt_seconds(-seconds, eps=eps)
+    
+    if seconds <= eps:
+        return "0s"
+    if seconds < 0.01:
+        return "%.3gms" % (seconds*1000.)
+    if seconds < 2.:
+        return "%.2gs" % seconds
+    seconds = int(seconds)
     if seconds < 60:
         return "%lds" % seconds
     if seconds < 60*60:
@@ -394,7 +405,9 @@ class WriteLine(object):
 # Conversion of arbitrary python elements into re-usable versions
 # =============================================================================
 
-def plain( inn, *, sorted_dicts : bool = False, native_np : bool = False ):
+def plain( inn, *, sorted_dicts : bool = False, 
+                   native_np    : bool = False,
+                   dt_to_str    : bool = False):
     """
     Converts a python structure into a simple atomic/list/dictionary collection such
     that it can be read without the specific imports used inside this program.
@@ -405,6 +418,7 @@ def plain( inn, *, sorted_dicts : bool = False, native_np : bool = False ):
         inn          : some object
         sorted_dicts : Use SortedDicts instead of dicts.
         native_np    : convert numpy to Python natives.
+        dt_to_str    : convert date times to strings
 
     Hans Buehler, Dec 2013
     """
@@ -412,9 +426,10 @@ def plain( inn, *, sorted_dicts : bool = False, native_np : bool = False ):
         return plain( x, sorted_dicts=sorted_dicts, native_np = native_np )
     # basics
     if isAtomic(inn) \
-        or isinstance(inn,(datetime.time,datetime.date,datetime.datetime))\
         or inn is None:
         return inn
+    if isinstance(inn,(datetime.time,datetime.date,datetime.datetime)):
+        return fmt_datetime(inn) if dt_to_str else inn
     if not np is None:
         if isinstance(inn,np.ndarray):
             return inn if not native_np else rec_plain( inn.tolist() )
@@ -847,7 +862,7 @@ class TrackTiming(object):
 
     def reset_all(self):
         """ Reset timer, and clear all tracked items """
-        self._tracked = []
+        self._tracked = OrderedDict()
         self._current = time.time()
 
     def reset_timer(self):
@@ -863,16 +878,24 @@ class TrackTiming(object):
         """ Track 'text' """
         text  = str(text)
         now   = time.time()
-        self._tracked.append( (text, now - self._current) )
+        dt    = now - self._current
+        if text in self._tracked:
+            self._tracked[text] += dt
+        else:
+            self._tracked[text] = dt        
         self._current = now
         return self
+    
+    def __str__(self):
+        """ Returns summary """
+        return self.summary()
 
     @property
     def tracked(self) -> list:
-        """ Return list of tracked texts. The list contains tuples (text, time_in_seconds) """
+        """ Returns dictionary of tracked texts """
         return self._tracked
 
-    def summary(self, format : str = "%(text)s: %(fmt_seconds)s", jn_fmt : str = ", " ) -> str:
+    def summary(self, frmat : str = "%(text)s: %(fmt_seconds)s", jn_fmt : str = ", " ) -> str:
         """
         Generate summary string by applying some formatting
 
@@ -887,7 +910,7 @@ class TrackTiming(object):
             The combined summary string
         """
         s = ""
-        for tr in self._tracked:
-            tr_txt = format % dict( text=tr[0], seconds=tr[1], fmt_seconds=fmt_seconds(tr[1]))
+        for text, seconds in self._tracked.items():
+            tr_txt = frmat % dict( text=text, seconds=seconds, fmt_seconds=fmt_seconds(seconds))
             s      = tr_txt if s=="" else s+jn_fmt+tr_txt
         return s

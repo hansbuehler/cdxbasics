@@ -63,6 +63,12 @@ class Format(Enum):
     JSON_PLAIN = 2
     BLOSC = 3
     GZIP = 4
+    
+PICKLE = Format.PICKLE
+JSON_PICKLE = Format.JSON_PICKLE
+JSON_PLAIN = Format.JSON_PLAIN
+BLOSC = Format.BLOSC
+GZIP = Format.GZIP
 
 """
 Use the following for config calls:
@@ -179,6 +185,7 @@ class SubDir(object):
     class __RETURN_SUB_DIRECTORY(object):
         pass
 
+    Format = Format
     PICKLE = Format.PICKLE
     JSON_PICKLE = Format.JSON_PICKLE
     JSON_PLAIN = Format.JSON_PLAIN
@@ -188,16 +195,24 @@ class SubDir(object):
     DEFAULT_RAISE_ON_ERROR = False
     RETURN_SUB_DIRECTORY = __RETURN_SUB_DIRECTORY
     DEFAULT_FORMAT = Format.PICKLE
+    DEFAULT_CREATE_DIRECTORY = True  # legacy behaviour so that self.path is a valid path
+    EXT_FMT_AUTO = "*"
 
     MAX_VERSION_BINARY_LEN = 128
 
-    VER_NORMAL = 0
-    VER_CHECK  = 1
-    VER_RETURN = 2
-
-    def __init__(self, name : str, parent = None, *, ext : str = None, fmt : Format = None, eraseEverything : bool = False ):
+    VER_NORMAL   = 0
+    VER_CHECK    = 1
+    VER_RETURN   = 2
+    
+    def __init__(self, name : str, 
+                       parent = None, *, 
+                       ext : str = None, 
+                       fmt : Format = None, 
+                       eraseEverything : bool = False,
+                       createDirectory : bool = None ):
         """
-        Creates a sub directory which contains pickle files with a common extension.
+        Instantiates a sub directory which contains pickle files with a common extension.
+        By default the directory is created.
 
         Absolute directories
             sd  = SubDir("!/subdir")           - relative to system temp directory
@@ -254,13 +269,17 @@ class SubDir(object):
                               Set to "" to turn off managing extensions.
             fmt             - format, current pickle or json
             eraseEverything - delete all contents in the newly defined subdir
+            createDirectory - whether to create the directory in __init__. Otherwise it will be created upon first write().
         """
+        createDirectory = bool(createDirectory) if not createDirectory is None else None
+        
         # copy constructor support
         if isinstance(name, SubDir):
             assert parent is None, "Internal error: copy construction does not accept 'parent' keyword"
             self._path = name._path
             self._ext  = name._ext if ext is None else ext
             self._fmt  = name._fmt if fmt is None else fmt
+            self._crt  = name._crt if createDirectory is None else createDirectory
             if eraseEverything: _log.throw( "Cannot use 'eraseEverything' when cloning a directory")
             return
 
@@ -270,12 +289,13 @@ class SubDir(object):
             self._path = name['_path']
             self._ext  = name['_ext'] if ext is None else ext
             self._fmt  = name['_fmt'] if fmt is None else fmt
+            self._crt  = name['_crt'] if createDirectory is None else createDirectory
             if eraseEverything: _log.throw( "Cannot use 'eraseEverything' when cloning a directory via a Mapping")
             return
 
         # parent
         if isinstance(parent, str):
-            parent = SubDir( parent, ext=ext, fmt=fmt )
+            parent = SubDir( parent, ext=ext, fmt=fmt, createDirectory=createDirectory )
         if not parent is None and not isinstance(parent, SubDir): _log.throw( "'parent' must be SubDir, str, or None. Found object of type %s", type(parent))
 
         # operational flags
@@ -307,9 +327,15 @@ class SubDir(object):
                 ext  = _ext
                 name = name[:ext_i]
         if ext is None:
-            self._ext = ("." + self._auto_ext(self._fmt)) if parent is None else parent._ext
+            self._ext = self.EXT_FMT_AUTO if parent is None else parent._ext
         else:
-            self._ext = self._convert_ext(ext)
+            self._ext = SubDir._extract_ext(ext)
+            
+        # createDirectory
+        if createDirectory is None:
+            self._crt = self.DEFAULT_CREATE_DIRECTORY if parent is None else parent._crt
+        else:
+            self._crt = bool(createDirectory)
 
         # name
         if name is None:
@@ -344,14 +370,10 @@ class SubDir(object):
             self._path = os.path.abspath(name) + '/'
             self._path = self._path.replace('\\','/')
 
-            # create directory
-            if not os.path.exists( self._path[:-1] ):
-                os.makedirs( self._path[:-1] )
-            else:
-                if not os.path.isdir(self._path[:-1]): _log.throw( "Cannot use sub directory %s: object exists but is not a directory", self._path[:-1] )
-                # erase all content if requested
-                if eraseEverything:
-                    self.eraseEverything(keepDirectory = True)
+            if eraseEverything:
+                self.eraseEverything(keepDirectory=self._crt)
+            if self._crt:
+                self.createDirectory()
 
     @staticmethod
     def expandStandardRoot( name ):
@@ -371,11 +393,30 @@ class SubDir(object):
         else:
             return SubDir.userDir() + name[2:]
 
-    # -- self description --
+    def createDirectory( self ):
+        """
+        Creates the directory if it doesn't exist yet.
+        Does not do anything if is_none.
+        """
+        # create directory/clean up
+        if self._path is None:
+            return
+        # create directory
+        if not os.path.exists( self._path[:-1] ):
+            os.makedirs( self._path[:-1] )
+        elif not os.path.isdir(self._path[:-1]):
+            _log.throw( "Cannot use sub directory %s: object exists but is not a directory", self._path[:-1] )
+
+    def pathExists(self) -> bool:
+        """ Returns True if the current directory exists """
+        return os.path.exists( self._path[:-1] ) if not self._path is None else False
+        
+    # -- a few basic properties --
 
     def __str__(self) -> str: # NOQA
         if self._path is None: return "(none)"
-        return self._path if len(self._ext) == 0 else self._path + ";*" + self._ext
+        ext = self.ext
+        return self._path if len(ext) == 0 else self._path + ";*" + ext
 
     def __repr__(self) -> str: # NOQA
         if self._path is None: return "SubDir(None)"
@@ -385,15 +426,15 @@ class SubDir(object):
         """ Tests equality between to SubDirs, or between a SubDir and a directory """
         if isinstance(other,str):
             return self._path == other
-        _log.verify( isinstance(other,SubDir), "Cannot compare SubDir to object of type '%s'", type(other))
-        return self._path == other._path and self._ext == other._ext
+        _log.verify( isinstance(other,SubDir), "Cannot compare SubDir to object of type '%s'", type(other).__name__)
+        return self._path == other._path and self._ext == other._ext and self._fmt == other._fmt
 
     def __bool__(self) -> bool:
         """ Returns True if 'self' is set, or False if 'self' is a None directory """
         return not self.is_none
 
     def __hash__(self) -> str: #NOQA
-        return hash( (self._path, self._ext) )
+        return hash( (self._path, self._ext, self._fmt) )
 
     @property
     def is_none(self) -> bool:
@@ -402,31 +443,80 @@ class SubDir(object):
 
     @property
     def path(self) -> str:
-        """ Return current path, including trailing '/' """
+        """
+        Return current path, including trailing '/'
+        Note that the path may not exist yet. If this is required, consider using existing_path
+        """
         return self._path
 
     @property
-    def ext(self) -> str:
-        """ Returns the common extension of the files in this directory """
-        return self._ext
+    def existing_path(self) -> str:
+        """
+        Return current path, including training '/'.
+        In addition to self.path this property ensures that the directory structure exists (or raises an exception)
+        """
+        self.createDirectory()
+        return self.path
 
     @property
     def fmt(self) -> Format:
         """ Returns current format """
         return self._fmt
+    
+    @property
+    def ext(self) -> str:
+        """
+        Returns the common extension of the files in this directory, including leading '.'
+        Resolves '*' into the extension associated with the current format.
+        """
+        return self._ext if self._ext != self.EXT_FMT_AUTO else self._auto_ext(self._fmt)
+
+    def autoExt( self, ext : str = None ) -> str:
+        """
+        Computes the effective extension based on inputs 'ext', defaulting to the SubDir's extension.
+        Resolves '*' into the extension associated with the specified format.
+        This function allows setting 'ext' also as a Format.
+        
+        Returns the extension with leading '.'
+        """
+        if isinstance(ext, Format):
+            return self._auto_ext(ext)
+        else:
+            ext = self._ext if ext is None else SubDir._extract_ext(ext)
+            return ext if ext != self.EXT_FMT_AUTO else self._auto_ext(self._fmt)
+
+    def autoExtFmt( self, *, ext : str = None, fmt : Format = None ) -> str:
+        """
+        Computes the effective extension and format based on inputs 'ext' and 'fmt', each of which defaults to the SubDir's current settings.
+        Resolves '*' into the extension associated with the specified format.
+        This function allows setting 'ext' also as a Format.
+
+        Returns (ext, fmt) where 'ext' contains the leading '.'
+        """
+        if isinstance(ext, Format):
+            _log.verify( fmt is None or fmt == ext, "If 'ext' is a Format, then 'fmt' must match 'ext' or be None. Found '%s' and '%s', respectively.", ext, fmt)
+            return self._auto_ext(ext), ext
+
+        fmt = fmt if not fmt is None else self._fmt
+        ext = self._ext if ext is None else SubDir._extract_ext(ext)
+        ext = ext if ext != self.EXT_FMT_AUTO else self._auto_ext(fmt)
+        return ext, fmt
+
+    # -- static helpers --
 
     @staticmethod
-    def _auto_ext( fmt : Format ):
+    def _auto_ext( fmt : Format ) -> str:
+        """ Default extension for a given format, including leading '.' """
         if fmt == Format.PICKLE:
-            return "pck"
+            return ".pck"
         if fmt == Format.JSON_PLAIN:
-            return "json"
+            return ".json"
         if fmt == Format.JSON_PICKLE:
-            return "jpck"
+            return ".jpck"
         if fmt == Format.BLOSC:
-            return "zbsc"
+            return ".zbsc"
         if fmt == Format.GZIP:
-            return "pgz"
+            return ".pgz"
         _log.throw("Unknown format '%s'", str(fmt))
 
     @staticmethod
@@ -442,18 +532,26 @@ class SubDir(object):
         ver_[1:1+l] = version_
         assert len(ver_) == SubDir.MAX_VERSION_BINARY_LEN, ("Internal error", len(ver_), ver_)
         return ver_
-
+    
     @staticmethod
-    def _convert_ext( ext ):
-        """ Returns .ext or "" """
-        assert not ext is None, "Internal error"
+    def _extract_ext( ext : str ) -> str:
+        """
+        Checks that 'ext' is an extension, and returns .ext.
+        -- Accepts '.ext' and 'ext'
+        -- Detects use of directories
+        -- Returns '*' if ext='*'
+        """
+        assert not ext is None, ("'ext' should not be None here")
         _log.verify( isinstance(ext,str), "Extension 'ext' must be a string. Found type %s", type(ext).__name__ )
+        # auto?
+        if ext == SubDir.EXT_FMT_AUTO:
+            return SubDir.EXT_FMT_AUTO        
         # remove leading '.'s
         while ext[:1] == ".":
             ext = ext[1:]
         # empty extension -> match all files
         if ext == "":
-            return ext
+            return ""
         # ensure extension has no directiory information
         sub, _ = os.path.split(ext)
         _log.verify( len(sub) == 0, "Extension '%s' contains directory information", ext)
@@ -462,6 +560,8 @@ class SubDir(object):
         _log.verify( ext[0] != "!", "Extension '%s' cannot start with '!' (this symbol indicates the temp directory)", ext)
         _log.verify( ext[0] != "~", "Extension '%s' cannot start with '~' (this symbol indicates the user's directory)", ext)
         return "." + ext
+            
+    # -- public utilities --
 
     def fullFileName(self, key : str, *, ext : str = None) -> str:
         """
@@ -495,11 +595,11 @@ class SubDir(object):
         _log.verify( key[0] != "!", "Key '%s' cannot start with '!' (this symbol indicates the temp directory)", key)
         _log.verify( key[0] != "~", "Key '%s' cannot start with '~' (this symbol indicates the user's directory)", key)
 
-        ext = self._convert_ext( ext if not ext is None else self._ext )
+        ext = self.autoExt( ext )
         if len(ext) > 0 and key[-len(ext):] != ext:
             return self._path + key + ext
         return self._path + key
-    fullKeyName = fullFileName
+    fullKeyName = fullFileName # backwards compatibility
 
     @staticmethod
     def tempDir() -> str:
@@ -577,13 +677,17 @@ class SubDir(object):
 
         # single key
         if len(key) == 0: _log.throw("'key' missing (the filename)" )
-        sub, key = os.path.split(key)
+        sub, key_ = os.path.split(key)
         if len(sub) > 0:
-            return self(sub)._read_reader(reader=reader,key=key,default=default,raiseOnError=raiseOnError,ext=ext)
-        if len(key) == 0: _log.throw( "'key' %s indicates a directory, not a file", key)
+            return self(sub)._read_reader(reader=reader,key=key_,default=default,raiseOnError=raiseOnError,ext=ext)
+        if len(key_) == 0: _log.throw( "'key' %s indicates a directory, not a file", key)
 
+        # don't try if directory doesn't exist
+        if not self.pathExists():
+            return default
+        
         # does file exit?
-        fullFileName = self.fullKeyName(key,ext=ext)
+        fullFileName = self.fullFileName(key,ext=ext)
         if not os.path.exists(fullFileName):
             if raiseOnError:
                 raise KeyError(key,fullFileName)
@@ -601,11 +705,11 @@ class SubDir(object):
             except Exception as e:
                 _log.warning("Cannot read %s; attempt to delete file failed (full path %s): %s",key,fullFileName,str(e))
         except Exception as e:
-            print(e)
+            _log.error(e)
             if raiseOnError:
                 raise KeyError(key, fullFileName) from e
-        except:
-            raise KeyError(key, fullFileName)
+        except BaseException as e:
+            raise KeyError(key, fullFileName) from e
         return default
 
     def _read( self, key : str,
@@ -619,9 +723,10 @@ class SubDir(object):
                     handle_version : int = 0
                     ):
         """ See read() """
-        fmt     = fmt if not fmt is None else self._fmt
-        version = str(version) if not version is None else None
-        version = version if handle_version != SubDir.VER_RETURN else ""
+        ext, fmt = self.autoExtFmt(ext=ext, fmt=fmt)
+        version  = str(version) if not version is None else None
+        version  = version if handle_version != SubDir.VER_RETURN else ""
+        assert not fmt == self.EXT_FMT_AUTO, ("'fmt' is '*' ...?")
 
         if version is None and fmt in [Format.BLOSC, Format.GZIP]:
             version = ""
@@ -780,11 +885,14 @@ class SubDir(object):
                 If True, and if a wrong version was found, delete the file.
             ext : str
                 Extension overwrite, or a list thereof if key is a list
-                Set to None to use directory's default
+                Set to:
+                -- None to use directory's default
+                -- '*' to use the extension implied by 'fmt' 
+                -- for convenience 'ext' can also be a Format (in this case leave fmt to None)
             fmt : Format
                 File format or None to use the directory's default.
                 Note that 'fmt' cannot be a list even if 'key' is.
-                Note that changing the format does not automatically change the extension.
+                Note that unless 'ext' or the SubDir's extension is '*', changing the format does not automatically change the extension.
 
         Returns
         -------
@@ -793,7 +901,7 @@ class SubDir(object):
         """
         return self._read( key=key,default=default,raiseOnError=raiseOnError,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,handle_version=SubDir.VER_NORMAL )
 
-    get = read
+    get = read # backwards compatibility
 
     def is_version( self, key : str, version : str = None, raiseOnError : bool = False, *, ext : str = None, fmt : Format = None, delete_wrong_version : bool = True ):
         """
@@ -813,12 +921,15 @@ class SubDir(object):
             delete_wrong_version : bool
                 If True, and if a wrong version was found, delete the file.
             ext : str
-                Extension overwrite, or a list thereof if key is a list
-                Set to None to use directory's default
+                Extension overwrite, or a list thereof if key is a list.
+                Set to:
+                -- None to use directory's default
+                -- '*' to use the extension implied by 'fmt' 
+                -- for convenience 'ext' can also be a Format (in this case leave fmt to None)
             fmt : Format
                 File format or None to use the directory's default.
                 Note that 'fmt' cannot be a list even if 'key' is.
-                Note that changing the format does not automatically change the extension.
+                Note that unless 'ext' or the SubDir's extension is '*', changing the format does not automatically change the extension.
 
         Returns
         -------
@@ -840,12 +951,15 @@ class SubDir(object):
                 Whether to raise an exception if accessing an existing file failed (e.g. if it is a directory).
                 By default this function fails silently and returns the default.
             ext : str
-                Extension overwrite, or a list thereof if key is a list
-                Set to None to use directory's default
+                Extension overwrite, or a list thereof if key is a list.
+                Set to:
+                -- None to use directory's default
+                -- '*' to use the extension implied by 'fmt' 
+                -- for convenience 'ext' can also be a Format (in this case leave fmt to None)
             fmt : Format
                 File format or None to use the directory's default.
                 Note that 'fmt' cannot be a list even if 'key' is.
-                Note that changing the format does not automatically change the extension.
+                Note that unless 'ext' or the SubDir's extension is '*', changing the format does not automatically change the extension.
 
         Returns
         -------
@@ -862,10 +976,14 @@ class SubDir(object):
         Returns the read string, or a list of strings if 'key' was iterable.
         If the current directory is 'None', then behaviour is as if the file did not exist.
 
-        This function ignores the the format (self.fmt) of the subdirectory as it is writing text in the first place.
-
-        See additional comments for read()
+        Use 'ext' to specify the extension.
+        You cannot use 'ext' to specify a format as the format is plain text.
+        If 'ext' is '*' or if self._ext is '*' then the default extension is 'txt'.
         """
+        _log.verify( not isinstance(ext, Format), "Cannot change format when writing strings. Found extension '%s'", ext)
+        ext = ext if not ext is None else self._ext
+        ext = ext if ext != self.EXT_FMT_AUTO else ".txt"
+
         def reader( key, fullFileName, default ):
             with open(fullFileName,"rt",encoding="utf-8") as f:
                 line = f.readline()
@@ -880,6 +998,7 @@ class SubDir(object):
         """ Utility function for write() and writeLine() """
         if self._path is None:
             raise EOFError("Cannot write to '%s': current directory is not specified" % key)
+        self.createDirectory()
 
         # vector version
         if not isinstance(key,str):
@@ -903,12 +1022,10 @@ class SubDir(object):
         sub, key = os.path.split(key)
         if len(key) == 0: _log.throw("'key '%s' refers to a directory, not a file", key)
         if len(sub) > 0:
-            return SubDir(self,sub)._write(writer,key,obj, raiseOnError=raiseOnError,ext=ext )
+            return SubDir(sub,parent=self)._write(writer,key,obj, raiseOnError=raiseOnError,ext=ext )
 
-        # write to temp file
-        # then rename into target file
-        # this reduces collision when i/o operations
-        # are slow
+        # write to temp file, then rename into target file
+        # this reduces collision when i/o operations are slow
         fullFileName = self.fullKeyName(key,ext=ext)
         tmp_file     = uniqueHash48( [ key, uuid.getnode(), os.getpid(), threading.get_ident(), datetime.datetime.now() ] )
         tmp_i        = 0
@@ -977,18 +1094,22 @@ class SubDir(object):
                 This version will be written to the beginning of the file.
             ext : str
                 Extension, or list thereof if 'key' is a list.
-                Set to None to use default extension.
+                Set to:
+                -- None to use directory's default
+                -- '*' to use the extension implied by 'fmt' 
+                -- for convenience 'ext' can also be a Format (in this case leave fmt to None)
             fmt : Format
-                Overwrite format.
+                File format or None to use the directory's default.
                 Note that 'fmt' cannot be a list even if 'key' is.
-                Note that changing the format does not automatically change the extension.
+                Note that unless 'ext' or the SubDir's extension is '*', changing the format does not automatically change the extension.
 
         Returns
         -------
             Boolean to indicate success if raiseOnError is False.
         """
-        fmt      = fmt if not fmt is None else self._fmt
+        ext, fmt = self.autoExtFmt(ext=ext, fmt=fmt)
         version  = str(version) if not version is None else None
+        assert ext != self.EXT_FMT_AUTO, ("'ext' is '*'...?")
 
         if version is None and fmt in [Format.BLOSC, Format.GZIP]:
             version = ""
@@ -1049,7 +1170,7 @@ class SubDir(object):
                             f.write( jsonpickle.encode(obj) )
                         else:
                             assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
-                            f.write( json.dumps( plain(obj, sorted_dicts=True, native_np=True) ) )
+                            f.write( json.dumps( plain(obj, sorted_dicts=True, native_np=True, dt_to_str=True ) ) )
 
                 else:
                     _log.throw("Internal error: invalid format '%s'", fmt)
@@ -1071,7 +1192,15 @@ class SubDir(object):
 
         If the current directory is 'None', then the function throws an EOFError exception
         See additional comments for write()
+        
+        Use 'ext' to specify the extension.
+        You cannot use 'ext' to specify a format as the format is plain text.
+        If 'ext' is '*' or if self._ext is '*' then the default extension is 'txt'.
         """
+        _log.verify( not isinstance(ext, Format), "Cannot change format when writing strings. Found extension '%s'", ext)
+        ext = ext if not ext is None else self._ext
+        ext = ext if ext != self.EXT_FMT_AUTO else ".txt"
+        
         if len(line) == 0 or line[-1] != '\n':
             line += '\n'
         def writer( key, fullFileName, obj ):
@@ -1087,23 +1216,25 @@ class SubDir(object):
 
     # -- iterate --
 
-    def files(self, *, ext : str = None ) -> list:
+    def files(self, *, ext : str = None) -> list:
         """
         Returns a list of keys in this subdirectory with the current extension, or the specified extension.
 
         In other words, if the extension is ".pck", and the files are "file1.pck", "file2.pck", "file3.bin"
         then this function will return [ "file1", "file2" ]
 
-        If 'ext' is "" then this function will return all files in this directory.
-        If 'ext' is None, the directory's default extension will be used
+        If 'ext' is
+        -- None, the directory's default extension will be used
+        -- "" then this function will return all files in this directory.
+        -- a Format, then the default extension of the format will be used.
 
         This function ignores directories.
 
         [This function has an alias 'keys']
         """
-        if self._path is None:
+        if not self.pathExists():
             return []
-        ext   = ext if not ext is None else self._ext
+        ext   = self.autoExt( ext=ext )
         ext_l = len(ext)
         keys = []
         with os.scandir(self._path) as it:
@@ -1125,7 +1256,7 @@ class SubDir(object):
         If self is None, then this function returns an empty list.
         """
         # do not do anything if the object was deleted
-        if self._path is None:
+        if not self.pathExists():
             return []
         subdirs = []
         with os.scandir(self._path[:-1]) as it:
@@ -1149,12 +1280,16 @@ class SubDir(object):
                 if False, do not throw KeyError if file does not exist.
             ext :
                 Extension, or list thereof if 'key' is an extension.
-                Use None for the directory default
+                Use
+                -- None for the directory default
+                -- "" to not use an automatic extension.
+                -- A Format to specify the default extension for that format.
         """
         # do not do anything if the object was deleted
         if self._path is None:
             if raiseOnError: raise EOFError("Cannot delete '%s': current directory not specified" % key)
             return
+            
         # vector version
         if not isinstance(key,str):
             if not isinstance(key, Collection): _log.throw( "'key' must be a string or an interable object. Found type %s", type(key))
@@ -1167,13 +1302,16 @@ class SubDir(object):
                 self.delete(k, raiseOnError=raiseOnError, ext=e)
             return
 
-        # resolve sub directories
+        # handle directories in 'key'
         if len(key) == 0: _log.throw( "'key' is empty" )
-        sub, key2 = os.path.split(key)
-        if len(key2) == 0: _log.throw("'key' %s indicates a directory, not a file", key)
-        if len(sub) > 0:
-            return SubDir(self,sub).delete(key2,raiseOnError=raiseOnError,ext=ext)
-
+        sub, key_ = os.path.split(key)
+        if len(key_) == 0: _log.throw("'key' %s indicates a directory, not a file", key)
+        if len(sub) > 0: return SubDir(sub,parent=self).delete(key_,raiseOnError=raiseOnError,ext=ext)
+        # don't try if directory doesn't existy
+        if not self.pathExists():
+            if raiseOnError:
+                raise KeyError(key)
+            return        
         fullFileName = self.fullKeyName(key, ext=ext)
         if not os.path.exists(fullFileName):
             if raiseOnError:
@@ -1184,10 +1322,24 @@ class SubDir(object):
     def deleteAllKeys( self, raiseOnError : bool = False, *, ext : str = None ):
         """
         Deletes all valid keys in this sub directory with the correct extension.
-        You can use 'ext' to specify a different extension than used for the directory itself
+        
+        Parameters
+        ----------
+            key :
+                filename, or list of filenames
+            raiseOnError :
+                if False, do not throw KeyError if file does not exist.
+            ext :
+                File extension to match.
+                Use
+                -- None for the directory default
+                -- "" to match all files regardless of extension.
+                -- A Format to specify the default extension for that format.
         """
         if self._path is None:
             if raiseOnError: raise EOFError("Cannot delete all files: current directory not specified")
+            return
+        if not self.pathExists():
             return
         self.delete( self.keys(ext=ext), raiseOnError=raiseOnError, ext=ext )
 
@@ -1199,13 +1351,20 @@ class SubDir(object):
 
         Parameters
         ----------
-            deleteSelf: whether to delete the directory or only its contents
-            raiseOnError: False for silent failure
-            ext: extension for keys, or None for the directory's default
+            deleteSelf:
+                whether to delete the directory or only its contents
+            raiseOnError:
+                False for silent failure
+            ext:
+                Extension for keys, or None for the directory's default.
+                You can also provide a Format for 'ext'.
+                Use "" to match all files regardless of extension.
         """
         # do not do anything if the object was deleted
         if self._path is None:
             if raiseOnError: raise EOFError("Cannot delete all contents: current directory not specified")
+            return
+        if not self.pathExists():
             return
         # delete sub directories
         subdirs = self.subDirs();
@@ -1236,6 +1395,8 @@ class SubDir(object):
         """
         if self._path is None:
             return
+        if not self.pathExists():
+            return
         shutil.rmtree(self._path[:-1], ignore_errors=True)
         if not keepDirectory and os.path.exists(self._path[:-1]):
             os.rmdir(self._path[:-1])
@@ -1246,7 +1407,24 @@ class SubDir(object):
     # -- file ops --
 
     def exists(self, key : str, *, ext : str = None ) -> bool:
-        """ Checks whether 'key' exists. Works with iterables """
+        """
+        Checks whether 'key' exists. Works with iterables
+
+        Parameters
+        ----------
+            key :
+                filename, or list of filenames
+            ext :
+                Extension, or list thereof if 'key' is an extension.
+                Use
+                -- None for the directory default
+                -- "" for no automatic extension
+                -- A Format to specify the default extension for that format.
+
+        Returns
+        -------
+            If 'key' is a string, returns True or False, else it will return a list of bools.
+        """
         # vector version
         if not isinstance(key,str):
             _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
@@ -1259,6 +1437,14 @@ class SubDir(object):
         # empty directory
         if self._path is None:
             return False
+        # handle directories in 'key'
+        if len(key) == 0: _log.throw("'key' missing (the filename)" )
+        sub, key_ = os.path.split(key)
+        if len(key_) == 0: _log.throw( "'key' %s indicates a directory, not a file", key)
+        if len(sub) > 0: return self(sub).exists(key=key_,ext=ext)
+        # if directory doesn't exit
+        if not self.pathExists():
+            return False
         # single key
         fullFileName = self.fullKeyName(key, ext=ext)
         if not os.path.exists(fullFileName):
@@ -1266,13 +1452,8 @@ class SubDir(object):
         if not os.path.isfile(fullFileName):
             raise _log.Exceptn("Structural error: key %s: exists, but is not a file (full path %s)",key,fullFileName)
         return True
-
-    def getCreationTime( self : str, key, *, ext : str = None ) -> datetime.datetime:
-        """
-        Returns the creation time of 'key', or None if file was not found.
-        Works with key as list.
-        See comments on os.path.getctime() for compatibility
-        """
+    
+    def _getFileProperty( self, *, key : str, ext : str, func ):
         # vector version
         if not isinstance(key,str):
             _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
@@ -1281,90 +1462,153 @@ class SubDir(object):
                 ext = [ ext ] * l
             else:
                 if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
-            return [ self.getCreationTime(k,ext=e) for k,e in zip(key,ext) ]
+            return [ self._getFileProperty(key=k,ext=e,func=func) for k,e in zip(key,ext) ]
         # empty directory
         if self._path is None:
+            return None
+        # handle directories in 'key'
+        if len(key) == 0: _log.throw("'key' missing (the filename)" )
+        sub, key_ = os.path.split(key)
+        if len(key_) == 0: _log.throw( "'key' %s indicates a directory, not a file", key)
+        if len(sub) > 0: return self(sub)._getFileProperty(key=key_,ext=ext,func=func)
+        # if directory doesn't exit
+        if not self.pathExists():
             return None
         # single key
         fullFileName = self.fullKeyName(key, ext=ext)
         if not os.path.exists(fullFileName):
             return None
-        return datetime.datetime.fromtimestamp(os.path.getctime(fullFileName))
+        return func(fullFileName)
+
+    def getCreationTime( self, key : str, *, ext : str = None ) -> datetime.datetime:
+        """
+        Returns the creation time of 'key', or None if file was not found.
+        See comments on os.path.getctime() for compatibility
+
+        Parameters
+        ----------
+            key :
+                filename, or list of filenames
+            ext :
+                Extension, or list thereof if 'key' is an extension.
+                Use
+                -- None for the directory default
+                -- "" for no automatic extension
+                -- A Format to specify the default extension for that format.
+
+        Returns
+        -------
+            datetime.datetime if 'key' is a string, otherwise a list of datetime's
+        """
+        return self._getFileProperty( key=key, ext=ext, func=lambda x : datetime.datetime.fromtimestamp(os.path.getctime(x)) )
 
     def getLastModificationTime( self, key : str, *, ext : str = None ) -> datetime.datetime:
         """
         Returns the last modification time of 'key', or None if file was not found.
-        Works with key as list.
         See comments on os.path.getmtime() for compatibility
+
+        Parameters
+        ----------
+            key :
+                filename, or list of filenames
+            ext :
+                Extension, or list thereof if 'key' is an extension.
+                Use
+                -- None for the directory default
+                -- "" for no automatic extension
+                -- A Format to specify the default extension for that format.
+
+        Returns
+        -------
+            datetime.datetime if 'key' is a string, otherwise a list of datetime's
         """
-        # vector version11
-        if not isinstance(key,str):
-            _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
-            l = len(key)
-            if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
-                ext = [ ext ] * l
-            else:
-                if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
-            return [ self.getLastModificationTime(k,ext=e) for k,e in zip(key,ext) ]
-        # empty directory
-        if self._path is None:
-            return None
-        # single key
-        fullFileName = self.fullKeyName(key, ext=ext)
-        if not os.path.exists(fullFileName):
-            return None
-        return datetime.datetime.fromtimestamp(os.path.getmtime(fullFileName))
+        return self._getFileProperty( key=key, ext=ext, func=lambda x : datetime.datetime.fromtimestamp(os.path.getmtime(x)) )
 
     def getLastAccessTime( self, key : str, *, ext : str = None ) -> datetime.datetime:
         """
         Returns the last access time of 'key', or None if file was not found.
-        Works with key as list.
         See comments on os.path.getatime() for compatibility
+
+        Parameters
+        ----------
+            key :
+                filename, or list of filenames
+            ext :
+                Extension, or list thereof if 'key' is an extension.
+                Use
+                -- None for the directory default
+                -- "" for no automatic extension
+                -- A Format to specify the default extension for that format.
+
+        Returns
+        -------
+            datetime.datetime if 'key' is a string, otherwise a list of datetime's
         """
-        # vector version
-        if not isinstance(key,str):
-            _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
-            l = len(key)
-            if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
-                ext = [ ext ] * l
-            else:
-                if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
-            return [ self.getLastAccessTime(k,ext=e) for k,e in zip(key,ext) ]
-        # empty directory
-        if self._path is None:
-            return None
-        # single key
-        fullFileName = self.fullKeyName(key, ext=ext)
-        if not os.path.exists(fullFileName):
-            return None
-        return datetime.datetime.fromtimestamp(os.path.getatime(fullFileName))
+        return self._getFileProperty( key=key, ext=ext, func=lambda x : datetime.datetime.fromtimestamp(os.path.getatime(x)) )
 
     def getFileSize( self, key : str, *, ext : str = None ) -> int:
         """
         Returns the file size of 'key', or None if file was not found.
-        Works with key as list.
         See comments on os.path.getatime() for compatibility
+
+        Parameters
+        ----------
+            key :
+                filename, or list of filenames
+            ext :
+                Extension, or list thereof if 'key' is an extension.
+                Use
+                -- None for the directory default
+                -- "" for no automatic extension
+                -- A Format to specify the default extension for that format.
+
+        Returns
+        -------
+            File size if 'key' is a string, otherwise a list thereof.
         """
-        # vector version
-        if not isinstance(key,str):
-            _log.verify( isinstance(key, Collection), "'key' must be a string or an interable object. Found type %s", type(key))
-            l = len(key)
-            if ext is None or isinstance(ext,str) or not isinstance(ext, Collection):
-                ext = [ ext ] * l
-            else:
-                if len(ext) != l: _log.throw("'ext' must have same lengths as 'key' if the latter is a collection; found %ld and %ld", len(ext), l )
-            return [ self.getFileSize(k,ext=e) for k,e in zip(key,ext) ]
-        # empty directory
-        if self._path is None:
-            return None
-        # single key
-        fullFileName = self.fullKeyName(key, ext=ext)
-        return os.path.getsize(fullFileName)
+        return self._getFileProperty( key=key, ext=ext, func=lambda x : os.path.getsize(x) )
 
     def rename( self, source : str, target : str, *, ext : str = None ):
-        """ Rename "source" key into "target" key. Function will raise an exception if not successful """
-        src_full = self.fullKeyName( source, ext=ext )
-        tar_full = self.fullKeyName( target, ext=ext )
+        """
+        Rename "source" key into "target" key.
+        Function will raise an exception if not successful
+
+        Parameters
+        ----------
+            source, target:
+                filenames
+            ext :
+                Extension, or list thereof if 'key' is an extension.
+                Use
+                -- None for the directory default
+                -- "" for no automatic extensions.
+                -- A Format to specify the default extension for that format.
+        """
+        # empty directory
+        if self._path is None:
+            return
+
+        # handle directories in 'source'
+        if len(source) == 0: _log.throw("'source' missing (the filename)" )
+        sub, source_ = os.path.split(source)
+        if len(source_) == 0: _log.throw( "'source' %s indicates a directory, not a file", source)
+        if len(sub) > 0:
+            src_full = self(sub).fullKeyName(key=source_,ext=ext)
+        else:
+            src_full = self.fullKeyName( source, ext=ext )
+            
+        # handle directories in 'target'
+        if len(target) == 0: _log.throw("'target' missing (the filename)" )
+        sub, target_ = os.path.split(target)
+        if len(target_) == 0: _log.throw( "'target' %s indicates a directory, not a file", target)
+        if len(sub) > 0:
+            tar_dir  = self(sub)
+            tar_dir.createDirectory()
+            tar_full = tar_dir.fullKeyName(key=target_,ext=ext)
+        else:
+            tar_full = self.fullKeyName( target, ext=ext )
+            self.createDirectory()
+            
         os.rename(src_full, tar_full)
 
     # -- dict-like interface --
@@ -1398,12 +1642,12 @@ class SubDir(object):
         Parameters
         ----------
             keyOrSub : str
-                identify the object requested. Should be a string, or a list.
+                identify the object requested. Should be a string or a list of strings.
             default:
                 If specified, this function reads 'keyOrSub' with read( keyOrSub, default, *kargs, **kwargs )
                 If not specified, then this function calls subDir( keyOrSub ).
 
-        The following keywords are only relevant when reading a file.
+        The following keywords are only relevant when reading files.
         They echo the parameters of read()
 
             raiseOnError : bool
@@ -1417,16 +1661,14 @@ class SubDir(object):
                 If True, and if a wrong version was found, delete the file.
             ext : str
                 Extension overwrite, or a list thereof if key is a list
-                Set to None to use directory's default
+                Set to:
+                -- None to use directory's default
+                -- '*' to use the extension implied by 'fmt' 
+                -- for convenience 'ext' can also be a Format (in this case leave fmt to None)
             fmt : Format
                 File format or None to use the directory's default.
-                Note that 'fmt' cannot be a list even if 'key' is
-            ext : str
-                Extension for a new sub-directory, or extension of the file
-                Set to None to use the directory's default.
-            fmt : Format
-                Format of the new subdirectory or of the file to be read, eg PICKLE or JSON_PICKLE.
-                Set to None to use the directory's default.
+                Note that 'fmt' cannot be a list even if 'key' is.
+                Note that unless 'ext' or the SubDir's extension is '*', changing the format does not automatically change the extension.
 
         Returns
         -------
@@ -1498,182 +1740,4 @@ class SubDir(object):
         """ Silently delete a key with member notation. """
         _log.verify( key[:1] != "_", "Deleting protected or private members disabled. Fix __delattr__ to support this")
         return self.delete( key=key, raiseOnError=False )
-
-    # -- short cuts for manual caching --
-    # UNDER CONSTRUCTION
-
-    def cache_read( self, cache_mode : CacheMode, key, default = None ):
-        """
-        Standard caching pattern ahead of a complex function:
-            1) Check whether the cache is to be cleared. If so, delete any existing files and return 'default'
-            2) If caching is enabled attempt to read the file 'key'. Return 'default' if not possible or enabled.
-        """
-        if cache_mode.delete:
-            self.delete(key,raiseOnError=False)
-            return default
-        if cache_mode.read:
-            return self.read(key,default=default,raiseOnError=False)
-        return default
-
-    def cache_write( self, cache_mode : CacheMode, key, value ):
-        """
-        Standard caching pattern at the end of a complex function:
-            3) If caching is enabled, write 'value' to file 'key'
-        """
-        if cache_mode.write:
-            self.write( key, value )
-
-    # -- automatic caching --
-
-    def cache(self, f, cacheName = None, cacheSubDir = None):
-        """
-        Decorater to create an automatically cached version of 'f'.
-
-        The wrapped function will
-            1) Compute a hash key for all parameters to be passed to 'f'
-            2) Depending on an additional cacheMode optional parameter, attempt to read the cache from disk
-            3) If not possible, call 'f', and store the result on disk
-
-        This decorate is used when the caching "subdir" is set at the scope surrounding the function, e.g. at module level.
-        It also works if the caching "subdir" is a static class member.
-        Use member_cache to decorate a member function of a class.
-
-        Example:
-
-            autoRoot = SubDir("!/caching")   # create directory
-
-            @autoRoot.cache
-            def my_function( x, y ):
-                return x*y
-
-            x1 = my_function(2,3)                 # compute & generate cache
-            x2 = my_function(2,3)                 # return cached result
-            x3 = my_function(2,3,cacheMode="off") # ignore cache & compute
-
-            print("Used cache" if my_function.cached else "Cached not used")
-            print("Cache file: " + f.cacheFullKey)
-
-        Example with a class:
-
-            class Test(object):
-
-                autoRoot = SubDir("!/caching")   # create directory
-
-                def __init__(self, x):
-                    self.x = x
-
-                @autoRoot.cache
-                def my_function( self, y ):
-                    return self.x*y
-
-        This works as expected. Important notice: the caching hash is computed using cdxbasics.util.uniqueHash() which
-
-        Advanced arguments to the decorator:
-           cacheName        : specify name for the cache for this function.
-                              By default it is the name of the function, potentiall hashed if it is too long
-           cacheSubDir      : specify a subdirectory for the function directory
-                              By default it is the module name, potentially hashed if it is too long
-
-        When calling the resulting decorated functions, you can pass the following argumets:
-            cacheVersion    : sets the version of the function. Default is 1.00.00.
-                              Change this value if you make changes to the function which are not backward compatible.
-            cacheMode       : A cdxbasics.util.CacheMode identifier:
-                               cacheMode='on'      : default, caching is on; delete existing caches with the wrong version
-                               cacheMode='gen'     : caching on; do not delete existing caches with the wrong version
-                               cacheMode='off'     : no caching
-                               cacheMode='clear'   : delete existing cache. Do not update
-                               cacheMode='update'  : update cache.
-                               cacheMode='readonly': only read; do not write.
-
-        The wrapped function has the following properties set after a function call
-           cached           : True or False to indicate whether cached data was used
-           cacheArgKey      : The hash key for this particular set of arguments
-           cacheFullKey     : Full key path
-        """
-        f_subDir = SubDir( uniqueFileName48(f.__module__ if cacheSubDir is None else cacheSubDir), parent=self)
-        f_subDir = SubDir( uniqueFileName48(f.__name__ if cacheName is None else cacheName), parent=f_subDir)
-
-        @wraps(f)
-        def wrapper(*vargs,**kwargs):
-            caching = CacheMode('on')
-            version = "1.00.00"
-            if 'cacheMode' in kwargs:
-                caching = CacheMode( kwargs['cacheMode'] )
-                del kwargs['cacheMode']        # do not pass 'cacheMode' as parameter to 'f'
-            if 'cacheVersion' in kwargs:
-                version = str( kwargs['cacheVersion'] )
-                del kwargs['cacheVersion']     # do not pass 'cacheVersion' as parameter to 'f'
-            # simply no caching
-            if caching.is_off:
-                wrapper.cached       = False
-                wrapper.cacheArgKey  = None
-                wrapper.cacheFullKey = None
-                return f(*vargs,**kwargs)
-            # compute key
-            key = uniqueFileName48(f.__module__, f.__name__,vargs,kwargs)
-            wrapper.cacheArgKey  = key
-            wrapper.cacheFullKey = f_subDir.fullKeyName(key)
-            wrapper.cached       = False
-            # clear?
-            if caching.delete:
-                f_subDir.delete(key)
-            # read?
-            if caching.read and key in f_subDir:
-                cv             = f_subDir[key]
-                version_       = cv[0]
-                cached         = cv[1]
-                if version == version_:
-                    wrapper.cached = True
-                    return cached
-                if caching.del_incomp:
-                    f_subDir.delete(key)
-            # call function 'f'
-            value = f(*vargs,**kwargs)
-            # cache
-            if caching.write:
-                f_subDir.write(key,[version,value])
-            return value
-
-        return wrapper
-
-SubDir.PICKLE = Format.PICKLE
-SubDir.JSON_PICKLE = Format.JSON_PICKLE
-SubDir.JSON_PLAIN = Format.JSON_PLAIN
-
-
-if False:
-    # Linux
-    import os
-    fd = os.open("/tmp/hans.test", os.O_CREAT|os.O_WRONLY)
-    os.lockf(fd, os.F_TLOCK, 1)
-
-
-    # http://timgolden.me.uk/pywin32-docs/Windows_NT_Files_.2d.2d_Locking.html
-
-    import win32file as win32file
-    import win32con
-    import pywintypes
-    import win32security
-    import win32api
-
-    highbits=0xffff0000 #high-order 32 bits of byte range to lock
-    file="H:/temp/lock.test"
-    secur_att = win32security.SECURITY_ATTRIBUTES()
-    secur_att.Initialize()
-
-    hfile=win32file.CreateFile( file,
-        win32con.GENERIC_READ|win32con.GENERIC_WRITE,
-        win32con.FILE_SHARE_READ|win32con.FILE_SHARE_WRITE,
-        secur_att,
-        win32con.OPEN_ALWAYS,
-        win32con.FILE_ATTRIBUTE_NORMAL , 0 )
-
-    ov=pywintypes.OVERLAPPED() #used to indicate starting region to lock
-    win32file.LockFileEx(hfile,win32con.LOCKFILE_EXCLUSIVE_LOCK|win32con.LOCKFILE_FAIL_IMMEDIATELY,0,highbits,ov)
-
-    win32api.Sleep(4000) #do something here
-    win32file.UnlockFileEx(hfile,0,highbits,ov)
-    hfile.Close()
-
-
 
