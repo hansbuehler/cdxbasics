@@ -363,7 +363,9 @@ class CDXBasicsTest(unittest.TestCase):
         sub.write(['a','b'],[11,22])
 
         lst = str(sorted(sub.keys()))
-        self.assertEqual(lst, "['a', 'b', 'l', 'x', 'y', 'z']")
+        self.assertEqual(lst, "['a', 'b', 'x', 'y', 'z']")
+        lst = str(sorted(sub.keys(ext="txt")))
+        self.assertEqual(lst, "['l']")
 
         # test naming
         self.assertEqual( str(sub), sub.path + ";*" + sub.ext )
