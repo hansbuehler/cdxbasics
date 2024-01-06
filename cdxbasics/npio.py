@@ -65,7 +65,7 @@ def tofile( file         : str,
     if saved != length*dsize:
         _log.throw("Write errr '%s': %s bytes were written in total, but expected %s bytes to be written", file, fmt_digits(saved), fmt_digits(length*dsize))
 
-def readfromfile( file : str, target : np.ndarray ) -> np.ndarray:
+def readfromfile( file         : str, 
                   target       : np.ndarray, *, 
                   read_only    : bool = False,
                   buffering    : int  = -1
