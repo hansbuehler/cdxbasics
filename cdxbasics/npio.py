@@ -9,8 +9,6 @@ import numpy as np
 import asyncio as asyncio
 _log = Logger(__file__)
 
-HAS_ASYNC = not getattr(asyncio,"run",None) is None
-
 def tofile( file         : str, 
             array        : np.ndarray, *,
             buffering    : int = -1
@@ -244,8 +242,6 @@ def raw_readfromfile( file         : str,
     -------
         The array
     """
-    enable_async = enable_async if not enable_async is None else HAS_ASYNC
-
     with open( file, "rb", buffering=0 ) as f:
         # read shape
         def read_int():
@@ -289,24 +285,12 @@ def raw_readfromfile( file         : str,
             num      = 16
             max_size = length//num
         
-        if not enable_async or num==1:
-            for j in range(num):
-                s   = j*max_size
-                e   = min(s+max_size, length)
-                nr  = f.readinto( array.data[s:e] )
-                if nr != (e-s)*dsize:
-                    _log.throw("Read error '%s': %s bytes were read, but expected %s bytes to be read", file, fmt_digits(nr),fmt_digits((e-s)*dsize) )
-        else:
-            async def a_read(j):
-                s   = j*max_size
-                e   = min(s+max_size, length)
-                nr  = f.readinto( array.data[s:e] )
-                if nr != (e-s)*dsize:
-                    _log.throw("Read error '%s': %s bytes were read, but expected %s bytes to be read", file, fmt_digits(nr),fmt_digits((e-s)*dsize) )
-            async def a_loop():       
-                coros = [ a_read(j) for j in range(num) ]
-                await asyncio.gather(*coros)
-            asyncio.run(a_loop())
+        for j in range(num):
+            s   = j*max_size
+            e   = min(s+max_size, length)
+            nr  = f.readinto( array.data[s:e] )
+            if nr != (e-s)*dsize:
+                _log.throw("Read error '%s': %s bytes were read, but expected %s bytes to be read", file, fmt_digits(nr),fmt_digits((e-s)*dsize) )
 
     r = np.reshape( array, shape )  # no copy
     if read_only:

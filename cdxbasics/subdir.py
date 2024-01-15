@@ -704,12 +704,18 @@ class SubDir(object):
                 _log.warning("Cannot read %s; file deleted (full path %s).\nError: %s",key,fullFileName, str(e))
             except Exception as e:
                 _log.warning("Cannot read %s; attempt to delete file failed (full path %s): %s",key,fullFileName,str(e))
-        except Exception as e:
-            _log.error(e)
+        except FileNotFoundError as e:
             if raiseOnError:
                 raise KeyError(key, fullFileName) from e
-        except BaseException as e:
-            raise KeyError(key, fullFileName) from e
+        except Exception as e:
+            if raiseOnError:
+                e.add_note( key )
+                e.add_note( fullFileName )
+                raise e
+        except (ImportError, BaseException) as e:
+            e.add_note( key )
+            e.add_note( fullFileName )
+            raise e
         return default
 
     def _read( self, key : str,

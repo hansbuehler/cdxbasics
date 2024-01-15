@@ -57,7 +57,7 @@ class Context(object):
             verbose_or_init : str, int, or Context
                 if a string: one of 'all' or 'quiet'
                 if an integer: the level at which to print. Any negative number will not print anything because the default level is 0.
-                if None: equivalent to displaying everything
+                if None: equivalent to displaying everything ("all")
                 if a Context: copy constructor.
             indent : int
                 How much to indent prints per level
@@ -307,9 +307,10 @@ class Context(object):
     def __setstate__(self, state):
         pass
 
-
-
 # Recommended default parameter 'quiet' for functions accepting a context parameter
 quiet = Context(Context.QUIET)
 Context.quiet = quiet
+
+all_ = Context(Context.ALL)
+Context.all = all_
 

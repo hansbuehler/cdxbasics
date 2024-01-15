@@ -90,7 +90,7 @@ class FileLock(object):
         self._fd             = None
         self._pid            = os.getpid()
         self._cnt            = 0
-        self._lid            = "LOCK" + fmt_datetime(datetime.datetime.now()) + (",%03ld" % FileLock.__LOCK_ID)
+        self._lid            = "LOCK" + fmt_datetime(datetime.datetime.now()) + (",%03ld:" % FileLock.__LOCK_ID) + filename
         self.verbose         = verbose if not verbose is None else Context(None)
         self.release_on_exit = release_on_exit
         FileLock.__LOCK_ID   +=1
@@ -176,7 +176,7 @@ class FileLock(object):
 
         i = 0
         while True:
-            self.verbose.write("\r%s: acquire(): locking '%s' [%s]... ", self._lid, self._filename, "windows" if IS_WINDOWS else "linux", end='')
+            self.verbose.write("\r%s: acquire(): locking [%s]... ", self._lid, "windows" if IS_WINDOWS else "linux", end='')
             if not IS_WINDOWS:
                 # Linux
                 # -----
@@ -265,7 +265,7 @@ class FileLock(object):
             self.verbose.write("%s: release(): lock counter lowered to %ld", self._lid, self._cnt)
             return self._cnt
 
-        self.verbose.write("%s: release(): unlocking '%s' [%s]... ", self._lid, self._filename, "windows" if IS_WINDOWS else "linux", end='')
+        self.verbose.write("%s: release(): unlocking [%s]... ", self._lid, "windows" if IS_WINDOWS else "linux", end='')
         err = ""
         if not IS_WINDOWS:
             # Linux
