@@ -728,7 +728,7 @@ class CDXBasicsVersionTest(unittest.TestCase):
         # test dependency
         self.assertEqual( h.version.input, "3.0" )
         self.assertEqual( h.version.full, "3.0 { A.r1: 2.2, A.r2: 2.3 { A.r1: 2.2, g1: 2.0 { f: 1.0 } }, B: XV, g1: 2.0 { f: 1.0 }, g2: 2.1 { f: 1.0 } }" )
-        self.assertEqual( h.version.unique_id48, "3.0 7fe1f470dff524518f1d4076d519f7ecdbc34f4a3a8c6391" )
+        self.assertEqual( h.version.unique_id48, "3.0 7fe1f470dff524518f1d4076d519f7ec" )
         self.assertEqual( h.version.is_dependent( g2 ), "2.1" )
         self.assertEqual( h.version.is_dependent( "g2" ), "2.1" )
         self.assertEqual( h.version.is_dependent( f ), "1.0" )
