@@ -6,10 +6,9 @@ Hans Buehler 2023
 from .logger import Logger
 from .util import fmt_digits
 import numpy as np
-import asyncio as asyncio
 _log = Logger(__file__)
 
-def tofile( file         : str, 
+def tofile( file,
             array        : np.ndarray, *,
             buffering    : int = -1
             ):
@@ -20,10 +19,15 @@ def tofile( file         : str,
     
     Parameters
     ----------
-        file  : file name passed to open()
+        file  : file name passed to open() or an open file handle
         array : numpy or sharedarray
         buffering : see open()
     """
+    if isinstance(file, str):
+        with open( file, "wb", buffering=buffering ) as f:
+            return tofile(f, array, buffering=buffering)
+    f = file
+        
     if not array.data.contiguous:
         _log.warn("Array is not 'contiguous'. Is that an issue??")
         array    = np.ascontiguousarray( array, dtype=array.dtype ) if not array.data.contiguous else array
@@ -39,31 +43,29 @@ def tofile( file         : str,
     num      = int(length-1)//max_size+1        
     saved    = 0
 
-    # write
-    with open( file, "wb", buffering=buffering ) as f:
-        # write shape
-        def write_int(x):
-            x = int(x).to_bytes(4,"big")
-            w = f.write( x )
-            assert w==len(x), ("Internal error", file, w, len(x), x )
-        write_int( len(shape) )
-        for i in shape:
-            write_int(i)
-        # write dsize
-        write_int(dsize)        
-        # write object      
-        for j in range(num):
-            s   = j*max_size
-            e   = min(s+max_size, length)
-            bts = array.data[s:e]
-            nw  = f.write( bts )
-            if nw != (e-s)*dsize:
-                _log.throw("Write error '%s'': %s bytes were written, but expected %s bytes to be written", file, fmt_digits(nw),fmt_digits((e-s)*dsize) )
-            saved += nw
+    # write shape
+    def write_int(x):
+        x = int(x).to_bytes(4,"big")
+        w = f.write( x )
+        assert w==len(x), ("Internal error", file, w, len(x), x )
+    write_int( len(shape) )
+    for i in shape:
+        write_int(i)
+    # write dsize
+    write_int(dsize)        
+    # write object      
+    for j in range(num):
+        s   = j*max_size
+        e   = min(s+max_size, length)
+        bts = array.data[s:e]
+        nw  = f.write( bts )
+        if nw != (e-s)*dsize:
+            _log.throw("Write error '%s'': %s bytes were written, but expected %s bytes to be written", file, fmt_digits(nw),fmt_digits((e-s)*dsize) )
+        saved += nw
     if saved != length*dsize:
         _log.throw("Write errr '%s': %s bytes were written in total, but expected %s bytes to be written", file, fmt_digits(saved), fmt_digits(length*dsize))
 
-def readfromfile( file         : str, 
+def readfromfile( file, 
                   target       : np.ndarray, *, 
                   read_only    : bool = False,
                   buffering    : int  = -1
@@ -76,7 +78,7 @@ def readfromfile( file         : str,
     
     Parameters
     ----------
-        file      : file name passed to open()
+        file      : file name passed to open(), or a file handle from open()
         target    : either an array, or a function which returns an array for a given shape
                     def create( shape ):
                         return np.empty( shape, dtype=np.float32 )
@@ -87,53 +89,57 @@ def readfromfile( file         : str,
     -------
         The array
     """
-    with open( file, "rb", buffering=buffering ) as f:
-        # read shape
-        def read_int():
-            x = f.read(4)
-            assert len(x) == 4, ("Internal error", len(x))
-            x = int.from_bytes(x,"big")
-            return int(x)
-        shape_len = read_int()
-        shape_    = tuple( [ read_int() for _ in range(shape_len) ] )
-        # read dsize
-        dsize_    = read_int()
-
-        # handle array
-        if isinstance(target, np.ndarray):
-            array    = target
-            shape    = tuple(array.shape)
-            length   = int( np.product( [ int(i) for i in shape ], dtype=np.uint64 ) )
-            array    = np.reshape( array, (length,) )  # no copy
-            dsize    = int(array.itemsize)   
+    if isinstance(file, str):
+        with open( file, "rb", buffering=buffering ) as f:
+            return readfromfile( f, target, read_only=read_only, buffering=buffering )
+    f = file
         
-            if shape != shape_:
-                _log.throw("Shape mismatch: file '%s' on disk has shape %s, while target array has shape %s", file, shape_, shape )
-            if dsize != dsize_:
-                _log.throw("dtype mismatch: file '%s' on disk uses a dtype of size %ld, while target array has dtype %s which is of size %ld", file, dsize_, array.dtype, dsize )
+    # read shape
+    def read_int():
+        x = f.read(4)
+        assert len(x) == 4, ("Internal error", len(x))
+        x = int.from_bytes(x,"big")
+        return int(x)
+    shape_len = read_int()
+    shape_    = tuple( [ read_int() for _ in range(shape_len) ] )
+    # read dsize
+    dsize_    = read_int()
 
-        else:
-            shape    = shape_
-            length   = int( np.product( [ int(i) for i in shape ], dtype=np.uint64 ) )
-            array    = target( shape=shape )
-            if array is None: _log.throw("'target' function returned empty array", shape)
-            array    = np.reshape( array, (length,) )  # no copy
-            dsize    = int(array.itemsize)   
-            if dsize != dsize_:
-                _log.throw("dtype mismatch for 'target': file '%s' on disk uses a dtype of size %ld, while target array has dtype %s which is of size %ld", file, dsize_, array.dtype, dsize )
+    # handle array
+    if isinstance(target, np.ndarray):
+        array    = target
+        shape    = tuple(array.shape)
+        length   = int( np.product( [ int(i) for i in shape ], dtype=np.uint64 ) )
+        array    = np.reshape( array, (length,) )  # no copy
+        dsize    = int(array.itemsize)   
+    
+        if shape != shape_:
+            _log.throw("Shape mismatch: file '%s' on disk has shape %s, while target array has shape %s", file, shape_, shape )
+        if dsize != dsize_:
+            _log.throw("dtype mismatch: file '%s' on disk uses a dtype of size %ld, while target array has dtype %s which is of size %ld", file, dsize_, array.dtype, dsize )
 
-        # split into chunks
-        max_size = int(1024*1024*1024//dsize)
-        num      = int(length-1)//max_size+1
-        read     = 0
-        # read        
-        for j in range(num):
-            s   = j*max_size
-            e   = min(s+max_size, length)
-            nr  = f.readinto( array.data[s:e] )
-            if nr != (e-s)*dsize:
-                _log.throw("Read error '%s': %s bytes were read, but expected %s bytes to be read", file, fmt_digits(nr),fmt_digits((e-s)*dsize) )
-            read += nr
+    else:
+        shape    = shape_
+        length   = int( np.product( [ int(i) for i in shape ], dtype=np.uint64 ) )
+        array    = target( shape=shape )
+        if array is None: _log.throw("'target' function returned empty array", shape)
+        array    = np.reshape( array, (length,) )  # no copy
+        dsize    = int(array.itemsize)   
+        if dsize != dsize_:
+            _log.throw("dtype mismatch for 'target': file '%s' on disk uses a dtype of size %ld, while target array has dtype %s which is of size %ld", file, dsize_, array.dtype, dsize )
+
+    # split into chunks
+    max_size = int(1024*1024*1024//dsize)
+    num      = int(length-1)//max_size+1
+    read     = 0
+    # read        
+    for j in range(num):
+        s   = j*max_size
+        e   = min(s+max_size, length)
+        nr  = f.readinto( array.data[s:e] )
+        if nr != (e-s)*dsize:
+            _log.throw("Read error '%s': %s bytes were read, but expected %s bytes to be read", file, fmt_digits(nr),fmt_digits((e-s)*dsize) )
+        read += nr
     if read != length*dsize:
         _log.throw("Read error '%s': %s bytes were read in total, but expected %s bytes to be read", file, fmt_digits(read), fmt_digits(length*dsize))
     return np.reshape( array, shape )  # no copy
@@ -143,10 +149,7 @@ def readfromfile( file         : str,
         r.flags.writeable  = False
     return r
 
-def readinto( file         : str, 
-              array        : np.ndarray, *, 
-              enable_async : bool = None,
-              read_only    : bool = False ):
+def readinto( file, array : np.ndarray, *, read_only    : bool = False ):
     """
     Read array from disk into an existing array.    
     The receiving array must have the same shape and dtype as the array on disk. 
@@ -154,31 +157,25 @@ def readinto( file         : str,
 
     Parameters
     ----------
-        file  : file name passed to open()
+        file  : file name passed to open(), or an open file
         array : target array to write into. This array must have the same shape and dtype as the source data.
-        enable_async : use asynicio to load blocks of the file in parallel. Speeds up reading slightly.
-                       The default None uses asyncio when available, e.g in Python 3.7 and above
-        read_only    : whether to clear the 'writable' flag of the array 
+        read_only : whether to clear the 'writable' flag of the array 
 
     Returns
     -------
         The array.
     """
-    return readfromfile( file, target = array, enable_async=enable_async, read_only=read_only )
+    return readfromfile( file, target = array, read_only=read_only )
 
-def fromfile( file         : str, 
-              dtype        : type, *, 
-              enable_async : bool = None, ) -> np.ndarray:
+def fromfile( file, *, dtype : type ) -> np.ndarray:
     """
     Read array from disk into a new numpy array.
     Use shared_fromfile() to create a shared array
 
     Parameters
     ----------
-        file  : file name passed to open()
+        file  : file name passed to open(), or an open file
         dtype : target dtype
-        enable_async : use asynicio to load blocks of the file in parallel. Speeds up reading slightly.
-                       The default None uses asyncio when available, e.g in Python 3.7 and above
 
     Returns
     -------
@@ -217,7 +214,8 @@ def raw_tofile( f, x : bytes, name : str = None, nbytes = None ):
         if nw != (e-s):
             _log.throw("Write error '%s'': %s bytes were written, but expected %s bytes to be written", name, fmt_digits(nw),fmt_digits((e-s)) )
 
-def raw_readfromfile( file         : str, 
+def raw_readfromfile( 
+                  file         : str, 
                   target       : np.ndarray, *, 
                   enable_async : bool = None ,
                   read_only    : bool = False

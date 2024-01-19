@@ -69,7 +69,7 @@ class Version(object):
         Returns a unique version string for this version, either the simple readable version or the current version plus a unique hash if the
         simple version exceeds 48 characters.
         """
-        return self.unique_id(max_len=64)
+        return self.unique_id(max_len=48)
 
     def unique_id(self, max_len : int = 64) -> str:
         """

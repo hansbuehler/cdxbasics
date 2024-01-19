@@ -1617,6 +1617,24 @@ class SubDir(object):
             
         os.rename(src_full, tar_full)
 
+    # utilities
+    
+    @staticmethod
+    def removeBadKeyCharacters( key, by='-' ):
+        """
+        Replaces invalid filename characters by a differnet character
+        """
+        key = key.replace("/", by)
+        key = key.replace("\\", by)
+        key = key.replace("|", by)
+        key = key.replace(":", by)
+        key = key.replace("\"", by)
+        key = key.replace(">", by)
+        key = key.replace("<", by)
+        key = key.replace("?", by)
+        key = key.replace("*", by)
+        return key
+   
     # -- dict-like interface --
 
     def __call__(self, keyOrSub : str,
