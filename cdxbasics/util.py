@@ -619,6 +619,48 @@ def uniqueHash(*args, **kwargs) -> str:
     """
     return uniqueHashExt(None)(*args,**kwargs)
 
+def uniqueHash8( *args, **argv ) -> str:
+    """
+    Compute a unique ID of length 8 for the provided arguments.
+    The function
+        1) uses the repr() function to feed objects to the hash algorithm.
+           that means is only distinguishes floats up to str conversion precision
+        2) keys of dictionaries, and sets are sorted to ensure equality of hashes
+           accross different memory setups of strings
+        3) Members with leading '_' are ignored (*)
+        4) Functions and properties are ignored (*)
+        (*) you can create a hash function with different behaviour by using uniqueHashExt()
+
+    To support hashing directly in one of your objects, implement
+
+        __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
+
+        The parameters are the same as for uniqueHashExt.
+        The function is expected to return a hashable object, ideally a string.
+    """
+    return uniqueHashExt(8)(*args,**argv)
+
+def uniqueHash16( *args, **argv ) -> str:
+    """
+    Compute a unique ID of length 16 for the provided arguments.
+    The function
+        1) uses the repr() function to feed objects to the hash algorithm.
+           that means is only distinguishes floats up to str conversion precision
+        2) keys of dictionaries, and sets are sorted to ensure equality of hashes
+           accross different memory setups of strings
+        3) Members with leading '_' are ignored (*)
+        4) Functions and properties are ignored (*)
+        (*) you can create a hash function with different behaviour by using uniqueHashExt()
+
+    To support hashing directly in one of your objects, implement
+
+        __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
+
+        The parameters are the same as for uniqueHashExt.
+        The function is expected to return a hashable object, ideally a string.
+    """
+    return uniqueHashExt(16)(*args,**argv)
+
 def uniqueHash32( *args, **argv ) -> str:
     """
     Compute a unique ID of length 32 for the provided arguments.

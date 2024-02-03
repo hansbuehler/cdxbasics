@@ -212,17 +212,30 @@ class Context(object):
         sub.fmt_level   = self.fmt_level
         return sub
 
-    def __call__(self, add_level : int = 1, message : str = None, *args, **kwargs ):
+    def __call__(self, add_level : int, message : str = None, *args, **kwargs ):
         """
-        Create a sub context at level 'sub_level'. The latter defaults to self.default_sub
+        Create a sub context at level 'sub_level'. The latter defaults to self.default_sub.
+        Optionally write message at the new level.
+        
+        That means writing
+            verbose(1,"Hallo")
+        is equivalent to
+            verbose.report(1,"Hallo")
 
         Parameters
         ----------
             add_level : int
                 Level of the sub context with respect to self. Set to 0 for the same level.
+                For convenience, the user may also let 'add_level' be a string, replacing 'message'.
+                
+                The following two are equivalent
+                    verbose(0,"Message %(test)s", test="test")
+                and
+                    verbose("Message %(test)s", test="test")
+                
             message, fmt, args:
                 If message is not None, call report() at _current_ level, not the newly
-                created sub level
+                created sub level.
 
         Returns
         -------
@@ -232,7 +245,14 @@ class Context(object):
         if message is None:
             assert len(args) == 0 and len(kwargs) == 0, "Internal error: no 'message' is provided."
             return self.sub(add_level)
-        self.report( add_level, message, *args, **kwargs )
+        if isinstance(add_level, str):
+            _log.verify( message is None, "Cannot specify 'add_level' as strong and also specify 'message'")
+            self.write( add_level, *args, **kwargs )
+            return self
+        else:
+            assert isinstance(add_level, int), "'add_level' should be an int or a string"
+            self.report( add_level, message, *args, **kwargs )
+            return self.sub(add_level)
 
     def limit(self, verbose):
         """ Assigns the minimim verbosity of self and verbose, i.e. self.verbose = min(self.verbose,verbose) """

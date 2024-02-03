@@ -684,6 +684,8 @@ class SubDir(object):
 
         # don't try if directory doesn't exist
         if not self.pathExists():
+            if raiseOnError:
+                raise KeyError(key, self.fullFileName(key,ext=ext))
             return default
         
         # does file exit?
@@ -706,12 +708,10 @@ class SubDir(object):
                 _log.warning("Cannot read %s; attempt to delete file failed (full path %s): %s",key,fullFileName,str(e))
         except FileNotFoundError as e:
             if raiseOnError:
-                raise KeyError(key, fullFileName) from e
+                raise KeyError(key, fullFileName, str(e)) from e
         except Exception as e:
             if raiseOnError:
-                e.add_note( key )
-                e.add_note( fullFileName )
-                raise e
+                raise KeyError(key, fullFileName, str(e)) from e
         except (ImportError, BaseException) as e:
             e.add_note( key )
             e.add_note( fullFileName )
@@ -1176,7 +1176,7 @@ class SubDir(object):
                             f.write( jsonpickle.encode(obj) )
                         else:
                             assert fmt == Format.JSON_PLAIN, ("Internal error: invalid Format", fmt)
-                            f.write( json.dumps( plain(obj, sorted_dicts=True, native_np=True, dt_to_str=True ) ) )
+                            f.write( json.dumps( plain(obj, sorted_dicts=True, native_np=True, dt_to_str=True ), default=str ) )
 
                 else:
                     _log.throw("Internal error: invalid format '%s'", fmt)
