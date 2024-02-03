@@ -9,7 +9,7 @@ from functools import wraps
 import hashlib as hashlib
 import inspect as inspect
 import psutil as psutil
-from collections.abc import Mapping, Collection
+from collections.abc import Mapping, Collection, Sequence
 from .prettydict import PrettyDict, OrderedDict
 import sys as sys
 import time as time
@@ -573,8 +573,20 @@ def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscor
                     visit(inn[k])
                 return
             # lists, tuples and everything which looks like it --> lists
+            if isinstance(inn, Sequence):
+                assert not isinstance(inn, dict)
+                for k in inn:
+                    if isinstance(k,str):
+                        if pi == 0 and k[:1] == '_':
+                            continue
+                        if pi == 1 and k[:1] == '__':
+                            continue
+                    visit(k)
+                return
+            # all others need sorting first
             if isinstance(inn, Collection):
                 assert not isinstance(inn, dict)
+                inn = sorted(inn)
                 for k in inn:
                     if isinstance(k,str):
                         if pi == 0 and k[:1] == '_':
