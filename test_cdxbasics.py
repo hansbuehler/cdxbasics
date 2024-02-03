@@ -263,6 +263,7 @@ class CDXBasicsTest(unittest.TestCase):
                 self.z = PrettyDict(c=3,d=4)
                 self.r = set([65,6234,1231,123123,12312])
                 self.t = (1,2,"test")
+                self.s = {1,3,4,2,5}
 
                 def ff():
                     pass
@@ -301,13 +302,13 @@ class CDXBasicsTest(unittest.TestCase):
 
         o = Object()
         u = uniqueHash(o)
-        self.assertEqual( u, "b6dd9dd20b081fc257295a9d0f6ed6f4" )
+        self.assertEqual( u, "2d0b0afb27137b9cdd317b16cff2fc77" )
         u = uniqueHash32(o)
-        self.assertEqual( u, "872bd1c11bbcfc0c1c4e583ffb9935b2" )
+        self.assertEqual( u, "be30319fa207f6a49c12a5bb349da11f" )
         u = uniqueHash48(o)
-        self.assertEqual( u, "872bd1c11bbcfc0c1c4e583ffb9935b20b3fa73668accd0f" )
+        self.assertEqual( u, "be30319fa207f6a49c12a5bb349da11f88efc5c434739a9d" )
         u = uniqueHash64(o)
-        self.assertEqual( u, "872bd1c11bbcfc0c1c4e583ffb9935b20b3fa73668accd0f9ea2c2c22d03ba8e" )
+        self.assertEqual( u, "be30319fa207f6a49c12a5bb349da11f88efc5c434739a9dd708294a545cf86c" )
 
         # test functions
         f1 = lambda x : x*x
@@ -338,19 +339,19 @@ class CDXBasicsTest(unittest.TestCase):
         p = util.plain(o)
         p = str(p).replace(' ','').replace('\n','')
         if (not np is None) and (not pd is None):
-            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234],'t':[1,2,'test'],'a':array([1,2,3]),'b':array([[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]]]),'c':None}"
+            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234],'t':[1,2,'test'],'s':[1,2,3,4,5],'a':array([1,2,3]),'b':array([[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]]]),'c':None}"
             self.assertEqual(p,tst)
 
         p = util.plain(o,sorted_dicts=True)
         p = str(p).replace(' ','').replace('\n','')
         if (not np is None) and (not pd is None):
-            tst = "SortedDict({'a':array([1,2,3]),'b':array([[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]]]),'c':None,'r':[65,1231,123123,12312,6234],'t':[1,2,'test'],'x':[1,2,3.0],'y':SortedDict({'a':1,'b':2}),'z':SortedDict({'c':3,'d':4})})"
+            tst = "SortedDict({'a':array([1,2,3]),'b':array([[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]],[[0.,0.],[0.,0.],[0.,0.],[0.,0.]]]),'c':None,'r':[65,1231,123123,12312,6234],'s':[1,2,3,4,5],'t':[1,2,'test'],'x':[1,2,3.0],'y':SortedDict({'a':1,'b':2}),'z':SortedDict({'c':3,'d':4})})"
             self.assertEqual(p,tst)
 
         p = util.plain(o,native_np=True)
         p = str(p).replace(' ','').replace('\n','')
         if (not np is None) and (not pd is None):
-            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234],'t':[1,2,'test'],'a':[1,2,3],'b':[[[0.0,0.0],[0.0,0.0],[0.0,0.0],[0.0,0.0]],[[0.0,0.0],[0.0,0.0],[0.0,0.0],[0.0,0.0]],[[0.0,0.0],[0.0,0.0],[0.0,0.0],[0.0,0.0]]],'c':None}"
+            tst = "{'x':[1,2,3.0],'y':{'a':1,'b':2},'z':{'c':3,'d':4},'r':[65,1231,123123,12312,6234],'t':[1,2,'test'],'s':[1,2,3,4,5],'a':[1,2,3],'b':[[[0.0,0.0],[0.0,0.0],[0.0,0.0],[0.0,0.0]],[[0.0,0.0],[0.0,0.0],[0.0,0.0],[0.0,0.0]],[[0.0,0.0],[0.0,0.0],[0.0,0.0],[0.0,0.0]]],'c':None}"
             self.assertEqual(p,tst)
 
     def test_subdir(self):
