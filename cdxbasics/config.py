@@ -1285,11 +1285,13 @@ class _Enum(_Cast):
     @property
     def err_str(self) -> str:
         """ Nice error string """
+        if len(self.enum) == 1:
+            return f"must be '{str(self.enum[0])}'"
+        
         s = "must be one of: '" + str(self.enum[0]) + "'"
         for i in range(1,len(self.enum)-1):
-            s += "', '" + str(self.enum[i])
-        if len(self.enum) > 1:
-            s += " or '" + str(self.enum[-1]) + "'"
+            s += ", '" + str(self.enum[i]) + "'"
+        s += " or '" + str(self.enum[-1]) + "'"
         return s
 
     def __str__(self) -> str:
