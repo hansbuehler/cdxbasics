@@ -315,6 +315,22 @@ def fmt_now() -> str:
     """ Returns string for 'now' """
     return fmt_datetime(datetime.datetime.now())
 
+def fmt_filename( s, by='-' ):
+    """
+    Replaces invalid filename characters by a differnet character
+    The returned string is a valid file name under both windows and linux
+    """
+    s = s.replace("/", by)
+    s = s.replace("\\", by)
+    s = s.replace("|", by)
+    s = s.replace(":", by)
+    s = s.replace("\"", by)
+    s = s.replace(">", by)
+    s = s.replace("<", by)
+    s = s.replace("?", by)
+    s = s.replace("*", by)
+    return s
+
 class WriteLine(object):
     """
     Class to manage the current text output line.
@@ -502,7 +518,6 @@ def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscor
     -------
         hash function with signature (*args, **kwargs).
         All arguments passed will be used to generate the hash key.
-
     """
     parse_underscore = str(parse_underscore)
     if parse_underscore == "none":
@@ -608,6 +623,46 @@ def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscor
     unique_hash.name = "uniqueHash(%s,%s,%s)" % (str(length),str(parse_functions),str(parse_underscore))
     return unique_hash
 
+def namedUniqueHashExt( total_length : int = 60, id_length : int = 16, separator = ' ', *, parse_functions : bool = False, parse_underscore : str = "none" ):
+    """
+    Returns a function which generates hashes of length 'id_length' added to a given label.
+    The maximum length of the returned ID is 'total_length'.
+    
+    See uniqueHashExt() for details on hashing logic
+
+    Parameters
+    ----------
+        total_length : int
+            Total length of the returned string including the ID.
+            Defaults to 60 to allow file names with extensions with three letters.
+        id_length : int
+            Intended length of the hash function, default 16
+        separator : str
+            Separator between label and id_length
+        parse_functions : bool
+            If True, then the function will attempt to generate
+            unique hashes for function and property objects
+            using _compress_function_code
+        parse_underscore : bool
+            How to handle dictionary and object members starting with '_'
+                'none' : ignore members starting with '_' (the default)
+                'protected' : ignore members starting with '__', but not with '_'
+                'private' : do not ignore any members starting with '__'
+
+    Returns
+    -------
+        hash function with signature (label, *args, **kwargs).
+        All arguments including the label will be used to generate the hash key.
+    """
+    label_length = total_length-id_length-len(separator)
+    assert label_length>0, ("'total_lenth' must be bigger than 'id_length' plus the length of the 'separator'", total_length, id_length, separator )
+    unique_hash  = uniqueHashExt( length=id_length, parse_functions=parse_functions, parse_underscore=parse_underscore )
+    
+    def named_unique_hash(label, *args, **kwargs) -> str:
+        base_hash = unique_hash( label, *args, **kwargs )
+        return label[:label_length] + separator + base_hash if len(label) > 0 else base_hash
+    return named_unique_hash         
+    
 def uniqueHash(*args, **kwargs) -> str:
     """
     Generates a hash key for any collection of python objects.

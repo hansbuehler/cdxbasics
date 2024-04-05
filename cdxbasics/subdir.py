@@ -5,14 +5,13 @@ Hans Buehler 2020
 """
 
 from .logger import Logger
-from .util import CacheMode, uniqueHash48, plain, fmt_list
+from .util import CacheMode, uniqueHash48, plain, fmt_list, fmt_filename
 _log = Logger(__file__)
 
 import os
 import os.path
 import uuid
 import threading
-from functools import wraps
 import pickle
 import tempfile
 import shutil
@@ -1624,16 +1623,7 @@ class SubDir(object):
         """
         Replaces invalid filename characters by a differnet character
         """
-        key = key.replace("/", by)
-        key = key.replace("\\", by)
-        key = key.replace("|", by)
-        key = key.replace(":", by)
-        key = key.replace("\"", by)
-        key = key.replace(">", by)
-        key = key.replace("<", by)
-        key = key.replace("?", by)
-        key = key.replace("*", by)
-        return key
+        return fmt_filename( key, by=by )
    
     # -- dict-like interface --
 
