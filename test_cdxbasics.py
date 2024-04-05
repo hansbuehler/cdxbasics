@@ -44,6 +44,7 @@ uniqueHash32 = util.uniqueHash32
 uniqueHash48 = util.uniqueHash48
 uniqueHash64 = util.uniqueHash64
 uniqueHashExt = util.uniqueHashExt
+namedUniqueHashExt = util.namedUniqueHashExt
 _compress_function_code = util._compress_function_code
 OrderedDict = prettydict.OrderedDict
 
@@ -302,13 +303,15 @@ class CDXBasicsTest(unittest.TestCase):
 
         o = Object()
         u = uniqueHash(o)
-        self.assertEqual( u, "2d0b0afb27137b9cdd317b16cff2fc77" )
+        self.assertEqual( u, "ed70913eb87c7a6332e7948781d9a082" )
         u = uniqueHash32(o)
-        self.assertEqual( u, "be30319fa207f6a49c12a5bb349da11f" )
+        self.assertEqual( u, "e4cd0483732d9cdaaef4a170dba1a442" )
         u = uniqueHash48(o)
-        self.assertEqual( u, "be30319fa207f6a49c12a5bb349da11f88efc5c434739a9d" )
+        self.assertEqual( u, "e4cd0483732d9cdaaef4a170dba1a442542b61f9d5ff8352" )
         u = uniqueHash64(o)
-        self.assertEqual( u, "be30319fa207f6a49c12a5bb349da11f88efc5c434739a9dd708294a545cf86c" )
+        self.assertEqual( u, "e4cd0483732d9cdaaef4a170dba1a442542b61f9d5ff8352320fe22e94a2c563" )
+        u = uniqueHash64(o)
+        self.assertEqual( u, "e4cd0483732d9cdaaef4a170dba1a442542b61f9d5ff8352320fe22e94a2c563" )
 
         # test functions
         f1 = lambda x : x*x
