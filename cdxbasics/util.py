@@ -14,6 +14,7 @@ from .prettydict import PrettyDict, OrderedDict
 import sys as sys
 import time as time
 from sortedcontainers import SortedDict
+from containers.abc import Mapping
 
 # support for numpy and pandas is optional for this module
 # At the moment both are listed as dependencies in setup.py to ensure
@@ -315,20 +316,37 @@ def fmt_now() -> str:
     """ Returns string for 'now' """
     return fmt_datetime(datetime.datetime.now())
 
-def fmt_filename( s, by='-' ):
+INVALID_FILE_NAME_CHARCTERS = {'/', '\\', '/', ':', '|', '>', '<', '?', '*'}
+DEF_FILE_NAME_MAP = {'/' : "_",
+                 '\\': "_", 
+                 '/' : "_", 
+                 '|' : "_",
+                 '>' : ")",
+                 '<' : "(", 
+                 '?' : "!",
+                 '*' : "."
+                 }
+
+def fmt_filename( s : str , by : str = DEF_FILE_NAME_MAP ):
     """
-    Replaces invalid filename characters by a differnet character
+    Replaces invalid filename characters by a differnet character.
     The returned string is a valid file name under both windows and linux
+    
+    Parameters
+    ----------
+        s : str
+            Input string
+        by : 
+            Either a single character or a dictionary with elements.
     """
-    s = s.replace("/", by)
-    s = s.replace("\\", by)
-    s = s.replace("|", by)
-    s = s.replace(":", by)
-    s = s.replace("\"", by)
-    s = s.replace(">", by)
-    s = s.replace("<", by)
-    s = s.replace("?", by)
-    s = s.replace("*", by)
+    
+    if isinstance(by, Mapping):
+        for c in INVALID_FILE_NAME_CHARCTERS:
+            s = s.replace(c, by[c])
+    else:
+        assert isinstance(by, str), ("by: 'str' or mapping expected", type(by))
+        for c in INVALID_FILE_NAME_CHARCTERS:
+            s = s.replace(c, by)
     return s
 
 class WriteLine(object):
@@ -623,7 +641,12 @@ def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscor
     unique_hash.name = "uniqueHash(%s,%s,%s)" % (str(length),str(parse_functions),str(parse_underscore))
     return unique_hash
 
-def namedUniqueHashExt( total_length : int = 60, id_length : int = 16, separator = ' ', *, parse_functions : bool = False, parse_underscore : str = "none" ):
+def namedUniqueHashExt( total_length     : int = 60, 
+                        id_length        : int = 16,  *, 
+                        separator        : str = ' ',
+                        filename_by      : str = None,
+                        parse_functions  : bool = False, 
+                        parse_underscore : str = "none" ):
     """
     Returns a function which generates hashes of length 'id_length' added to a given label.
     The maximum length of the returned ID is 'total_length'.
@@ -639,10 +662,13 @@ def namedUniqueHashExt( total_length : int = 60, id_length : int = 16, separator
             Intended length of the hash function, default 16
         separator : str
             Separator between label and id_length
+        filename_by : str, bool
+            If not None, use fmt_filename( *, by=filename_by ) to ensure the returned string is a valid
+            filename for both windows and linux, of at most 'total_length' size.
+            If set to "default", use DEF_FILE_NAME_MAP as the defaultt mapping of fmt_filename
         parse_functions : bool
-            If True, then the function will attempt to generate
-            unique hashes for function and property objects
-            using _compress_function_code
+            If True, then the function will attempt to generate unique hashes for function and property objects
+            using _compress_function_code().
         parse_underscore : bool
             How to handle dictionary and object members starting with '_'
                 'none' : ignore members starting with '_' (the default)
@@ -657,10 +683,12 @@ def namedUniqueHashExt( total_length : int = 60, id_length : int = 16, separator
     label_length = total_length-id_length-len(separator)
     assert label_length>0, ("'total_lenth' must be bigger than 'id_length' plus the length of the 'separator'", total_length, id_length, separator )
     unique_hash  = uniqueHashExt( length=id_length, parse_functions=parse_functions, parse_underscore=parse_underscore )
+    filename_by  = DEF_FILE_NAME_MAP if filename_by=="default" else filename_by
     
     def named_unique_hash(label, *args, **kwargs) -> str:
-        base_hash = unique_hash( label, *args, **kwargs )
-        return label[:label_length] + separator + base_hash if len(label) > 0 else base_hash
+        label        = fmt_filename( label + separator, by=filename_by ) if not filename_by is None else label + separator
+        base_hash    = unique_hash( label, *args, **kwargs )
+        return label[:label_length] + base_hash if len(label) > 0 else base_hash
     return named_unique_hash         
     
 def uniqueHash(*args, **kwargs) -> str:
