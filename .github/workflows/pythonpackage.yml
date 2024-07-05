@@ -33,7 +33,7 @@ jobs:
     - name: Test with pytest
       run: |
         pip install pytest
-        pip install numpy
+        pip install "numpy==1.24"
         pip install pandas
         pip install sortedcontainers
         pip install psutil
