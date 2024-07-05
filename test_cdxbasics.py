@@ -218,7 +218,7 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual( util.isAtomic(np.int_(0)), True  )
         self.assertEqual( util.isAtomic(np.int32(0)), True  )
         self.assertEqual( util.isAtomic(np.int64(0)), True  )
-        self.assertEqual( util.isAtomic(np.complex_(0)), True  )
+        self.assertEqual( util.isAtomic(np.complex128(0)), True  )
         self.assertEqual( util.isAtomic(np.datetime64()), True  )
         self.assertEqual( util.isAtomic(np.timedelta64()), True  )
         self.assertEqual( util.isAtomic(np.ushort(0)), True  )
