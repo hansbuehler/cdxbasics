@@ -33,10 +33,10 @@ jobs:
     - name: Test with pytest
       run: |
         pip install pytest
-        pip install "numpy==1.21"
         pip install pandas
         pip install sortedcontainers
         pip install psutil
         pip install jsonpickle
         pip install blosc
+        pip install "numpy==1.21"
         pytest
