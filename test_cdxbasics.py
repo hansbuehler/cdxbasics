@@ -297,6 +297,12 @@ class CDXBasicsTest(unittest.TestCase):
         u = uniqueHash(x)
         self.assertEqual( u, "d819f0b72b849d66112e139fa3b7c9f1" )
 
+
+        self.assertEqual( uniqueHash( np.float32(0) ), "30565a8911a6bb487e3745c0ea3c8224" )
+        self.assertEqual( uniqueHash( np.float64(0) ), "30565a8911a6bb487e3745c0ea3c8224" )
+        self.assertEqual( uniqueHash( np.int32(0) ), "cfcd208495d565ef66e7dff9f98764da" )
+        self.assertEqual( uniqueHash( np.int64(0) ), "cfcd208495d565ef66e7dff9f98764da" )
+
         o2 = [ np.float32(0), np.float64(0), np.int32(0), np.int64(0) ]
         u = uniqueHash(o2)
         self.assertEqual( u, "818745c4d2c2ac8393b1d9571dc0d1bc" )
