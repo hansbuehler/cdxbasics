@@ -14,7 +14,7 @@ from .prettydict import PrettyDict, OrderedDict
 import sys as sys
 import time as time
 from sortedcontainers import SortedDict
-from containers.abc import Mapping
+from collections.abc import Mapping
 
 # support for numpy and pandas is optional for this module
 # At the moment both are listed as dependencies in setup.py to ensure
