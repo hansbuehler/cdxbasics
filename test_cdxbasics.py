@@ -609,6 +609,12 @@ class CDXBasicsTest(unittest.TestCase):
         self.assertEqual( util.fmt_datetime(DT(2023,3,18,1,2,3)), "2023-03-18 01:02:03" )
         self.assertEqual( util.fmt_datetime(TT(1,2,3)), "01:02:03" )
 
+        filename1 = "(*Hans/*\\|this << is >>>?"
+        filename2 = "Hans_this-is-(not).a;problem"
+
+        self.assertEqual( util.fmt_filename(filename2), filename2)
+        self.assertEqual( util.fmt_filename(filename1), "(.Hans_.__this (( is )))!")
+
     def test_np(self):
 
         P = np.exp( np.linspace(-10.,-1.,10) )

@@ -141,7 +141,7 @@ def fmt_seconds( seconds : float, *, eps : float = 1E-8 ) -> str:
     assert eps>=0., ("'eps' must not be negative")
     if seconds < -eps:
         return "-" + fmt_seconds(-seconds, eps=eps)
-    
+
     if seconds <= eps:
         return "0s"
     if seconds < 0.01:
@@ -316,30 +316,32 @@ def fmt_now() -> str:
     """ Returns string for 'now' """
     return fmt_datetime(datetime.datetime.now())
 
-INVALID_FILE_NAME_CHARCTERS = {'/', '\\', '/', ':', '|', '>', '<', '?', '*'}
-DEF_FILE_NAME_MAP = {'/' : "_",
-                 '\\': "_", 
-                 '/' : "_", 
+INVALID_FILE_NAME_CHARCTERS = {'/', '\\', '/', '|', ':', '>', '<', '?', '*'}
+DEF_FILE_NAME_MAP = {
+                 '/' : "_",
+                 '\\': "_",
+                 '/' : "_",
                  '|' : "_",
+                 ':' : ".",
                  '>' : ")",
-                 '<' : "(", 
+                 '<' : "(",
                  '?' : "!",
-                 '*' : "."
+                 '*' : ".",
                  }
 
 def fmt_filename( s : str , by : str = DEF_FILE_NAME_MAP ):
     """
     Replaces invalid filename characters by a differnet character.
     The returned string is a valid file name under both windows and linux
-    
+
     Parameters
     ----------
         s : str
             Input string
-        by : 
+        by :
             Either a single character or a dictionary with elements.
     """
-    
+
     if isinstance(by, Mapping):
         for c in INVALID_FILE_NAME_CHARCTERS:
             s = s.replace(c, by[c])
@@ -439,7 +441,7 @@ class WriteLine(object):
 # Conversion of arbitrary python elements into re-usable versions
 # =============================================================================
 
-def plain( inn, *, sorted_dicts : bool = False, 
+def plain( inn, *, sorted_dicts : bool = False,
                    native_np    : bool = False,
                    dt_to_str    : bool = False):
     """
@@ -641,16 +643,16 @@ def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscor
     unique_hash.name = "uniqueHash(%s,%s,%s)" % (str(length),str(parse_functions),str(parse_underscore))
     return unique_hash
 
-def namedUniqueHashExt( total_length     : int = 60, 
-                        id_length        : int = 16,  *, 
+def namedUniqueHashExt( total_length     : int = 60,
+                        id_length        : int = 16,  *,
                         separator        : str = ' ',
                         filename_by      : str = None,
-                        parse_functions  : bool = False, 
+                        parse_functions  : bool = False,
                         parse_underscore : str = "none" ):
     """
     Returns a function which generates hashes of length 'id_length' added to a given label.
     The maximum length of the returned ID is 'total_length'.
-    
+
     See uniqueHashExt() for details on hashing logic
 
     Parameters
@@ -684,13 +686,13 @@ def namedUniqueHashExt( total_length     : int = 60,
     assert label_length>0, ("'total_lenth' must be bigger than 'id_length' plus the length of the 'separator'", total_length, id_length, separator )
     unique_hash  = uniqueHashExt( length=id_length, parse_functions=parse_functions, parse_underscore=parse_underscore )
     filename_by  = DEF_FILE_NAME_MAP if filename_by=="default" else filename_by
-    
+
     def named_unique_hash(label, *args, **kwargs) -> str:
         label        = fmt_filename( label + separator, by=filename_by ) if not filename_by is None else label + separator
         base_hash    = unique_hash( label, *args, **kwargs )
         return label[:label_length] + base_hash if len(label) > 0 else base_hash
-    return named_unique_hash         
-    
+    return named_unique_hash
+
 def uniqueHash(*args, **kwargs) -> str:
     """
     Generates a hash key for any collection of python objects.
@@ -1019,10 +1021,10 @@ class TrackTiming(object):
         if text in self._tracked:
             self._tracked[text] += dt
         else:
-            self._tracked[text] = dt        
+            self._tracked[text] = dt
         self._current = now
         return self
-    
+
     def __str__(self):
         """ Returns summary """
         return self.summary()

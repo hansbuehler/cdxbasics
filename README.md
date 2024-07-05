@@ -13,6 +13,11 @@ Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit 
 Some users reported that the package does not work in some versions of Jupyter. In this case, please try setting `dynaplot.DynamicFig.MODE = 'canvas'`. I appreciate if you let me know whether this resolved
 the problem.
 
+The package now contains a lazy method to manage updates. Instead of updating individual names, we recommend to simply remove the previous element and redraw. This is implemented as follows
+* Once a figure `fig` is created, call `fig.store()` to return a element store.
+* When creating new matplotlib elements such as plots, figures, fills, lines, add them to the store with `store +=`.
+* Before the next update call `store.remove()` to remove all old updates; create the renewed elements, and only then call `fig.render()` or `fig.close()`.
+
 ### Animated Matplotlib in Jupyter
 
 See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb) for some applications. 
@@ -20,27 +25,36 @@ See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbu
 ![dynamic line plot](https://raw.githubusercontent.com/hansbuehler/cdxbasics/master/media/dynaplot.gif)
 ![dynamic 3D plot](https://raw.githubusercontent.com/hansbuehler/cdxbasics/master/media/dynaplot3D.gif)
 
-    # example
     %matplotlib inline
     import numpy as np
-    x = np.linspace(-5,5,21)
-    y = np.ramdom.normal(size=(21,5))
-
-    # create figure
-    from cdxbasics.dynaplot import figure
-    fig = figure()                  # equivalent to matplotlib.figure
-    ax  = fig.add_subplot()         # no need to specify row,col,num
-    l   = ax.plot( x, y[:,0] )[0]   # get fist line2D object
-    fig.render()                    # construct figure & draw graph
+    import cdxbasics.dynaplot as dynaplot
     
-    # animate
+    x  = np.linspace(0,1,100)
+    pm = 0.2
+
+    fig = dynaplot.figure(col_size=10)
+    ax = fig.add_subplot()
+    ax2 = fig.add_subplot()
+    ax2.sharey(ax)
+    store = fig.store()
+
+    fig.render()
+
     import time
-    for i in range(1,5):
-        time.sleep(1) 
-        l.set_ydata( y[:,i] )       # update data
-        fig.render()
+    for i in range(5):
+        y = np.random.random(size=(100,))
+        ax.set_title(f"Test {i}")
+        ax2.set_title(f"Test {i}")
         
-    fig.close()                     # clear figure to avoid duplication
+        store.remove() # delete all prviously stored elements
+        store += ax.plot(x,y,":", label=f"data {i}")
+        store += ax2.plot(x,y,"-",color="red", label=f"data {i}")
+        store += ax2.fill_between( x, y-pm, y+pm, color="blue", alpha=0.2 )
+        store += ax.legend()
+        
+        fig.render()
+        time.sleep(1)
+    fig.close()
 
 See example notebook for how to use the package for lines, confidence intervals, and 3D graphs.
 
@@ -851,6 +865,7 @@ Example 2 (line length is getting shorter)
 * `fmt_date()` returns a date string in natural order e.g. YYYY-MM-DD.
 * `fmt_time()` returns a time string in natural order HH:MM:SS. The colon can be changed into another character if required, e.g. for file names.
 * `fmt_datetime()` returns a datetime string in natural order e.g. YYYY-MM-DD HH:SS. It returns the respective simplification if just a `date` or `time` is passed instead of a `datetime`.
+* `fmt_filename()` returns a valid filename for both Windows and Linux by replacing unsupported characters with alternatives. Instead of our default alternatives you can pass a dictionary of your own.
  
 * `is_jupyter()` tries to assess whether the current environment is a jupyer IPython environment.
 This is experimental as it appears there is no safe way to do this. The current implemenentation checks whether the command which started the current process contains the string `jupyter`.
