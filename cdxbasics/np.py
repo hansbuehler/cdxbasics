@@ -364,7 +364,8 @@ def np_european(   *,
                    cp   : np.ndarray,
                    DF   : np.ndarray = 1.,
                    F    : np.ndarray = 1.,
-                   price_only : bool = False) -> dict:
+                   price_only : bool = False,
+                   price_eps  : float = 1E-4 ) -> dict:
     """
     European option pricer
     Returns a dictionary with (price,fdelta,fgamma,vega,ftheta,frhoDF)
@@ -426,6 +427,7 @@ def np_european(   *,
         DF   : discount factor >0
         F    : forward >0
         price_only : if True, return price, otherwise return dictionary
+        price_eps  : epsolion tolernace for the price
 
     Returns
     -------
@@ -444,12 +446,10 @@ def np_european(   *,
     assert np.min( K ) > 0., ("European error: 'K' must be positive; found", np.min(K))
     assert np.min( DF ) > 0., ("European error: 'DF' must be positive; found", np.min(DF))
     assert np.min( F ) > 0., ("European error: 'F' must be positive; found", np.min(F))
-    assert np.min( vols ) >= 0., ("European error: 'vols' cannot be negative; found", np.min(ttm))
+    assert np.min( vols ) >= 0., ("European error: 'vols' cannot be negative; found", np.min(vols))
     assert np.max( np.abs(cp)-1. ) <1E-12, ("European error: 'cp' must be +1 (call) or -1 (put); found max{ |cp|-1 }:", np.max( np.abs(cp)-1. ))
+    assert price_eps >= 0., ("European error: 'price_eps' must not be negative; found", price_eps )
 
-    """
-
-    """
     intrinsic = np.maximum( DF*cp*( F - K ), 0. )
     intr_dlt  = np.where( cp > 0., np.where( F>K, DF, 0., ), np.where( F<K, -DF, 0.) )
     is_intr   = ttm*vols*vols < 1E-8
@@ -465,14 +465,28 @@ def np_european(   *,
     N2        = norm.cdf( d2 )
     n1        = norm.pdf( d1 )
     cp0       = 0.5 * (1. - cp)   # 0 for call 1 for put
-    price     = DF * ( F * N1 - K * N2 + cp0 * ( F - K ) )
+    price     = DF * ( F * N1 - K * N2 - cp0 * ( F - K ) )  # C-P=F-K <=> P=C-F+K
     assert not np.any(~np.isfinite(price)), ("Error computing European prices: NaN's returned:", price)
     fdelta    = DF * ( N1 - cp0 )
     vega      = DF * F * n1 * sqrtTTM
     fgamma    = DF * n1 / ( F * vols * sqrtTTM )
     dfrho     = price / DF
     voltheta  = - 0.5 * fgamma * F * F * vols * vols * ttm
-
+    price     = np.where( is_intr, intrinsic, price )
+    
+    if np.min( price - intrinsic ) < -price_eps:
+        ixs = price - intrinsic < -price_eps+1E-12
+        assert np.min( price-intrinsic ) >= 0., ("Internal error: European price is below intrinsic", np.min(price-intrinsic),
+                                       "price", (price)[ixs], 
+                                       "intr", intrinsic[ixs],
+                                       "ttm", (ttm+price*0.)[ixs], 
+                                       "vols",(vols+price*0.)[ixs],
+                                       "K",   (K+price*0.)[ixs],
+                                       "cp",  (cp+price*0.)[ixs],
+                                       "DF",  (DF+price*0.)[ixs],
+                                       "F",   (F+price*0.)[ixs],
+                                       "price_eps", price_eps)
+    is_intr   = is_intr | (price < intrinsic)
     price     = np.where( is_intr, intrinsic, price )
 
     if price_only:
