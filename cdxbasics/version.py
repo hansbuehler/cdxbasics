@@ -3,12 +3,13 @@ Version handling for functions and classes
 Hans Buehler June 2023
 """
 
-from .util import fmt_list, uniqueHashExt
+from .util import fmt_list, uniqueLabelExt
 from .logger import Logger
+from functools import partial
 
-# support for functions with underscores.
-uniqueHash32Ext = uniqueHashExt(length=32, parse_functions=False, parse_underscore="private" )
-uniqueHash48Ext = uniqueHashExt(length=48, parse_functions=False, parse_underscore="private" )
+uniqueLabel64 = uniqueLabelExt(max_length=64,id_length=8)
+uniqueLabel60 = uniqueLabelExt(max_length=60,id_length=8)
+uniqueLabel48 = uniqueLabelExt(max_length=48,id_length=8)
 
 _log = Logger(__file__)
 
@@ -61,7 +62,16 @@ class Version(object):
         Returns a unique version string for this version, either the simple readable version or the current version plus a unique hash if the
         simple version exceeds 64 characters.
         """
-        return self.unique_id(max_len=64)
+        return uniqueLabel64(self.full)
+
+    @property
+    def unique_id60(self) -> str:
+        """
+        Returns a unique version string for this version, either the simple readable version or the current version plus a unique hash if the
+        simple version exceeds 60 characters.
+        The 60 character version is to support filenames with a three letter extension, so total file name size is at most 64.
+        """
+        return uniqueLabel60(self.full)
 
     @property
     def unique_id48(self) -> str:
@@ -69,29 +79,17 @@ class Version(object):
         Returns a unique version string for this version, either the simple readable version or the current version plus a unique hash if the
         simple version exceeds 48 characters.
         """
-        return self.unique_id(max_len=48)
+        return uniqueLabel48(self.full)
 
     def unique_id(self, max_len : int = 64) -> str:
         """
         Returns a unique version string for this version, either the simple readable version or the current version plus a unique hash if the
         simple version exceeds 'max_len' characters.
         """
-        if max_len < 64:
-            hash_function = uniqueHash32Ext
-            hash_len = 32
-            _log.verify( max_len >= hash_len, "'max_len' must not be smaller than %ld", hash_len)
-        else:
-            hash_function = uniqueHash48Ext
-            hash_len = 48
-
-        self._resolve_dependencies()
-
-        v = self.full
-        if len(v) <= max_len:
-            return v
-        if len(self._input_version) + hash_len + 1 <= max_len:
-            return self._input_version + " " + hash_function( self._dependencies )
-        return hash_function( self._input_version, self._dependencies )
+        assert max_len >= 4,("'max_len' must be at least 4", max_len)
+        id_len = 8 if max_len > 16 else 4
+        uniqueHashVersion = uniqueLabelExt(max_length=max_len, id_length=id_len)
+        return uniqueHashVersion(self.full)
 
     @property
     def full(self) -> str:
@@ -137,8 +135,6 @@ class Version(object):
         
         This function returns None if there is no dependency on 'other', 
         or the version of the 'other' it is dependent on.
-        
-        TODO: move this to cdxbasics.version
         """
         other        = other.__qualname__ if not isinstance(other, str) else other
         dependencies = self.dependencies

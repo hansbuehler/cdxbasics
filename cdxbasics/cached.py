@@ -381,7 +381,7 @@ def cached( version       : str  = "0.0.1",
 version = version_decorator
 
 def test():
-    from cdxbasics.cached import cached, version, Cache
+    from options.cdxbasics.cached import cached, version, Cache
 
     @version("0.0.1")
     def f(x,y):
@@ -433,3 +433,33 @@ def test():
 
     print( "Cached 2", my_big_func(2,3,4, cache=cache) )
     print( "Func ID", my_big_func.cache_version_id, "\n" )
+
+def test2():
+    import options.tf.cached as cached_
+    import importlib as imp
+    imp.reload(cached_)
+
+    Cache   = cached_.Cache
+    cached  = cached_.cached
+    version = cached_.version
+    @cached("0.0.1")
+    def f(x,y,cache=None):
+        return x*y
+
+    @cached("0.0.1", dependencies=[f])
+    def g(x,y,cache=None):
+        return f(x,y,cache=cache)
+
+    @cached("0.0.1", dependencies=[g])
+    def h(x,y,cache=None):
+        return g(x,y,cache=cache)
+
+    print("Simnple caching")
+    h(1,1,cache=Cache(cache_mode="update"))
+    h(1,1,cache=Cache(cache_mode="on"))
+
+    print("\nUpdate g,h")
+    cache = Cache(qualify=[g])
+    h(1,1, cache=cache)
+
+

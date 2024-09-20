@@ -264,7 +264,7 @@ class DynamicFig(Deferred):
         elif self.MODE == 'canvas_idle':
             self.fig.canvas.draw_idle()
         else:
-            _log.verify( self.MODE == "canvas", "DynamicFig.MODE must be 'hdisplay' or 'canvas'. Found %s", self.MODE )
+            _log.verify( self.MODE == "canvas", "DynamicFig.MODE must be 'hdisplay', 'canvas_idle' or 'canvas'. Found %s", self.MODE )
             self.fig.canvas.draw()
 
     def savefig(self, fname, silent_close : bool = True, **kwargs ):

@@ -5,7 +5,7 @@ Hans Buehler 2020
 """
 
 from .logger import Logger
-from .util import CacheMode, uniqueHash48, plain, fmt_list, fmt_filename
+from .util import CacheMode, uniqueHash48, plain, fmt_list, fmt_filename, uniqueLabelExt
 _log = Logger(__file__)
 
 import os
@@ -1619,11 +1619,37 @@ class SubDir(object):
     # utilities
     
     @staticmethod
-    def removeBadKeyCharacters( key, by='-' ):
+    def removeBadKeyCharacters( key:str, by:str=' ' ) -> str:
         """
-        Replaces invalid filename characters by a differnet character
+        Replaces invalid characters in a filename by 'by'.
+        See util.fmt_filename() for documentation and further options.
         """
         return fmt_filename( key, by=by )
+   
+    def unqiueLabelToKey( self, unique_label:str, id_length:int=8, separator:str='-', max_length:int=64 ) -> str:
+        """
+        Converts a unique label which might contain invalid characters into a unique file name, such that the full file name does not exceed 'max_length' bytes.
+        The returned key has the format 
+            name + separator + ID
+        where ID has length id_length.
+        If unique_label is already guaranteed to be a valid filename, use unqiueLongFileNameToKey() instead.
+        """
+        len_ext      = len(self.ext)
+        assert len_ext < max_length, ("'max_length' must exceed the length of the extension", max_length, self.ext)
+        uqf          = uniqueLabelExt( max_length=max_length-len_ext, id_length=id_length, separator=separator, filename_by="default" )
+        return uqf( unique_label )
+   
+    def unqiueLongFileNameToKey( self, unique_filename:str, id_length:int=8, separator:str='-', max_length:int=64 ) -> str:
+        """
+        Converts a unique filename which might be too long to a unique filename such that the total length plus 'ext' does not exceed 'max_length' bytes.
+        If the filename is already short enough, no change is made.
+
+        If 'unique_filename' is not guaranteed to be a valid filename, use unqiueLabelToKey() instead.
+        """
+        len_ext      = len(self.ext)
+        assert len_ext < max_length, ("'max_length' must exceed the length of the extension", max_length, self.ext)
+        uqf          = uniqueLabelExt( max_length=max_length-len_ext, id_length=id_length, separator=separator )
+        return uqf( unique_filename )
    
     # -- dict-like interface --
 

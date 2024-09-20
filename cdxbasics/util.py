@@ -513,12 +513,16 @@ def _compress_function_code( f ):
 def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscore : str = "none" ):
     """
     Returns a function which generates hashes of length 'length', or of standard length if length is None
+
+    Expert use
+    ----------
     To support hashing directly in one of your objects, implement
 
         __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
 
         The parameters are the same as for uniqueHashExt.
-        The function is expected to return a hashable object, ideally a string.
+        The function is expected to return a hashable object, ideally a string, which will be passed to the hashing code.
+        It does not need to have length 'length', but the ultimate hash computed will have that length.
 
     Parameters
     ----------
@@ -643,31 +647,45 @@ def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscor
     unique_hash.name = "uniqueHash(%s,%s,%s)" % (str(length),str(parse_functions),str(parse_underscore))
     return unique_hash
 
-def namedUniqueHashExt( total_length     : int = 60,
+def namedUniqueHashExt( max_length       : int = 60,
                         id_length        : int = 16,  *,
                         separator        : str = ' ',
                         filename_by      : str = None,
                         parse_functions  : bool = False,
                         parse_underscore : str = "none" ):
     """
-    Returns a function which generates hashes of length 'id_length' added to a given label.
-    The maximum length of the returned ID is 'total_length'.
+    Returns a function 
+    
+        f( label, **argv, **argp )
+    
+    which generates unique strings of at most a length of max_length of the format
+        label + separator + ID
+    where ID has length id_length.
+    The maximum length of the returned string is 'max_length'.
+
+    If total_lengths is id_length+len(separator) then the function just returns the ID
+    of length max_length.
+
+    This function does not suppose that 'label' is unqiue, hence the ID is prioritized.
+    See uniqueLabelExt() for a function which assumes the label is unique.
 
     See uniqueHashExt() for details on hashing logic
 
     Parameters
     ----------
-        total_length : int
+        max_length : int
             Total length of the returned string including the ID.
             Defaults to 60 to allow file names with extensions with three letters.
         id_length : int
             Intended length of the hash function, default 16
         separator : str
-            Separator between label and id_length
+            Separator between label and id_length.
+            Note that the separator will be included in the ID calculation, hence different separators
+            lead to different IDs.
         filename_by : str, bool
             If not None, use fmt_filename( *, by=filename_by ) to ensure the returned string is a valid
-            filename for both windows and linux, of at most 'total_length' size.
-            If set to "default", use DEF_FILE_NAME_MAP as the defaultt mapping of fmt_filename
+            filename for both windows and linux, of at most 'max_length' size.
+            If set to the string "default", use DEF_FILE_NAME_MAP as the default mapping of fmt_filename
         parse_functions : bool
             If True, then the function will attempt to generate unique hashes for function and property objects
             using _compress_function_code().
@@ -680,22 +698,104 @@ def namedUniqueHashExt( total_length     : int = 60,
     Returns
     -------
         hash function with signature (label, *args, **kwargs).
-        All arguments including the label will be used to generate the hash key.
+        All arguments including label and separator will be used to generate the hash key.
     """
-    label_length = total_length-id_length-len(separator)
-    assert label_length>0, ("'total_lenth' must be bigger than 'id_length' plus the length of the 'separator'", total_length, id_length, separator )
+    assert max_length >= 4, ("'max_length' must be at least 4", max_length)
+    assert id_length >= 4, ("'id_length' must be at least 4", id_length)
+    filename_by  = ( DEF_FILE_NAME_MAP if filename_by=="default" else filename_by ) if not filename_by is None else None
+    fseparator   = fmt_filename( separator, by=filename_by ) if not filename_by is None else separator
+
+    label_length = max_length-id_length-len(fseparator)
+    if label_length<=0:
+        id_length    = max_length
+        label_length = 0
     unique_hash  = uniqueHashExt( length=id_length, parse_functions=parse_functions, parse_underscore=parse_underscore )
-    filename_by  = DEF_FILE_NAME_MAP if filename_by=="default" else filename_by
 
     def named_unique_hash(label, *args, **kwargs) -> str:
-        label        = fmt_filename( label + separator, by=filename_by ) if not filename_by is None else label + separator
-        base_hash    = unique_hash( label, *args, **kwargs )
-        return label[:label_length] + base_hash if len(label) > 0 else base_hash
+        if label_length>0:
+            label        = fmt_filename( label, by=filename_by ) if not filename_by is None else label
+            base_hash    = unique_hash( label, separator, *args, **kwargs )
+            label        = label[:label_length] + fseparator + base_hash
+        else:
+            label        = unique_hash( separator, *args, **kwargs )  # using 'separator' here to allow distinction at that level
+        return label
     return named_unique_hash
+
+def uniqueLabelExt(     max_length       : int = 60,
+                        id_length        : int = 8,
+                        separator        : str = ' ',
+                        filename_by      : str = None ):
+    """
+    Returns a function 
+    
+        f( unique_label )
+    
+    which generates strings of at most max_length of the format:
+    If len(unique_label) <= max_length:
+        unique_label
+    else:
+        unique_label + separator + ID
+    where the ID is of maximum length 'id_length'.
+
+    This function assumes that 'unique_label' is unique, hence the ID is dropped if 'unique_label' is less than 'max_length'
+    See namedUniqueHashExt() for a function does not assume the label is unique, hence the ID is always appended.
+
+    See uniqueHashExt() for details on hashing logic
+
+    Parameters
+    ----------
+        max_length : int
+            Total length of the returned string including the ID.
+            Defaults to 60 to allow file names with extensions with three letters.
+        id_length : int
+            Indicative length of the hash function, default 8.
+            id_length will be reduced to max_length if neccessary.
+        separator : str
+            Separator between label and id_length.
+            Note that the separator will be included in the ID calculation, hence different separators
+            lead to different IDs.
+        filename_by : str, bool
+            If not None, use fmt_filename( *, by=filename_by ) to ensure the returned string is a valid
+            filename for both windows and linux, of at most 'max_length' size.
+            ** If used  the function cannot tell whether any unique label could be mapped to another, hence the ID is always appended **
+            If set to the string "default", use DEF_FILE_NAME_MAP as the default mapping of fmt_filename
+
+    Returns
+    -------
+        hash function with signature (unique_label).
+    """
+    assert id_length >= 4, ("'id_length' must be at least 4", id_length)
+    assert id_length <= max_length, ("'max_length' must not be less than 'id_length'", max_length, id_length)
+
+    filename_by  = ( DEF_FILE_NAME_MAP if filename_by=="default" else filename_by ) if not filename_by is None else None
+    fseparator   = fmt_filename( separator, by=filename_by ) if not filename_by is None else separator
+
+    if id_length>=max_length+len(fseparator):
+        id_length = max_length+len(fseparator)
+
+    unique_hash  = uniqueHashExt( length=id_length )
+
+    def unique_label_hash(label) -> str:
+        force_id = False
+        if filename_by is None and len(label) <= max_length and len(label) > 0:
+            # no filename convertsion and label is short enough --> use this name
+            return label
+            
+        base_hash    = unique_hash( label, separator )
+        label_hash   = fseparator + base_hash
+        if len(label_hash) >= max_length or len(label) == 0:
+            # hash and separator exceed total length. Note that len(base_hash) <= max_length
+            label = base_hash
+        else:
+            # convert label to filename. This loses uniqueness.
+            label = fmt_filename( label, by=filename_by ) if not filename_by is None else label
+            label = label[:max_length-len(label_hash)] + label_hash
+        return label
+    return unique_label_hash
 
 def uniqueHash(*args, **kwargs) -> str:
     """
-    Generates a hash key for any collection of python objects.
+    Generates a hash key of length 32 for any collection of python objects.
     Typical use is for key'ing data vs a unique configuation.
 
     The function
@@ -719,6 +819,7 @@ def uniqueHash(*args, **kwargs) -> str:
 def uniqueHash8( *args, **argv ) -> str:
     """
     Compute a unique ID of length 8 for the provided arguments.
+
     The function
         1) uses the repr() function to feed objects to the hash algorithm.
            that means is only distinguishes floats up to str conversion precision
