@@ -44,7 +44,7 @@ def _prep_P_and_X( P : np.ndarray, x : np.ndarray, axis : int ) -> tuple:
     P = np.asarray(P)
     x = np.asarray(x)
     is_P = True
-    if len(P.shape) != 1: _log.throw("'P' must be a vector. Found shape %s", P.shape)
+    #if len(P.shape) != 1: _log.throw("'P' must be a vector. Found shape %s", P.shape)
     if not axis is None:
         if axis >= len(x.shape): _log.throw("Invalid axis %ld for 'x' with shape %s", axis, x.shape)
         if axis < -len(x.shape): _log.throw("Invalid axis %ld for 'x' with shape %s", axis, x.shape)
@@ -57,9 +57,11 @@ def _prep_P_and_X( P : np.ndarray, x : np.ndarray, axis : int ) -> tuple:
         else:
             p = P
     else:
-        x    = x.flatten() if len(x.shape) > 1 else x
+        if P.shape != x.shape: _log.throw("'P' and 'x' must have the same shape if no 'axis' is provided. Found %s and %s, respectively", P.shape, x.shape )
+        if len(x.shape) > 1:
+            x    = x.flatten()
+            P    = P.flatten()
         axis = -1
-        if len(P) != len(x): _log.throw("'P' must have the same length as 'x'. Found %ld and %ld, respectively. Did you itend to use axis=None ?", len(P), len(x))
         p = P
     if np.min(p) < 0.: _log.throw("'P' cannot have negative members. Found element %g", np.min(P))
     sum_p = np.sum(p)
@@ -379,16 +381,16 @@ def np_european(   *,
     https://en.wikipedia.org/wiki/Greeks_(finance)
     Note that we compute delta, gamma, theta with respect to the forward
 
-        BS( DF, F, V, T ) = DF { F E[ X \1[FX > K]] - K E[ \1[FX > K]] }
+        BS( DF, F, V, T ) = DF { F E[ X 1[FX > K]] - K E[ 1[FX > K]] }
         for X=exp( V sqrtT Y - 0.5 V*V*T )
 
-        Under E[\cdot]
+        Under E[cdot]
                           X > +K/F <=>
                           V sqrtT Y - 0.5 VVT > log K/F
                           Y > {log K/F + 0.5 VVT }/VsqrtT
                           Y < {log F/K - 0.5 VVT }/VsqrtT =: d2
 
-        Under E[X\cdot] we have X=exp( V sqrtT Y + 0.5 V*V*T )
+        Under E[X cdot] we have X=exp( V sqrtT Y + 0.5 V*V*T )
                           X > +K/F <=>
                           V sqrtT Y + 0.5 VVT > log K/F
                           Y > {log K/F - 0.5 VVT }/VsqrtT

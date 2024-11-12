@@ -459,7 +459,7 @@ def plain( inn, *, sorted_dicts : bool = False,
     Hans Buehler, Dec 2013
     """
     def rec_plain( x ):
-        return plain( x, sorted_dicts=sorted_dicts, native_np = native_np )
+        return plain( x, sorted_dicts=sorted_dicts, native_np=native_np, dt_to_str=dt_to_str )
     # basics
     if isAtomic(inn) \
         or inn is None:

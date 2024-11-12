@@ -129,7 +129,9 @@ class Deferred(object):
             try:
                 live  = owner( *self._ref[0], **self._ref[1] )
             except Exception as e:
-                _log.error("Error resolving deferred call to '%s': %s", self._info, e)
+                _log.error("Error resolving deferred call to '%s': %s; "
+                           "positional arguments: %s; "
+                           "keyword arguments: %s", self._info, e, str(self._ref[0])[:100], str(self._ref[1])[:100])
                 raise e
 
         elif self._type == Deferred.TYPE_ITEM:

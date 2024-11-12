@@ -1096,6 +1096,10 @@ def _cast_name( cast : type ) -> str:
 # ================================
 
 class _Simple(_Cast):# NOQA
+    """
+    Default case where the 'cast' argument for a config call() is simply a type or None.
+    Cast to an actual underlying type
+    """
 
     STR_NONE_CAST = "any"
 
