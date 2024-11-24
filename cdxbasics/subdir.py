@@ -235,7 +235,7 @@ class SubDir(object):
             sd  = SubDir("~/subdir;*.bin")      - set extension to 'bin'
 
         COPY CONSTRUCTION
-        The function also allows copy construction, and constrution from a repr() string.
+        This function also allows copy construction and constrution from a repr() string.
 
         HANDLING KEYS
         SubDirs allows reading data using the item and attribute notation, i.e. we may use
@@ -248,7 +248,6 @@ class SubDir(object):
         It is possible to set the directory name to 'None'. In this case the directory will behave as if:
             No files exist
             Writing fails with a EOFError.
-
 
         Parameters
         ----------
@@ -1685,7 +1684,7 @@ class SubDir(object):
                 identify the object requested. Should be a string or a list of strings.
             default:
                 If specified, this function reads 'keyOrSub' with read( keyOrSub, default, *kargs, **kwargs )
-                If not specified, then this function calls subDir( keyOrSub ).
+                If not specified, then this function calls SubDir(keyOrSub,parent=self,ext=ext,fmt=fmt)
 
         The following keywords are only relevant when reading files.
         They echo the parameters of read()
