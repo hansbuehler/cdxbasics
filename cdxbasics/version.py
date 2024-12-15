@@ -226,7 +226,7 @@ class Version(object):
 
             dep_ = getattr(dep, "version", None)
             if dep_ is None: _log.throw( err_context() + ": cannot determine version of '%s': this is not a versioned function or class as it does not have a 'version' member", dep.__qualname__ )
-            if not isinstance(dep_, Version): _log.throw( err_context() + ": cannot determine version of '%s': 'version' member is of type '%s' not of type 'Version'", dep.__qualname__, type(dep_).__name__ )
+            if type(dep_).__name__ != "Version": _log.throw( err_context() + ": cannot determine version of '%s': 'version' member is of type '%s' not of type 'Version'", dep.__qualname__, type(dep_).__name__ )
 
             # dynamically retrieve dependencies
 
@@ -253,7 +253,7 @@ class Version(object):
 
 def version( version : str = "0.0.1" , dependencies : list = [] ):
     """
-    Decorator for a versioned function, which may depend on other versioned functions.
+    Decorator for a versioned function or class, which may depend on other versioned functions or classes.
     The point of this decorate is being able to find out the code version of a
     sequence of function calls, and be able to update cached or otherwise stored
     results accordingly.

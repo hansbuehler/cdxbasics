@@ -169,7 +169,6 @@ class DynamicFig(Deferred):
 
     def add_subplot(self, title    : str = None, 
                           new_row  : bool = None, 
-                          position = None,
                           **kwargs) -> DynamicAx:
         """
         Add a subplot.
@@ -186,7 +185,7 @@ class DynamicFig(Deferred):
                 other arguments to be passed to matplotlib's add_subplot https://matplotlib.org/stable/api/figure_api.html#matplotlib.figure.Figure.add_subplot
                 Common use cases
                     projection='3d'
-                    subplotspec='' when using https://matplotlib.org/stable/api/_as_gen/matplotlib.gridspec.GridSpec.html
+                    subplotspec='...' when using https://matplotlib.org/stable/api/_as_gen/matplotlib.gridspec.GridSpec.html
                     
         """
         _log.verify( not self.closed, "Cannot call add_subplot() after close() was called")
@@ -486,6 +485,14 @@ class FigStore( object ):
         for e in self._elements:
             rem(e)
         self._elements = []
+
+    def clear(self):
+        """
+        Alias for remove(): removes all elements by calling their remove() function:
+        https://matplotlib.org/stable/api/_as_gen/matplotlib.artist.Artist.remove.html#matplotlib.artist.Artist.remove
+        """
+        return self.remove()
+        
 
 # ----------------------------------------------------------------------------------
 # color management

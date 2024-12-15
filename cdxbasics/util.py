@@ -14,7 +14,7 @@ from .prettydict import PrettyDict, OrderedDict
 import sys as sys
 import time as time
 from sortedcontainers import SortedDict
-from collections.abc import Mapping
+from collections.abc import Mapping, Collection
 
 # support for numpy and pandas is optional for this module
 # At the moment both are listed as dependencies in setup.py to ensure
@@ -101,6 +101,52 @@ def isFloat( o ):
     if not np is None and isinstance(o,np.floating):
         return True
     return False
+
+# =============================================================================
+# python basics
+# =============================================================================
+
+def _get_recursive_size(obj, seen=None):
+    """
+    Recursive helper for sizeof
+    """
+    if seen is None:
+        seen = set()  # Keep track of seen objects to avoid double-counting
+
+    # Get the size of the current object
+    size = sys.getsizeof(obj)
+
+    # Avoid counting the same object twice
+    if id(obj) in seen:
+        return 0
+    seen.add(id(obj))
+
+    if isinstance( obj, np.ndarray ):
+        size += obj.nbytes
+    elif isinstance(obj, Mapping):
+        for key, value in obj.items():
+            size += _get_recursive_size(key, seen)
+            size += _get_recursive_size(value, seen)
+    elif isinstance(obj, Collection):
+        for item in obj:
+            size += _get_recursive_size(item, seen)
+    else:
+        try:
+            size += _get_recursive_size( obj.__dict__, seen )
+        except:
+            pass
+        try:
+            size += _get_recursive_size( obj.__slots__, seen )
+        except:
+            pass
+    return size
+
+def getsizeof(obj):
+    """
+    Approximates the size of 'obj'.
+    In addition to sys.getsizeof this function also iterates through embedded containers.
+    """
+    return _get_recursive_size(obj,None)    
 
 # =============================================================================
 # string formatting
@@ -518,7 +564,7 @@ def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscor
     ----------
     To support hashing directly in one of your objects, implement
 
-        __unique_hash__( length : int, parse_functions : bool, parse_underscore : str )
+        __unique_hash__( self, length : int, parse_functions : bool, parse_underscore : str )
 
         The parameters are the same as for uniqueHashExt.
         The function is expected to return a hashable object, ideally a string, which will be passed to the hashing code.
@@ -586,6 +632,10 @@ def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscor
             if isinstance(inn,(datetime.time,datetime.date,datetime.datetime)):
                 update(inn)
                 return
+            # slice
+            if isinstance(inn,slice):
+                update((inn.start,inn.stop,inn.step))
+                return
             # numpy
             if not np is None and isinstance(inn,np.ndarray):
                 update(inn)
@@ -637,7 +687,9 @@ def uniqueHashExt( length : int, parse_functions : bool = False, parse_underscor
             # objects: treat like dictionaries
             inn_ = getattr(inn,"__dict__",None)
             if inn_ is None:
-                raise TypeError(fmt("Cannot handle type %s: it does not have __dict__", type(inn).__name__))
+                inn_ = getattr(inn,"__slots__",None)
+                if inn_ is None:
+                    raise TypeError(fmt("Cannot handle type %s: it does not have __dict__ or __slots__", type(inn).__name__))
             assert isinstance(inn_,Mapping)
             visit(inn_)
 
@@ -669,7 +721,7 @@ def namedUniqueHashExt( max_length       : int = 60,
     This function does not suppose that 'label' is unqiue, hence the ID is prioritized.
     See uniqueLabelExt() for a function which assumes the label is unique.
 
-    See uniqueHashExt() for details on hashing logic
+    See uniqueHashExt() for details on hashing logic.
 
     Parameters
     ----------
@@ -713,6 +765,7 @@ def namedUniqueHashExt( max_length       : int = 60,
 
     def named_unique_hash(label, *args, **kwargs) -> str:
         if label_length>0:
+            assert not label is None, ("'label' cannot be None", args, kwargs)
             label        = fmt_filename( label, by=filename_by ) if not filename_by is None else label
             base_hash    = unique_hash( label, separator, *args, **kwargs )
             label        = label[:label_length] + fseparator + base_hash

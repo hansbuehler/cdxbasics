@@ -5,7 +5,7 @@ Hans Buehler 2020
 """
 
 from .logger import Logger
-from .util import CacheMode, uniqueHash48, plain, fmt_list, fmt_filename, uniqueLabelExt
+from .util import CacheMode, uniqueHash48, plain, fmt_list, fmt_filename, uniqueLabelExt, namedUniqueHashExt, DEF_FILE_NAME_MAP
 _log = Logger(__file__)
 
 import os
@@ -16,7 +16,7 @@ import pickle
 import tempfile
 import shutil
 import datetime
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Mapping, Callable
 from enum import Enum
 import json as json
 import platform as platform
@@ -48,6 +48,7 @@ except ModuleNotFoundError:
     gzip = None
 
 uniqueFileName48 = uniqueHash48
+uniqueNamedFileName48_16 = namedUniqueHashExt(max_length=48,id_length=16,filename_by=DEF_FILE_NAME_MAP)
 
 def _remove_trailing( path ):
     if len(path) > 0:
@@ -813,6 +814,7 @@ class SubDir(object):
             else:
                 _log.throw("Unknown format '%s'", fmt )
 
+            # arrive here if version is wrong
             # delete a wrong version
             deleted = ""
             if delete_wrong_version:
@@ -1780,3 +1782,113 @@ class SubDir(object):
         _log.verify( key[:1] != "_", "Deleting protected or private members disabled. Fix __delattr__ to support this")
         return self.delete( key=key, raiseOnError=False )
 
+    # caching
+    # -------
+    
+    def cache_callable(self, F : Callable, 
+                             unique_args_id : str = None, *, 
+                             version : str = "**", 
+                             name : str = None, 
+                             cache_mode : CacheMode = CacheMode.ON):
+        """
+        Wraps a callable into a cachable function.
+        It will attempt to read an existing cache for the parameter set with the correct function version.
+        
+        Explicit usage:
+            
+            def f(x,y):
+                return x*y
+            x = 1
+            y = 2
+            z = cache_callable( f, unique_args_id=f"{x},{y}", version="1", label="f" )( x, y=y )
+        
+        
+        Fully implicit usage utilizing cdxbasics.version:
+
+            @version
+            def f(x,y):
+                return x*y        
+            z = cache_callable( f )( 1, y=2 )
+
+            In this case:
+                * The callable F must be decorate with cdxbascis.version.version
+                * All parameters of F must be convertable to with cdxbasics.util.uniqueHash
+                * The function name must be unique.
+        
+        Parameters
+        ----------
+        F : Callable
+            The callable; if this is not a function or an object then 'name' must be specified        
+        unique_args_id : str
+            A hash string for the arguments. You may use cdxbasics.util.uniqueHash or similar.
+            If this argument is None then the function will call uniqueHash on the parameters passed to f.
+        version : str, optional
+            Version of the function. If not provided, then F must have been decorated with cdxbasics.version.version.
+            This works for both classes and functions.
+        name : str, optional
+            Readable label to identify the callable.
+            If not provided, F.__qualname__ or type(F).__name__ are used if available; must be specified otherwise.
+        cache_mode : CacheMode, optional
+            Controls cache usage. See cdxbasics.CacheMode.
+            
+        Returns
+        -------
+            A callable to execute F if need be.
+
+        """
+        if name is None:
+            try:
+                name = F.__qualname__
+            finally:
+                pass
+            try:
+                name = F.__name__
+            finally:
+                pass
+            _log.verify( not name is None, "Cannot determine string name for 'F': it has neither __qualname__ nor a type with a name. Must specify 'name'")
+
+        if version != "**":
+            version_ = version
+        else:
+            version_ = None
+            try:
+                version_ = F.version.unique_id64
+            except Exception:
+                _log.throw( f"Cannot determine version string for 'F' ({name}): must specify 'version'." )
+                
+        cache_mode = CacheMode(cache_mode)
+        
+        def execute( *kargs, **kwargs ):            
+            if not unique_args_id is None:
+                filename = uniqueNamedFileName48_16( name, unique_args_id )
+            else:
+                filename = uniqueNamedFileName48_16( name, kargs, kwargs )
+
+            if cache_mode.delete:
+                self.delete( filename )
+            elif cache_mode.read:
+                r = self.read( filename, None, version=version_ )
+                if not r is None:
+                    return r
+            
+            r = F(*kargs, **kwargs)
+            _log.verify( not r is None, "Cannot use caching with functions which return None")
+            
+            if cache_mode.write:
+                self.write(filename,r,version=version_)                
+            return r
+        
+        return execute
+            
+
+        
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
