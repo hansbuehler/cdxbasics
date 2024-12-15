@@ -5,7 +5,7 @@ echo PIP build
 echo =====================================================================================
 
 REM https://packaging.python.org/tutorials/packaging-projects/
-cd C:\Users\hansb\OneDrive\Python3\packages\cdxbasics
+cd C:\Users\hans\OneDrive\Python3\packages\cdxbasics
 if exist dist rmdir /Q /S dist
 mkdir dist
 call conda activate base
