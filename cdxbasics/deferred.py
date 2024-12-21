@@ -119,7 +119,7 @@ class Deferred(object):
     def _dereference(self, owner):
         """
         Execute deferred action with 'owner' as the object the action is to be performed upon.
-        If the current type is TYPE_SELF then the '_result' is simply 'owner'
+        If the current type is TYPE_SELF then the result is simply 'owner'
         """
         # execute the deferred action
         if self._was_executed:

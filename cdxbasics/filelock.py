@@ -59,8 +59,9 @@ class FileLock(object):
         Parameters
         ----------
             filename :
-                Filename of the lock. On Unix /dev/shm/ can be used to refer to share memory
+                Filename of the lock.
                 'filename' may start with '!/' to refer to the temp directory, or '~/' to refer to the user directory.
+                On Unix /dev/shm/ can be used to refer to shared memory.
             acquire :
                 Whether to aquire the lock upon initialization
             release_on_exit :

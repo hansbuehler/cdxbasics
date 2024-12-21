@@ -14,10 +14,12 @@ Dynamic matplotlib in jupyer notebooks
 Hans Buehler 2022
 """
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 import matplotlib.colors as mcolors
 from matplotlib.artist import Artist
 from IPython import display
 import io as io
+import gc as gc
 import types as types
 from .deferred import Deferred
 from .logger import Logger
@@ -42,21 +44,54 @@ class DynamicAx(Deferred):
         fig.render()                  # update graph
     """
 
-    def __init__(self, row : int, col : int, title : str, kwargs : dict):
+    def __init__(self, *, 
+                       fig_id   : str, 
+                       fig_list : list,
+                       row      : int, 
+                       col      : int, 
+                       spec_pos,
+                       title    : str, 
+                       args     : list,
+                       kwargs   : dict):
         """ Creates internal object which defers the creation of various graphics to a later point """
-        Deferred.__init__(self,"axes(%ld,%ld)" % (row, col))
-        self.row    = row
-        self.col    = col
-        self.title  = title
-        self.plots  = {}
-        self.kwargs = kwargs
-        self.ax     = None
+        if row is None:
+            assert col is None, "Consistency error"
+            assert not args is None or not spec_pos is None, "Consistency error"
+        else:
+            assert not col is None and args is None, "Consistency error"
+            
+        Deferred.__init__(self,f"subplot({row},{col}" if not row is None else "axes()")
+        self.fig_id   = fig_id
+        self.fig_list = fig_list
+        self.row      = row
+        self.col      = col
+        self.spec_pos = spec_pos
+        self.title    = title
+        self.plots    = {}
+        self.args     = args
+        self.kwargs   = kwargs
+        self.ax       = None
+        assert not self in fig_list
+        fig_list.append( self )
 
-    def initialize( self, fig, rows : int, cols : int):
-        """ Creates the plot by calling all 'caught' functions calls in sequece """
+    def initialize( self, plt_fig, rows : int, cols : int):
+        """
+        Creates the plot by calling all 'caught' functions calls in sequece for the figure 'fig'.
+        'rows' and 'cols' count the columns and rows specified by add_subplot() and are ignored by add_axes()
+        """
         assert self.ax is None, "Internal error; function called twice?"
-        num     = 1 + self.col + self.row*cols
-        self.ax = fig.add_subplot( rows, cols, num, **self.kwargs )
+        
+        if not self.row is None:
+            # add_axes
+            num     = 1 + self.col + self.row*cols
+            self.ax = plt_fig.add_subplot( rows, cols, num, **self.kwargs )
+        elif not self.spec_pos is None:
+            # add_subplot with grid spec
+            self.ax = plt_fig.add_subplot( self.spec_pos.cdx_deferred_result, **self.kwargs )            
+        else:
+            # add_subplot with auto-numbering
+            self.ax = plt_fig.add_axes( *self.args, **self.kwargs )
+            
         if not self.title is None:
             self.ax.set_title(self.title)
 
@@ -81,12 +116,53 @@ class DynamicAx(Deferred):
 
         # call all deferred operations
         self._dereference( self.ax )
+        
+    def remove(self):
+        """ Equivalent of the respective Axes remove() function """
+        assert self in self.fig_list, ("Internal error: axes not contained in figure list")
+        self.fig_list.remove(self)
+        self.ax.remove()
+        self.ax = None
+        gc.collect()
+        
+    def __eq__(self, ax):
+        if type(ax).__name__ != type(self).__name__:
+            return False
+        return self.fig_id == ax.fig_id and self.row == ax.row and self.col == ax.col
+    
+class DynamicGridSpec(Deferred):
+    """ Deferred GridSpec """
+     
+    def __init__(self, nrows, ncols, kwargs):    
+        Deferred.__init__(self,f"gridspec({nrows},{ncols})")
+        self.grid   = None
+        self.nrows  = nrows
+        self.ncols  = ncols
+        self.kwargs = dict(kwargs)
+        
+    def initialize( self, plt_fig ):
+        """ Lazy initialization """
+        assert self.grid is None, ("Initialized twice?")
+        if len(self.kwargs) == 0:
+            self.grid = plt_fig.add_gridspec( nrows=self.nrows, ncols=self.ncols )
+        else:
+            # wired error in my distribution
+            try:
+                self.grid = plt_fig.add_gridspec( nrows=self.nrows, ncols=self.ncols, **self.kwargs )
+            except TypeError as e:
+                estr = str(e)
+                print(estr)
+                if estr != "GridSpec.__init__() got an unexpected keyword argument 'kwargs'":
+                    raise e
+                _log.warning("Error calling matplotlib GridSpec() with **kwargs: %s; will attempt to ignore any kwargs.", estr)
+                self.grid = plt_fig.add_gridspec( nrows=self.nrows, ncols=self.ncols )
+        self._dereference( self.grid )
 
 class DynamicFig(Deferred):
     """
     Figure.
     Wraps matplotlib figures.
-    Main use are the functions
+    Main classic use are the functions
 
         add_subplot():
             notice that the call signatue is now different.
@@ -103,10 +179,35 @@ class DynamicFig(Deferred):
 
         next_row()
             Skip to next row, if not already in the first column.
-
+            
+    Example
+    -------
+    Simple add_subplot() without the need to pre-specify axes positions.
+    
+        fig = dynaplot.figure()
+        ax = fig.add_subplot("1")
+        ax.plot(x,y)
+        ax = fig.add_subplot("2")
+        ax.plot(x,y)
+        fig.render()
+        
+    Example with Grid Spec
+    -----------------------
+    https://matplotlib.org/stable/api/_as_gen/matplotlib.figure.Figure.add_gridspec.html#matplotlib.figure.Figure.add_gridspec
+        
+        fig = dynaplot.figure()
+        gs  = fig.add_gridspec(2,2)
+        ax = fig.add_subplot( gs[:,0] )
+        ax.plot(x,y)
+        ax = fig.add_subplot( gs[:,1] )
+        ax.plot(x,y)
+        fig.render()
+        
     The object will also defer all other function calls to the figure
     object; most useful for: suptitle, supxlabel, supylabel
     https://matplotlib.org/stable/gallery/subplots_axes_and_figures/figure_title.html
+    
+    Note that this wrapper will have its own 'axes' funtions.
     """
 
     MODE = 'hdisplay'  # switch to 'canvas' if it doesn't work
@@ -128,12 +229,14 @@ class DynamicFig(Deferred):
         
         Parameters
         ----------
+            fig_id : str
+                ID of the containing figure, typically just hash(fig)
             row_size : int, optional
                 Size for a row for matplot lib. Default is 5
             col_size : int, optional
                 Size for a column for matplot lib. Default is 4
             col_nums : int, optional
-                How many columns. Default is 5
+                How many columns to use when add_subplot() is used. If omitted, and grid_spec is None, then the default is 5.
             title : str, optional
                 An optional title which will be passed to suptitle()
             fig_kwargs :
@@ -147,6 +250,7 @@ class DynamicFig(Deferred):
         Deferred.__init__(self, "figure")
         self.hdisplay   = None
         self.axes       = []
+        self.grid_specs = []
         self.fig        = None
         self.row_size   = int(row_size)
         self.col_size   = int(col_size)
@@ -167,13 +271,13 @@ class DynamicFig(Deferred):
         """ Ensure the figure is closed """
         self.close()
 
-    def add_subplot(self, title    : str = None, 
-                          new_row  : bool = None, 
+    def add_subplot(self, title    : str = None, *,
+                          new_row  : bool = None,
+                          spec_pos = None,
                           **kwargs) -> DynamicAx:
         """
         Add a subplot.
-        This function will return a wrapper which defers the creation of the actual sub plot
-        until all subplots were defined.
+        This function will return a wrapper which defers the creation of the actual sub plot until self.render() or self.close() is called.
 
         Parameters
         ----------
@@ -181,6 +285,8 @@ class DynamicFig(Deferred):
                 Optional title for the plot.
             new_row : bool, optional
                 Whether to force a new row. Default is False
+            spec_pos : optional
+                Grid spec position
             kwargs : 
                 other arguments to be passed to matplotlib's add_subplot https://matplotlib.org/stable/api/figure_api.html#matplotlib.figure.Figure.add_subplot
                 Common use cases
@@ -189,7 +295,7 @@ class DynamicFig(Deferred):
                     
         """
         _log.verify( not self.closed, "Cannot call add_subplot() after close() was called")
-        _log.verify( self.fig is None, "Cannot call add_subplot() after render() was called")
+        _log.verify( self.fig is None, "Cannot call add_subplot() after render() was called. Use add_axes() instead")
 
         # backward compatibility:
         # previous versions has "new_row" first.
@@ -199,21 +305,57 @@ class DynamicFig(Deferred):
             new_row = title
             title   = _
         else:
+            assert title is None or isinstance(title, str), ("'title' must be a string.")
             title   = str(title) if not title is None else None
-            new_row = bool(new_row) if not new_row is None else False
             
-        
-        if (self.this_col >= self.col_nums) or ( new_row and not self.this_col == 0 ):
-            self.this_col = 0
-            self.this_row = self.this_row + 1
-        if self.max_col < self.this_col:
-            self.max_col = self.this_col
-        ax = DynamicAx( self.this_row, self.this_col, title, dict(kwargs) )
-        self.axes.append(ax)
-        self.this_col += 1
+        if not spec_pos is None:
+            assert new_row is None, ("Cannot specify 'new_row' when 'spec_pos' is specified")
+            ax = DynamicAx( fig_id=hash(self), fig_list=self.axes, row=None, col=None, title=title, spec_pos=spec_pos, args=None, kwargs=dict(kwargs) )
+            
+        else:
+            new_row = bool(new_row) if not new_row is None else False
+            if (self.this_col >= self.col_nums) or ( new_row and not self.this_col == 0 ):
+                self.this_col = 0
+                self.this_row = self.this_row + 1
+            if self.max_col < self.this_col:
+                self.max_col = self.this_col
+            ax = DynamicAx( fig_id=hash(self), fig_list=self.axes, row=self.this_row, col=self.this_col, spec_pos=None, title=title, args=None, kwargs=dict(kwargs) )
+            self.this_col += 1
+        assert ax in self.axes
         return ax
 
     add_plot = add_subplot
+    
+    def add_axes( self, title : str = None, *args, **kwargs ):
+        """
+        Add axes.
+        This function will return a wrapper which defers the creation of the actual axes until self.render() or self.close() is called.
+        Unlike add_subplot() you can add axes after render() was called.
+
+        Parameters
+        ----------
+            title : str, options
+                Optional title for the plot.
+            kwargs :
+                keyword arguments to be passed to matplotlib's add_axes https://matplotlib.org/stable/api/_as_gen/matplotlib.figure.Figure.add_axes.html#matplotlib.figure.Figure.add_axes
+        """
+        _log.verify( not self.closed, "Cannot call add_subplot() after close() was called")
+
+        title   = str(title) if not title is None else None
+        
+        ax = DynamicAx( fig_id=hash(self), fig_list=self.axes, row=None, col=None, title=title, spec_pos=None, args=list(args), kwargs=dict(kwargs) )
+        assert ax in self.axes
+        if not self.fig is None:
+            ax.initialize( self.fig, rows=self.this_row+1, cols=self.max_col+1 )        
+        return ax
+    
+    def add_gridspec(self, ncols=1, nrows=1, **kwargs):
+        """
+        Wrapper for https://matplotlib.org/stable/api/_as_gen/matplotlib.figure.Figure.add_gridspec.html#matplotlib.figure.Figure.add_gridspec
+        """
+        grid = DynamicGridSpec( ncols=ncols, nrows=nrows, kwargs=kwargs )
+        self.grid_specs.append( grid )
+        return grid
 
     def next_row(self):
         """ Skip to next row """
@@ -247,12 +389,15 @@ class DynamicFig(Deferred):
                 self.fig.set_tight_layout(True)
             if not self.fig_title is None:
                 self.fig.suptitle( self.fig_title )
-            rows      = self.this_row+1
-            cols      = self.max_col+1
+            # create all grid specs
+            for gs in self.grid_specs:
+                gs.initialize( self.fig )
+            # create all axes
             for ax in self.axes:
-                ax.initialize( self.fig, rows, cols )
+                ax.initialize( self.fig, rows=self.this_row+1, cols=self.max_col+1 )
             # execute all deferred calls to fig()
             self._dereference( self.fig )
+            
         if not draw:
             return
         if self.MODE == 'hdisplay':
@@ -314,7 +459,8 @@ class DynamicFig(Deferred):
         """ Create a FigStore(). Such a store allows managing graphical elements (artists) dynamically """
         return FigStore()
 
-    def close(self, render : bool = True ):
+    def close(self, render          : bool = True, 
+                    clear           : bool = False):
         """
         Closes the figure. Does not clear the figure.
         Call this to avoid a duplicate in jupyter output cells.
@@ -322,11 +468,49 @@ class DynamicFig(Deferred):
         Parameters
         ----------
             render : if True, this function will call render() before closing the figure.
+            clear  : if True, all axes will be cleared.
         """
-        if not self.closed:
-            if render: self.render()
+        if not self.closed and not self.fig is None:
+            # magic wand to avoid printing an empty figure message
+            def repr_magic(self):
+                return type(self)._repr_html_(self) if len(self.axes) > 0 else "</HTML>"
+            self.fig._repr_html_ = types.MethodType(repr_magic,self.fig)
+            if clear:
+                self.delaxes( self.axes, render=render )            
+            elif render:
+                self.render()
             plt.close(self.fig)
+        self.fig    = None
         self.closed = True
+        gc.collect()
+        
+    def get_axes(self) -> list:
+        """ Equivalent to self.axes """
+        _log.verify( not self.closed, "Cannot call render() after close() was called")
+        return self.axes
+    
+    def remove_all_axes(self, *, render : bool = False):
+        """ Calles remove() for all axes """
+        while len(self.axes) > 0:
+            self.axes[0].remove()
+        if render:
+            self.render()
+        
+    def delaxes( self, ax : DynamicAx, *, render : bool = False ):
+        """
+        Equivalent of https://matplotlib.org/stable/api/_as_gen/matplotlib.figure.Figure.delaxes.html#matplotlib.figure.Figure.delaxes
+        Can also take a list
+        """
+        _log.verify( not self.closed, "Cannot call render() after close() was called")
+        if isinstance( ax, Collection ):
+            ax = list(ax)
+            for x in ax:
+                x.remove()
+        else:
+            assert ax in self.axes, ("Cannot delete axes which wasn't created by this figure")
+            ax.remove()
+        if render:
+            self.render()
 
 def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kwargs ) -> DynamicFig:
     """

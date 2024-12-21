@@ -254,8 +254,7 @@ class Version(object):
 def version( version : str = "0.0.1" , dependencies : list = [] ):
     """
     Decorator for a versioned function or class, which may depend on other versioned functions or classes.
-    The point of this decorate is being able to find out the code version of a
-    sequence of function calls, and be able to update cached or otherwise stored
+    The point of this decorate is being able to find out the code version of a sequence of function calls, and be able to update cached or otherwise stored
     results accordingly.
     Decoration also works for class members.
 
