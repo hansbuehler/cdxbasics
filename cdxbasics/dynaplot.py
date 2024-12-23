@@ -410,6 +410,7 @@ class DynamicFig(Deferred):
         else:
             _log.verify( self.MODE == "canvas", "DynamicFig.MODE must be 'hdisplay', 'canvas_idle' or 'canvas'. Found %s", self.MODE )
             self.fig.canvas.draw()
+        gc.collect() # for some unknown reason this is required in VSCode
 
     def savefig(self, fname, silent_close : bool = True, **kwargs ):
         """
@@ -470,18 +471,21 @@ class DynamicFig(Deferred):
             render : if True, this function will call render() before closing the figure.
             clear  : if True, all axes will be cleared.
         """
-        if not self.closed and not self.fig is None:
+        if not self.closed:
             # magic wand to avoid printing an empty figure message
-            def repr_magic(self):
-                return type(self)._repr_html_(self) if len(self.axes) > 0 else "</HTML>"
-            self.fig._repr_html_ = types.MethodType(repr_magic,self.fig)
             if clear:
-                self.delaxes( self.axes, render=render )            
+                if not self.fig is None:
+                    def repr_magic(self):
+                        return type(self)._repr_html_(self) if len(self.axes) > 0 else "</HTML>"
+                    self.fig._repr_html_ = types.MethodType(repr_magic,self.fig)
+                    self.delaxes( self.axes, render=render )
             elif render:
                 self.render()
-            plt.close(self.fig)
-        self.fig    = None
-        self.closed = True
+            if not self.fig is None:
+                plt.close(self.fig)
+        self.fig      = None
+        self.closed   = True
+        self.hdisplay = None
         gc.collect()
         
     def get_axes(self) -> list:
@@ -666,9 +670,10 @@ class FigStore( object ):
             if not e is None:
                 _log.throw("Cannot remove() element of type '%s' as it is not derived from matplotlib.artist.Artist, nor is it a Collection", type(e).__name__)
     
-        for e in self._elements:
-            rem(e)
+        while len(self._elements) > 0:
+            rem( self._elements.pop(0) )
         self._elements = []
+        gc.collect()
 
     def clear(self):
         """
