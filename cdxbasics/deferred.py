@@ -115,7 +115,7 @@ class Deferred(object):
         """ Returns the result of the deferred action """
         if not self._was_executed: _log.throw( "Deferred action %s has not been executed yet", self._info )
         return self._live
-
+    
     def _dereference(self, owner):
         """
         Execute deferred action with 'owner' as the object the action is to be performed upon.

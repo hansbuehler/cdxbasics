@@ -8,6 +8,7 @@ import numpy as np
 import math as math
 from collections.abc import Mapping
 from cdxbasics.prettydict import PrettyOrderedDict
+import numba as numba
 _log = Logger(__file__)
 
 try:
@@ -359,6 +360,10 @@ def mean_std_bins( x : np.ndarray, bins : int, axis : int = None, P : np.ndarray
         stds  = np.asarray( std( P[ixs[i]:ixs[i+1]], x[ixs[i]:ixs[i+1]], axis=axis) for i in range(len(ixs)-1))
     return means, stds
 
+# ------------------------------------------------
+# Black Scholes
+# -------------------------------------------------
+
 def np_european(   *,
                    ttm  : np.ndarray,
                    vols : np.ndarray,
@@ -508,3 +513,244 @@ def np_european(   *,
                        voltheta=voltheta,
                        dfrho=dfrho)
 
+# ------------------------------------------------
+# Normalization
+# -------------------------------------------------
+
+def robust_svd( A : np.ndarray, *, total_rel_floor : float = 0.001,
+                                   ev0_rel_floor   : float = 0.,
+                                   min_abs_ev      : float = 0.0001,
+                                   cutoff          : bool = True,
+                                   rescale         : bool = True):
+    """
+    Computes SVD and cuts/floors he eigenvalues for more robust numerical calculations
+    
+    Parameters
+    ----------
+        A : 
+            Matrix
+        total_rel_floor : float
+            Total valatility is the square root of the sum of squares of eigenvalues (singular values)
+            'total_rel_floor' cuts off or floors any eigenvalues which contribute less than this fraction
+            to total volatility.
+            Set to zero to ignore.
+        ev0_rel_floor : float
+            'ev0_rel_floor' cuts off or floors eigenvalues at below this fraction of the first eigenvalue.
+            Set to zero to ignore.
+        min_abs_ev : float
+            Total lowest eigenvalue number.
+        cutoff : bool
+            Whether to cutoff (True) or floor (False) eigenvalues.
+        rescale : bool
+            Whether to rescale the cut off or floored eigenvalues back to the sum of the original eigenvalues.
+    
+    Returns
+    -------
+        u, s, vt such that u @ np.diag(s) @ vt ~ A
+    """
+    assert ev0_rel_floor >= 0. and ev0_rel_floor < 1., ("'ev0_rel_floor' must be from [0,1)", ev0_rel_floor)    
+    assert total_rel_floor >= 0. and total_rel_floor < 1., ("'total_rel_floor' must be from [0,1)", total_rel_floor)    
+    assert min_abs_ev > 0., ("'min_abs_ev' must be positive", min_abs_ev)
+
+    u, s, vt            = np.linalg.svd( A, full_matrices=False, compute_uv=True )
+    assert len(s.shape) == 1, ("s should be a vector")
+    assert u.shape == (A.shape[0], s.shape[0]) and vt.shape == (s.shape[0], A.shape[1]), "Bad shapes"
+    assert u.dtype == A.dtype, ("'u' dtype error")
+    assert s.dtype == A.dtype, ("'s' dtype error")
+    assert vt.dtype == A.dtype, ("'vt' dtype error")
+    _log.verify( s[0] >= min_abs_ev**2, "Lowest matrix eigenvalue %g is below 'min_abs_ev' of %g", math.sqrt(s[0]), min_abs_ev)
+    
+    total_var           = np.sum(s)
+
+    if total_rel_floor > 0.:
+        sum_s           = np.cumsum(s)
+        thrshld         = total_var*(total_rel_floor**2)
+        ix_cut          = np.searchsorted(sum_s,thrshld)
+        assert ix_cut>=0
+        assert (ix_cut==len(s) and thrshld > sum_s[-1]) or (ix_cut<len(s) and thrshld <= sum_s[ix_cut])
+        s[:ix_cut]      = 0.
+    
+    min_sv = max( min_abs_ev**2, s[0]*(ev0_rel_floor**2) )
+    s[1:][s[1:] < min_sv] = 0. if cutoff else min_sv
+
+    if rescale:
+        s              *= total_var / np.sum( s )
+    assert np.all(np.isfinite(s)), ("Infinite 's'") 
+    return u, s, vt
+
+def orth_project( XtX, XtY, YtY, * , total_rel_floor : float = 0.001,
+                                     ev0_rel_floor   : float = 0.,
+                                     min_abs_ev      : float = 0.0001,
+                                     cutoff          : bool = True,
+                                     rescale         : bool = True):
+    """
+    Numpy implementation of the partial projection
+        Z = X XtoZ + Y YtoZ
+    for matrices with leading 'sample' dimension and final 'feature' dimension:
+        X(m,nx)
+        Y(m,ny)
+    such that the resulting matrix Z(m,nz) has orthogonal columns and is orthogonal to Y.
+    Its dimension nz <= nx reflects the number of eigenvalues >= cutoff.
+    
+    Solution: start with
+        1) R := X - Y P
+           Orthogonality to Y implies 0 = Y'( X - Y P ) = Y'X - Y'Y P and therefore P = {Y'Y}^{-1} Y'X
+    
+        2) Z = R Q
+           Orthogonality implies I = Q'R'R Q. Using SVD R'R=UDU' gives the solution Q=U 1/sqrt{D} 
+            
+    Then Z = X Q - Y P Q
+        XtoR = Q
+        YtoR = - P Q
+                                 
+    Calculation of RtR
+        R = X - Y P = X - Y {Y'Y}^{-1} Y' X = X - S X with S := Y {Y'Y}^{-1} Y'
+        Thus
+        RtR = X'X - X' S X - X' S' X + X' S'S X
+        By construction S'=S and S'S=S hence
+        RtR = X'X - X'S X
+            = X'X - X'Y P
+                          
+    Parameters
+    ----------
+        XtX, XtY, YtY
+            Respective covariance matrices of the centered vectors x and y
+        total_rel_floor : float
+            Total valatility is the square root of the sum of squares of eigenvalues (singular values)
+            'total_rel_floor' cuts off or floors any eigenvalues which contribute less than this fraction
+            to total volatility.
+            Set to zero to ignore.
+        ev0_rel_floor : float
+            'ev0_rel_floor' cuts off or floors eigenvalues at below this fraction of the first eigenvalue.
+            Set to zero to ignore.
+        min_abs_ev : float
+            Lowest eigenvalue.
+        cutoff : bool
+            If True, eigenvalues below the effective minimum eigenvalues are cut off. If False, they will be floored there.
+        rescale : bool
+            Whether to rescale the cut off or floored eigenvalues back to the sum of the original eigenvalues.
+            
+    Returns
+    -------
+        XtoZ, YtoZ
+    """
+    assert len(XtX.shape) == 2 and XtX.shape[0] == XtX.shape[1], ("XtX must be square")
+    assert len(YtY.shape) == 2 and YtY.shape[0] == YtY.shape[1], ("YtY must be square")
+    dtype = XtX.dtype
+    assert dtype == YtY.dtype, ("Dtype mismatch. Likely an issue", dtype, YtY.dtype )
+    assert dtype == XtY.dtype, ("Dtype mismatch. Likely an issue", dtype, XtY.dtype )
+
+    num_X = XtX.shape[0]
+    num_Y = YtY.shape[0]
+    assert XtY.shape == (num_X,num_Y), ("XtY has the wrong shape", XtY.shape, (num_X,num_Y))
+
+    def inv( A ):
+        """
+        Compute inverse with SVD
+            A = UDU'
+        as UdU' where d=1/D whereever D>epsilon
+        """  
+        assert len(A.shape) == 2 and A.shape[0] == A.shape[1], ("'A' should be square")
+        u, s, vh  = robust_svd( A, total_rel_floor=total_rel_floor, ev0_rel_floor=ev0_rel_floor, min_abs_ev=min_abs_ev, rescale=rescale, cutoff=False )
+        assert len(s.shape) == 1, ("s should be a vector")
+        assert np.max( s[1:] - s[:-1] ) <= 0., ("s sv error")
+        assert u.shape == A.shape and vh.shape == A.shape, ("Bad shapes", A.shape, u.shape, vh.shape )
+        assert np.min(s) >= min_abs_ev**2, ("Internal floor error", np.min(s), min_abs_ev**2 )
+        s         = 1./s
+        invA      = np.transpose(vh) @ np.diag(s) @ np.transpose(u)
+        assert invA.shape == A.shape, ("Inverse shape error", invA.shape, A.shape)
+        assert np.all(np.isfinite(invA)), ("Infinite inverse of A") 
+        return invA.astype(A.dtype)
+
+    P   = inv(YtY) @ np.transpose( XtY )
+    
+    def project(A):
+        """
+        Compute SVD A = UDU' and return U/sqrt{D} for whereever D>epsilon. The returned matrix has only valid dimensions
+        """  
+        assert len(A.shape) == 2 and A.shape[0] == A.shape[1], ("'A' should be square")
+        u, s, vh  = robust_svd( A, total_rel_floor=total_rel_floor, ev0_rel_floor=ev0_rel_floor, min_abs_ev=min_abs_ev, rescale=rescale, cutoff=False )
+        assert len(s.shape) == 1, ("s should be a vector")
+        assert np.max( s[1:] - s[:-1] ) <= 0., ("s sv error")
+        assert u.shape == A.shape and vh.shape == A.shape, ("Bad shapes", A.shape, u.shape, vh.shape )
+        assert np.min(s) >= min_abs_ev**2, ("Internal floor error", np.min(s), min_abs_ev**2 )
+        """
+        cutoff    = max( total_rel_floor**2 * np.sum(s), ev0_rel_floor**2 * s[0], min_abs_ev**2 )
+        ix        = np.searchsorted( -s, -cutoff, side="right" )
+        assert ix > 0 and s[ix-1] >= cutoff and ( ( ix < len(s) and cutoff > s[ix] ) or ( ix ==len(s) ) ) , ("Index issues", ix, s )
+        d         = np.zeros( (A.shape[0], ix))
+        np.fill_diagonal( d, 1./np.sqrt(s[:ix]))
+        """        
+        d        = np.diag(1./np.sqrt(s))
+        Q        = u @ d
+        assert np.all(np.isfinite(Q)), ("Infinite Q") 
+        return Q.astype(A.dtype)
+       
+    Q = project( XtX - XtY @ P )
+    del XtY, YtY, XtX
+    XtoZ = Q
+    YtoZ = -P @ Q
+    assert XtoZ.shape[0] == num_X, ("Shape error", XtoZ.shape, num_X) 
+    assert YtoZ.shape[0] == num_Y, ("Shape error", YtoZ.shape, num_Y)
+    assert XtoZ.dtype == dtype, ("Dtype error", XtoZ.dtype, dtype)
+    assert YtoZ.dtype == dtype, ("Dtype error", YtoZ.dtype, dtype)
+    return XtoZ, YtoZ
+    
+# ------------------------------------------------
+# Data management
+# -------------------------------------------------
+
+def get( data : dict, item : str, shape : tuple, *, optional : bool = False, dtype : type = None ) -> np.ndarray:
+    """
+    Read a named np array from data while checking its dimensions.
+    
+    Parameters
+    ----------
+    data : dictionary to read from        
+    item : string name what to read
+    shape : expected shape to assert against. Set to None to accept any shape. Can be set to int to test for a given length instead.
+    optional : whether this is optional. In this case, a None entry is accepted.
+    dtype : expected (np) dtype
+
+    Returns
+    -------
+    The data member with the correct shape. None if the element did not exist and optional was true
+    """
+    x = data[item] if not optional else data.get(item, None)
+    if __debug__:
+        if x is None:
+            return x
+        if isinstance(shape, int):
+            assert len(x.shape) == int(shape), ("Shape error: expected shape of length", item, int(shape), x.shape )
+        else:
+            assert shape is None or x.shape == shape, ("Shape error: does not match expected shape", item, x.shape, shape)
+        if not dtype is None:
+            assert x.dtype == dtype, ("Dtype error", item, dtype, x.dtype )
+    return x
+
+def pop( data, item, shape, optional = False, dtype : type = None ):
+    """
+    Pop a named np array from data while checking its dimensions.
+    
+    Parameters
+    ----------
+    data : dictionary to read from        
+    item : string name what to read
+    shape : expected shape to assert against. Set to None to accept any shape.  Can be set to int to test for a given length instead.
+    optional : whether this is optional. In this case, a None entry is accepted.
+
+    Returns
+    -------
+    The data member with the correct shape. None if the element did not exist and optional was true
+    """
+    x = data.pop(item) if not optional else data.pop(item, None)
+    if __debug__:
+        if x is None:
+            return x
+        if isinstance(shape, int):
+            assert len(x.shape) == int(shape), ("Shape error: expected shape of length", item, int(shape), x.shape )
+        else:
+            assert shape is None or x.shape == shape, ("Shape error: does not match expected shape", item, x.shape, shape)
+        if not dtype is None:
+            assert x.dtype == dtype, ("Dtype error", item, dtype, x.dtype )
+    return x

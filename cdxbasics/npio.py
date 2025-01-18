@@ -123,6 +123,15 @@ def _readfromfile( f, array ):
         raise IOError(f"could only read {fmt_digits(read)} of {fmt_digits(length*dsize)} bytes.")
     return np.reshape( array, shape )  # no copy
 
+def _readheader(f):
+    """
+    Read shape, dtype
+    """
+    shape_len  = _read_int(f,2)
+    shape      = tuple( [ int(_read_int(f,4)) for _ in range(shape_len) ] )
+    dtype      = dtype_rev[_read_int(f,1)]
+    return shape, dtype
+
 def readfromfile( file, 
                   target         : np.ndarray, *, 
                   read_only      : bool = False,
@@ -141,7 +150,7 @@ def readfromfile( file,
                     def create( shape ):
                         return np.empty( shape, dtype=np.float32 )
         read_only : whether to clear the 'writable' flag of the array 
-        buffering : see open()
+        buffering : see open(); -1 is the default.
         validate_dtype: if specified, check that the array has the specified dtype
         validate_shape: if specified, check that the array has the specified shape
         
@@ -151,14 +160,16 @@ def readfromfile( file,
     """
     if isinstance(file, str):
         with open( file, "rb", buffering=buffering ) as f:
-            return readfromfile( f, target, read_only=read_only, buffering=buffering )
+            return readfromfile( f, target, 
+                                 read_only=read_only,
+                                 buffering=buffering,
+                                 validate_dtype=validate_dtype,
+                                 validate_shape=validate_shape )
     f = file
     del file
         
     # read shape
-    shape_len  = _read_int(f,2)
-    shape      = tuple( [ int(_read_int(f,4)) for _ in range(shape_len) ] )
-    dtype      = dtype_rev[_read_int(f,1)]
+    shape, dtype = _readheader(f)
 
     if not validate_dtype is None and validate_dtype != dtype:
         _log.throw(f"Failed to read {f.name}: found type {dtype} expected {validate_dtype}.")
@@ -170,20 +181,40 @@ def readfromfile( file,
         if target.shape != shape or target.dtype.base != dtype:
             e = IOError(f"File {f.name} read error: expected shape {target.shape}/{str(target.dtype)} but found {shape}/{str(dtype)}.")
             _log.throw(f"Cannot read from {f.name}: {str(e)}")
+        array = target
         
     else:
-        array    = target( shape=shape, dtype=dtype ) 
+        array = target( shape=shape, dtype=dtype ) 
         assert not array is None, ("'target' function returned None")
         assert array.shape == shape and array.dtype == dtype, ("'target' function returned wrong array; shape:", array.shape, shape, "; dtype:", array.dtype, dtype)
+    del target
 
     try:
-        array = _readfromfile(f, array)
+        _readfromfile(f, array)
     except IOError as e:
         _log.throw(f"Cannot read from {f.name}: {str(e)}")
     if read_only:
         array.flags.writeable  = False
 
+    assert array.flags.writeable == (not read_only), ("Internal flag error", array.flags.writeable, read_only, not read_only )
     return array
+
+def read_shape_dtype( file, buffering : int = -1 ) -> tuple:
+    """
+    Read shape and dtype from a numpy binary file.
+    
+    Parameters
+    ----------
+        file      : file name passed to open(), or a file handle from open()
+        
+    Returns
+    -------
+        shape, dtype
+    """
+    if isinstance(file, str):
+        with open( file, "rb", buffering=buffering ) as f:
+            return read_shape_dtype( f, buffering=buffering )
+    return _readheader(file)
 
 def readinto( file, array : np.ndarray, *, read_only : bool = False ):
     """
@@ -195,7 +226,7 @@ def readinto( file, array : np.ndarray, *, read_only : bool = False ):
     ----------
         file  : file name passed to open(), or an open file
         array : target array to write into. This array must have the same shape and dtype as the source data.
-        read_only : whether to clear the 'writable' flag of the array 
+        read_only : whether to clear the 'writable' flag of the array after the file was read
 
     Returns
     -------

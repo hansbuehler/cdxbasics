@@ -268,7 +268,9 @@ class SubDir(object):
                               Set to "" to turn off managing extensions.
             fmt             - format, current pickle or json
             eraseEverything - delete all contents in the newly defined subdir
-            createDirectory - whether to create the directory in __init__. Otherwise it will be created upon first write().
+            createDirectory - whether to create the directory.
+                              Otherwise it will be created upon first write().
+                              Set to None to use the setting of the parent directory       
         """
         createDirectory = bool(createDirectory) if not createDirectory is None else None
         
@@ -1661,7 +1663,8 @@ class SubDir(object):
                        version : str = None,
                        ext : str = None,
                        fmt : Format = None,
-                       delete_wrong_version : bool = True ):
+                       delete_wrong_version : bool = True,
+                       createDirectory : bool = None ):
         """
         Return either the value of a sub-key (file), or return a new sub directory.
         If only one argument is used, then this function returns a new sub directory.
@@ -1710,7 +1713,17 @@ class SubDir(object):
                 File format or None to use the directory's default.
                 Note that 'fmt' cannot be a list even if 'key' is.
                 Note that unless 'ext' or the SubDir's extension is '*', changing the format does not automatically change the extension.
-
+                
+        The following keywords are only relevant when accessing directories
+        They echo the parameters of __init__
+        
+            createDirectory : bool
+                Whether or not to create the directory. The default, None, is to inherit the behaviour from self.
+            ext : str
+                Set to None to inherit the parent's extension.
+            fmt : Format
+                Set to None to inherit the parent's format.
+                
         Returns
         -------
             Either the value in the file, a new sub directory, or lists thereof.
@@ -1719,8 +1732,8 @@ class SubDir(object):
         if default == SubDir.RETURN_SUB_DIRECTORY:
             if not isinstance(keyOrSub, str):
                 if not isinstance(keyOrSub, Collection): _log.throw("'keyOrSub' must be a string or an iterable object. Found type '%s;", type(keyOrSub))
-                return [ SubDir(k,parent=self,ext=ext,fmt=fmt) for k in keyOrSub ]
-            return SubDir(keyOrSub,parent=self,ext=ext,fmt=fmt)
+                return [ SubDir( k,parent=self,ext=ext,fmt=fmt,createDirectory=createDirectory) for k in keyOrSub ]
+            return SubDir(keyOrSub,parent=self,ext=ext,fmt=fmt,createDirectory=createDirectory)
         return self.read( key=keyOrSub,
                           default=default,
                           raiseOnError=raiseOnError,

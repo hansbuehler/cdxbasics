@@ -63,12 +63,12 @@ class FileLock(object):
                 'filename' may start with '!/' to refer to the temp directory, or '~/' to refer to the user directory.
                 On Unix /dev/shm/ can be used to refer to shared memory.
             acquire :
-                Whether to aquire the lock upon initialization
+                Whether to attempt aquiring the lock upon initialization
             release_on_exit :
                 Whether to auto-release the lock upon exit.
             wait :
                 If False, return immediately if the lock cannot be acquired. 
-                If True, wait with below parameters
+                If True, wait with below parameters; in particular if these are left as defaults the lock will wait indefinitely.
             timeout_seconds :
                 Number of seconds to wait before retrying.
                 Set to 0 to fail immediately.

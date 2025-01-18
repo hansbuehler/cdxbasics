@@ -959,7 +959,7 @@ class Config(OrderedDict):
             # this way we do not trigger a change in ID simply due to a failed read access.
             if child_data != "":
                 inputs[c]  = child_data
-        return uniqueHashExt(length=length,parse_functions=parse_functions)(inputs) if len(inputs) > 0 else ""
+        return uniqueHashExt(length=length,parse_functions=parse_functions)(inputs)
 
     def used_info(self, key : str) -> tuple:
         """Returns the usage stats for a given key in the form of a tuple (done, record) where 'done' is a boolean and 'record' is a dictionary of information on the key """
@@ -1066,7 +1066,119 @@ class Config(OrderedDict):
         """
         return self.unique_id(length=length,parse_functions=parse_functions,parse_underscore=parse_underscore)
 
+
+    # Comparison
+    # -----------
+    
+    def __eq__(self, other):
+        """ Equality operator comparing 'name' and standard dictionary content """        
+        if type(self).__name__ != type(other).__name__:  # allow comparison betweenn different imports
+            return False
+        if self._name != other._name:
+            return False
+        return OrderedDict.__eq__(self, other)
+
+    def __hash__(self):
+        return hash(self._name) ^ OrderedDict.__hash__(self)
+        
 to_config = Config.to_config
+
+# ==============================================================================
+# New in version 0.1.45
+# Support for conditional types, e.g. we can write
+#
+#  x = config(x, 0.1, Float >= 0., "An 'x' which cannot be negative")
+# ==============================================================================
+
+class ConfigField(object):
+    """
+    Simplististc 'read only' wrapper for Config objects.
+    Useful for Flax
+
+        import dataclasses as dataclasses
+        import jax.numpy as jnp
+        import jax as jax
+        from options.cdxbasics.config import Config, ConfigField
+        import types as types
+        
+        class A( nn.Module ):
+            config : ConfigField = ConfigField.field()
+        
+            def setup(self):
+                self.dense = nn.Dense(1)
+        
+            def __call__(self, x):
+                a = self.config("y", 0.1 ,float)
+                return self.dense(x)*a
+        
+        print("Default")
+        a = A()
+        key1, key2 = jax.random.split(jax.random.key(0))
+        x = jnp.zeros((10,10))
+        param = a.init( key1, x )
+        y = a.apply( param, x )
+        
+        print("Value")
+        w = ConfigField(y=1.)
+        a = A(config=w)
+        
+        key1, key2 = jax.random.split(jax.random.key(0))
+        x = jnp.zeros((10,10))
+        param = a.init( key1, x )
+        y = a.apply( param, x )
+        
+        class A( nn.Module ):
+            config : ConfigField = ConfigField.field()
+        
+            @nn.compact
+            def __call__(self, x):
+                a = self.config.x("y", 0.1 ,float)
+                self.config.done()
+                return nn.Dense(1)(x)*a
+                
+        print("Config")
+        c = Config()
+        c.x.y = 1.
+        w = ConfigField(c)
+        a = A(config=w)
+        
+        key1, key2 = jax.random.split(jax.random.key(0))
+        x = jnp.zeros((10,10))
+        param = a.init( key1, x )
+        y = a.apply( param, x )
+        y = a.apply( param, x )    
+    """
+    def __init__(self, config : Config = None, **kwargs):
+        self.config = Config.config_kwargs( config, kwargs )
+    def __call__(self, *kargs, **kwargs):
+        r = self.config(*kargs,**kwargs)
+        print(type(r),r)
+        return r
+    def __getattr__(self, key):
+        return getattr(self.config, key)
+    def __getitem__(self, key):
+        return self.config[key]
+    def __eq__(self, other):
+        if type(other).__name__ == "Config":
+            return self.config == other
+        else:
+            return self.config == other.config
+    def __hash__(self):
+        h = 0
+        for k, v in self.items():
+            h ^= hash(k) ^ hash(v)
+        return h
+
+    @staticmethod
+    def default():
+        return ConfigField()
+    
+    @staticmethod
+    def field():
+        import dataclasses as dataclasses
+        return dataclasses.field( default_factory=ConfigField )
+    
+default_field = ConfigField()
 
 # ==============================================================================
 # New in version 0.1.45
