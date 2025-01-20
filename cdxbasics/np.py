@@ -8,7 +8,14 @@ import numpy as np
 import math as math
 from collections.abc import Mapping
 from cdxbasics.prettydict import PrettyOrderedDict
-from numba import njit, prange
+
+try:
+    from numba import njit, prange
+except ModuleNotFoundError:
+    def njit(*kargs, **kwargs):
+        return lambda x : x
+    prange = range
+
 _log = Logger(__file__)
 
 try:
