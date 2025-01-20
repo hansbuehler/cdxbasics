@@ -1130,7 +1130,7 @@ def is_jupyter():
     return  'jupyter' in parent_process
 
 # =============================================================================
-# Misc Jupyter
+# Misc
 # =============================================================================
 
 class TrackTiming(object):
@@ -1207,3 +1207,54 @@ class TrackTiming(object):
             tr_txt = frmat % dict( text=text, seconds=seconds, fmt_seconds=fmt_seconds(seconds))
             s      = tr_txt if s=="" else s+jn_fmt+tr_txt
         return s
+
+# =============================================================================
+# Misc
+# =============================================================================
+
+class Timer(object):
+    """
+    Micro utility which allows keeing track of time using 'with'
+    
+    with Timer() as t:
+        .... do somthing ...
+        print(f"This took {t}.")
+    """
+    
+    def __init__(self):
+        self.time = time.time()
+        
+    def reset(self):
+        self.time = time.time()
+        
+    def __enter__(self):
+        self.reset()
+        return self
+    
+    def __str__(self):
+        return self.fmt_seconds
+
+    @property
+    def fmt_seconds(self):
+        return fmt_seconds(self.seconds)
+
+    @property
+    def seconds(self):
+        return time.time() - self.time
+
+    @property
+    def minutes(self):
+        return self.seconds / 60.
+
+    @property
+    def hours(self):
+        return self.minutes / 60.
+
+    def __exit__(self, *kargs, **wargs):
+        return False
+
+
+
+
+
+

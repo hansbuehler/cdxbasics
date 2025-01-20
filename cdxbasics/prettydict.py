@@ -193,10 +193,80 @@ class PrettySortedDict(SortedDict):
             raise NotImplementedError("Cannot pass more than one default parameter.")
         return self.get(key,default[0]) if len(default) == 1 else  self.get(key)
         
+class PrettyDictField(object):
+    """
+    Simplististc 'read only' wrapper for PrettyOrderedDict objects.
+    Useful for Flax
 
+        import dataclasses as dataclasses
+        import jax.numpy as jnp
+        import jax as jax
+        from options.cdxbasics.config import Config, ConfigField
+        import types as types
         
-
-
+        class A( nn.Module ):
+            pdct : PrettyOrderedDictField = PrettyOrderedDictField.field()
         
-
+            def setup(self):
+                self.dense = nn.Dense(1)
         
+            def __call__(self, x):
+                a = self.pdct.a
+                return self.dense(x)*a
+        
+        a = A( PrettyOrderedDictField(a=1.) )
+        
+        key1, key2 = jax.random.split(jax.random.key(0))
+        x = jnp.zeros((10,10))
+        param = a.init( key1, x )
+        y = a.apply( param, x )
+    """
+    def __init__(self, pdct : PrettyOrderedDict = None, **kwargs):
+        if not pdct is None:
+            self.pdct = PrettyOrderedDict(pdct if type(pdct).__name__ == type(self).__name__ else pdct.pdct)
+            self.pdct.update(kwargs)
+        else:
+            self.pdct = PrettyOrderedDict(kwargs) 
+            
+    @property
+    def as_dict(self) -> PrettyOrderedDict:
+        """ Return copy of underlying dictionary """
+        return PrettyOrderedDict( self.pdct )
+            
+    @staticmethod
+    def default():
+        return PrettyDictField()
+    
+    @staticmethod
+    def field():
+        import dataclasses as dataclasses
+        return dataclasses.field( default_factory=PrettyDictField )
+
+    # mimic the underlying dictionary
+    # -------------------------------
+    
+    def __getattr__(self, key):
+        return self.pdct.__getattr__(key)
+    def __getitem__(self, key):
+        return self.pdct[key]
+    def __eq__(self, other):
+        if type(other).__name__ == "PrettyOrderedDict":
+            return self.pdct == other
+        else:
+            return self.pdct == other.pdct
+    def keys(self):
+        return self.pdct.keys()
+    def items(self):
+        return self.pdct.items()
+    def values(self):
+        return self.pdct.values()
+    def __hash__(self):
+        h = 0
+        for k, v in self.items():
+            h ^= hash(k) ^ hash(v)
+        return h
+    def __iter__(self):
+        return self.pdct.__iter__()
+    def __len__(self):
+        return self.pdct.__len__()
+

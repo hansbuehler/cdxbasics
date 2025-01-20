@@ -1151,9 +1151,7 @@ class ConfigField(object):
     def __init__(self, config : Config = None, **kwargs):
         self.config = Config.config_kwargs( config, kwargs )
     def __call__(self, *kargs, **kwargs):
-        r = self.config(*kargs,**kwargs)
-        print(type(r),r)
-        return r
+        return self.config(*kargs,**kwargs)
     def __getattr__(self, key):
         return getattr(self.config, key)
     def __getitem__(self, key):
@@ -1168,6 +1166,10 @@ class ConfigField(object):
         for k, v in self.items():
             h ^= hash(k) ^ hash(v)
         return h
+    def as_dict(self):
+        return self.config.as_dict(mark_done=False)
+    def done(self):
+        return self.config.done()
 
     @staticmethod
     def default():
@@ -1177,8 +1179,6 @@ class ConfigField(object):
     def field():
         import dataclasses as dataclasses
         return dataclasses.field( default_factory=ConfigField )
-    
-default_field = ConfigField()
 
 # ==============================================================================
 # New in version 0.1.45

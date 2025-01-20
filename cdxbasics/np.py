@@ -8,7 +8,7 @@ import numpy as np
 import math as math
 from collections.abc import Mapping
 from cdxbasics.prettydict import PrettyOrderedDict
-import numba as numba
+from numba import njit, prange
 _log = Logger(__file__)
 
 try:
@@ -513,6 +513,148 @@ def np_european(   *,
                        voltheta=voltheta,
                        dfrho=dfrho)
 
+# -----------------------------------------------------------
+# (updated) weighted comoutations for orthonormalization
+# -----------------------------------------------------------
+
+@njit(nogil=True)
+def flt_wsum(P,x):
+    """
+    Returns the flattened product P*x without allocating additional memory.
+    Numba compiled
+    """
+    P   = P.flatten()
+    x   = x.flatten()
+    lna = len(x)
+    if len(P) != lna: raise ValueError(f"'P' and 'x' flattened sizes {len(P)} and {len(x)} do not match")
+    if lna == 0: raise ValueError("'x' is empty")
+    r = P[0]*x[0]
+    for i in range(1,lna):
+        r += P[i]*x[i]
+    if __debug__ and not np.isfinite(r): raise FloatingPointError("Numerical errors in flt_wsum")
+    return r
+
+@njit(nogil=True)
+def flt_wsumsqm(P,x,y,meanX = 0.,meanY = 0.):
+    """
+    Returns the flattened product P*(x-meanX)*(y-meanY) without allocating memory.
+    Numba compiled
+    """
+    P   = P.flatten()
+    x   = x.flatten()
+    y   = y.flatten()
+    lna = len(x)
+    if len(P) != len(x): raise ValueError("'P' and 'x' flattened sizes do not match")
+    if len(P) != len(y): raise ValueError("'P' and 'y' flattened sizes do not match")
+#    if x.dtype != y.dtype: raise ValueError("'x' and 'y' have different dtypes {x.dtype} and {y.dtype}")
+    if lna == 0: raise ValueError("'x' is empty")
+    if meanX is None or meanY is None:
+        if meanX is None:
+            meanX = flt_wsum( P=P, x=x )
+        if meanY is None:
+            meanY = flt_wsum( P=P, x=y )
+        return flt_wsumsqm( P=P, x=x, y=y, meanX=meanX, meanY=meanY )
+    r = P[0]*(x[0]-meanX)*(y[0]-meanY)
+    for i in range(1,lna):
+        r += P[i]*(x[i]-meanX)*(y[i]-meanY)
+    if __debug__ and not np.isfinite(r): raise FloatingPointError("Numerical errors in flt_wsumsqm")
+    return r
+
+@njit(parallel=True)
+def wmean( P : np.ndarray, x : np.ndarray ):
+    """
+    Computes the weighted mean for the last coordinates of 'x' without additional memory.
+    Numba compiled.
+    
+    Parameters:
+    -----------
+        P[m] : np.ndarray
+            probabiltiy weighting for m samples
+        X[m,nx] : np.ndarray
+            feature matrix for nx freatures with m samples
+        
+    Returns
+    -------
+        meanX[nx] : np.ndarray
+            weighted means with dtype equal to x
+    """    
+    numX  = x.shape[-1]
+    if numX == 0: raise ValueError("'x' is empty")
+    x     = x.reshape((-1,numX))
+    meanX = np.zeros((numX,), dtype=x.dtype)
+    for ix in prange(numX):
+        meanX[ix] = flt_wsum( P=P, x=x[...,ix] )
+    return meanX
+
+@njit(parallel=True)
+def wcov( P : np.ndarray, x : np.ndarray, y : np.ndarray = None, meanX : np.ndarray = None, meanY : np.ndarray = None ):
+    """
+    Computes the weighted covariance matrix for the last coordinates of 'x' and 'y' without additional memory.
+    Numba compiled.
+    
+    Simply computes:
+        weights * ( x - meanX ) * ( y - meanY )
+    
+    Parameters:
+    -----------
+        P[m] : np.ndarray
+            probabiltiy weighting for m samples
+        X[m,nx] : np.ndarray
+            feature matrix for nx freatures with m samples
+        Y[m,ny] : np.ndarray
+            feature matrix for ny freatures with m samples, or None
+        meanX[nx] : np.ndarray
+            array with weighted means of x. If None this will be computed on the fly
+        meanY[ny] : np.ndarray
+            array with weighted means of y. If None this will be computed on the fly
+        
+    Returns
+    -------
+        meanX[nx] : np.ndarray
+            weighted means with dtype equal to x
+    """
+#    if x.dtype != y.dtype: raise ValueError("'x' and 'y' have different dtypes {x.dtype} and {y.dtype}")
+    numX    = x.shape[-1]
+    numY    = y.shape[-1] 
+    x       = x.reshape((-1,numX))
+    y       = y.reshape((-1,numY)) 
+    P       = P.flatten()
+    m       = x.shape[0]
+    dtype   = x.dtype
+    if len(P) != m: raise ValueError(f"'P' must be of flattened length {m}; found {len(P)}.")
+    if not y is None and y.shape[0] != m: raise ValueError(f"'x' and 'y' do not have compatible sizes {x.shape} and {y.shape} after reshaping")
+    
+    if meanX is None or meanY is None:
+        if meanX is None:
+            meanX = wmean(P=P, x=x)
+        if meanY is None:
+            meanY = wmean(P=P, x=y)
+        return wcov( P=P, x=x, y=y, meanX=meanX, meanY=meanY )
+    meanX   = meanX.flatten()
+    meanY   = meanY.flatten()
+    if numX != len(meanX): raise ValueError(f"'meanX' must be of length {numX} found shape {meanX.shape}")
+    if numY != len(meanY): raise ValueError(f"'meanY' must be of length {numY} found shape {meanY.shape}")
+    
+    Z       = [ x[...,_] for _ in range(numX) ] + [ y[...,_] for _ in range(numY) ]
+    meanZ   = [ meanX[_] for _ in range(numX) ] + [ meanY[_] for _ in range(numY) ] 
+    numZ    = len(Z)
+    x       = None
+    y       = None
+    meanX   = None
+    meanY   = None
+    assert numZ == numX+numY, ("Invalid numZ")
+    C      = np.full((numZ,numZ), np.inf, dtype=dtype)
+    
+    for iz1 in prange(numZ):
+        C[iz1,iz1] = flt_wsumsqm( P=P, x=Z[iz1], y=Z[iz1], meanX=meanZ[iz1], meanY=meanZ[iz1] )
+        for iz2 in range(iz1):
+            c12 = flt_wsumsqm( P=P, x=Z[iz1], y=Z[iz2], meanX=meanZ[iz1], meanY=meanZ[iz2] )
+            C[iz1,iz2] = c12
+            C[iz2,iz1] = c12
+            
+    assert C.dtype == dtype, ("Dtype error", C.dtype, dtype)
+    return C
+
 # ------------------------------------------------
 # Normalization
 # -------------------------------------------------
@@ -658,6 +800,7 @@ def orth_project( XtX, XtY, YtY, * , total_rel_floor : float = 0.001,
         assert np.min(s) >= min_abs_ev**2, ("Internal floor error", np.min(s), min_abs_ev**2 )
         s         = 1./s
         invA      = np.transpose(vh) @ np.diag(s) @ np.transpose(u)
+        del u, s, vh
         assert invA.shape == A.shape, ("Inverse shape error", invA.shape, A.shape)
         assert np.all(np.isfinite(invA)), ("Infinite inverse of A") 
         return invA.astype(A.dtype)
@@ -681,8 +824,8 @@ def orth_project( XtX, XtY, YtY, * , total_rel_floor : float = 0.001,
         d         = np.zeros( (A.shape[0], ix))
         np.fill_diagonal( d, 1./np.sqrt(s[:ix]))
         """        
-        d        = np.diag(1./np.sqrt(s))
-        Q        = u @ d
+        Q        = u @ np.diag(1./np.sqrt(s))
+        del u, s, vh
         assert np.all(np.isfinite(Q)), ("Infinite Q") 
         return Q.astype(A.dtype)
        
