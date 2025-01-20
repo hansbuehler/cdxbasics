@@ -21,6 +21,7 @@ from IPython import display
 import io as io
 import gc as gc
 import types as types
+import numpy as np
 from .deferred import Deferred
 from .logger import Logger
 from collections.abc import Collection
