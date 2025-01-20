@@ -5,6 +5,16 @@ Install by
 
     pip install cdxbasics
 
+Most useful additions:
+* *dynaplot* is a framework for simple dynamic graphs with matplotlib.
+* *config* allows robust managements of configurations. It automates help, validation checking, and detects misspelled configuration arguments
+* *subdir* wraps various file and directory functions into convenient objects. Useful if files have commons extensions. Supports versioned file i/o
+with `version`. With that it offers a simple but effective caching methodology.
+* *npio* has a low lever interface for binary i/o for numpy files for fast read/write.
+* *version* adds version information including dependencies to functions and objects.
+* *verbose* provides user-controllable context output.
+* *utils* offers a number of utility functions such as uniqueHashes, standard formatting for lists, dictionaries etc
+* *prettydict* if you do not like the item access method but prefer attribute access.
 
 # dynaplot
 
@@ -20,7 +30,7 @@ The package now contains a lazy method to manage updates. Instead of updating in
 
 ### Animated Matplotlib in Jupyter
 
-See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb) for some applications. 
+See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooksth/DynamicPlot.ipynb) for some applications. 
 
 ![dynamic line plot](https://raw.githubusercontent.com/hansbuehler/cdxbasics/master/media/dynaplot.gif)
 ![dynamic 3D plot](https://raw.githubusercontent.com/hansbuehler/cdxbasics/master/media/dynaplot3D.gif)
@@ -79,8 +89,6 @@ The package lets you create sub plots without having to know the number of plots
     fig.render()                    # draws the plots
    
 ### Other features
-
-
 
 There are a number of other functions to aid plotting
 
@@ -166,6 +174,25 @@ The reason for this is as follows: consider
     pdct['mult'] = mult
     pdct.mult(3,4) --> 12
  
+### Dataclasses
+
+Dataclasses have difficulties with derived dictionaries.
+This applies as well to `Flax` modules.
+For fields in dataclasses use `PrettyDictField`:
+
+	from cdxbasics.prettydict import PrettyDictField
+	from dataclasses import dataclass
+
+	@dataclass
+	class Data:
+		...
+		data : PrettyDictField = PrettyDictField.field()
+
+		def f(self):
+			return self.data.x
+
+	d = Data( PrettDictField(x=1) )
+	f.f()
 
 # config
 
@@ -264,7 +291,6 @@ We can combine conditional expressions with the tuple notation:
     # example allowing either None or a positive int
     self.batch_size = network('batch_size', None, (None, Int>0), "Batch size or None for TensorFlow's default 32", help_cast="Positive integer, or None")
 
-
 ### Ensuring that we had no typos & that all provided data is meaningful
 
 A common issue when using dictionary-based code is that we might misspell one of the parameters. Unless this is a mandatory parameter we might not notice that we have not actually changed its value in the code below.
@@ -331,7 +357,6 @@ produces
     config['features'] = ['time', 'spot'] #  Default: 2
 
 You can check the status of the use of the config by using the `not_done` property.
-
 
 ### Detaching child configs and other Copy operations
 
@@ -409,11 +434,11 @@ If now a user calls `f` with a misspelled `config(difficlt_name=5)` an error wil
 
 Another pattern is to allow both `config` and `kwargs`:
 
-        def f( config=Config(), **kwargs):
-            kwargs = config.detach.update(kwargs)
-            a = kwargs("difficult_name", 10)
-            b = kwargs("b", 20)
-            kwargs.done()
+        def f( config=None, **kwargs):
+            config = Config.config_kwargs(config,kwargs)
+            a = config("difficult_name", 10, int)
+            b = config("b", 20, int)
+            config.done()
 
 # logger
 
@@ -475,16 +500,23 @@ If-conditional functions
 
 # subdir
 
-A few tools to handle file i/o in a transparent way. The key idea is to provide transparent, concise pickle access to the file system in a manner similar to dictionary access - hence core file names are referred to as 'keys'. Files managed by `subdir` all have the same extension. From 0.2.60 `SubDir` supports different file formats specified with the `fmt=` keyword to `SubDir`:
+A few tools to handle file i/o in a transparent way.
+The key idea is to provide transparent, concise pickle access to the file system in a manner similar to dictionary access - hence core file names are referred to as 'keys'. Files managed by `subdir` all have the same extension.
+From 0.2.60 `SubDir` supports different file formats specified with the `fmt=` keyword to `SubDir`:
 
 * PICKLE: standard pickling. Default extension 'pck'
 * JSON_PICKLE: uses the `jsonpickle` package. Default extension 'jpck'. The advantage of this format over PICKLE is that it is somewhat human-readable. However, `jsonpickle` uses compressed formats for complex objects such as `numpy` arrays, hence readablility is somewhat limited. It comes at cost of slower writing speeds.
 * JSON_PLAIN: calls `cdxbasics.util.plain()` to convert objects into plain Python objects before using `json` to write them. That means that deserialized data does not have the correct object structure. However, such files are much easier to read.
 * BLOSC: uses [blosc](https://github.com/blosc/python-blosc) to write compressed binary data. The blosc compression algorithm is very fast, hence using this mode will not usually lead to notably slower performanbce than using PICKLE but will generate smaller files, depending on your data structure.
 
+`subdir` supports versioned files.
+
 ### Creating directories
 
-You can create directories using the `SubDir` class. Simply write
+You can create directories object using the `SubDir` class.
+By default the underlying directory is only created once a write attempt is made.
+
+Simply write
 
     from cdxbasics.subdir import SubDir
     subdir = SubDir("my_directory")      # relative to current working directory
@@ -495,7 +527,9 @@ You can create directories using the `SubDir` class. Simply write
 You can specify a parent for relative path names:
 
     from cdxbasics.subdir import SubDir
-    subdir = SubDir("my_directory", "~")      # relative to home directory
+    subdir = SubDir("my_directory", "~")     # relative to home directory
+    subdir = SubDir("my_directory", "!")      # relative to default temp directory
+    subdir = SubDir("my_directory", ".")      # relative to current directory
     subdir2 = SubDir("my_directory", subdir)  # subdir2 is relative to `subdir`
 
 Change the extension to `bin`
@@ -517,16 +551,18 @@ You may specify the file format; in this case the extension will be automaticall
     subdir = SubDir("~/my_directory", fmt=SubDir.JSON_PICKLE)
     subdir = SubDir("~/my_directory", fmt=SubDir.JSON_PLAIN)
 
-You can also use the `()` operator to generate sub directories. This operator is overloaded: for a single argument, it creates a relative sub-directory:
+You can also use the `()` operator to generate sub directories.
+This operator is overloaded: for a single argument, it creates a relative sub-directory:
 
     from cdxbasics.subdir import SubDir
     parent = SubDir("~/parent")
     subdir = parent("subdir")                                # shares extension and format with parent
     subdir = parent("subdir", ext="bin", fmt=SubDir.PICKLE)  # change extension and format
 
-Be aware that when the operator `()` is called with two arguments, then it reads files; see below.
+Be aware that when the operator `()` is called with two keyword arguments, then it reads files; see below.
 
-You can obtain a list of all sub directories in a directory by using `subDirs()`.
+You can obtain a list of all sub directories in a directory by using `subDirs()`. The list of files 
+with the corresponding extension is accessible via `files()`. 
 
 ### Reading
 
@@ -596,8 +632,10 @@ or `fullKeyName()`.
 ### Reading and Writing Versioned Files
 
 From 0.2.64 `SubDir` supports versioned files. If versions are used, then they *must* be used for both reading and writing.
+`cdxbasics.version` provides a standards framework to define versions for classes and functions.
 
-If `version=` is provided, then `write()` will write it in a block ahead of the main content of the file. In case of the PICKLE format, this is a byte string. In case of JSON_PLAIN and JSON_PICKLE this is line of text starting with `#` ahead of the file. (Note that this violates
+If `version=` is provided, then `write()` will write it in a block ahead of the main content of the file.
+In case of the PICKLE format, this is a byte string. In case of JSON_PLAIN and JSON_PICKLE this is line of text starting with `#` ahead of the file. (Note that this violates
  the JSON file format.)
 The point of writing short block ahead of the main data is that `read()` can read this version information back quickly before attempting to read the entire file. `read()` does attempt so if its called with `version=` as well. In this case it will compare the read version with the provided version, and only return the main content of the file if versions match.
 
@@ -628,7 +666,9 @@ You can ignoore the version used to write a file by using `*` as version:
 
     _ = sub_dir.read("test", version="*")
 
-Note that reading files which have been written with a version back without `version=` keyword will fail because `SubDir` will only append additional information to the chosen file format if required.
+Note that reading files which have been written with a version back without
+`version=` keyword will fail because `SubDir` will only append additional information
+to the chosen file format if required.
 
 ### Test existence of files
 
@@ -751,7 +791,7 @@ It implements the following decision matrix
 |                                        |on    |off     |update   |clear   |readonly|
 |----------------------------------------|------|--------|---------|--------|--------|
 |load cache from disk if exists          |x     |-       |-        |-       |x|
-|write updates to di.sk                   |x     |-       |x        |-       |-|
+|write updates to di.sk                  |x     |-       |x        |-       |-|
 |delete existing object                  |-     |-       |-        |x       |-|
 |delete existing object if incompatible  |x     |-       |x        |x       |-|
 
