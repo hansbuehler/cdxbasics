@@ -16,6 +16,7 @@ import cdxbasics.prettydict as prettydict
 import cdxbasics.verbose as verbose
 import cdxbasics.version as ver
 import datetime as datetime
+import dataclasses as dataclasses
 import numpy as np
 if False:
     import importlib as imp
@@ -49,6 +50,7 @@ _compress_function_code = util._compress_function_code
 OrderedDict = prettydict.OrderedDict
 
 Config = config.Config
+ConfigField = config.ConfigField
 Float = config.Float
 Int = config.Int
 version = ver.version
@@ -1082,13 +1084,11 @@ class CDXCConfigTest(unittest.TestCase):
 
         id2 = config.unique_id()
         self.assertNotEqual(id1,id2)
-
-        print(config)
+        self.assertEqual(id2,"ee3f0548a51125451d18ce9297d17252")
 
         _ = config.nothing("get_nothing", 0)  # this triggered a new ID in old versions
 
         id3 = config.unique_id()
-        print(config)
         self.assertEqual(id2,id3)
 
         # pickle test
@@ -1163,6 +1163,25 @@ class CDXCConfigTest(unittest.TestCase):
         _ = c1("b", 3)
         _ = config("b", 2)  # different default - ok
 
+    def test_dataclass(self):
+        
+        @dataclasses.dataclass
+        class A:
+            i : int = 0
+            config : ConfigField = ConfigField.field()
+            
+            def f(self):
+                return self.config("a", 1, int, "Test")
+            
+        a = A()
+        self.assertEqual(a.f(),1)
+        c = Config()
+        a = A(i=2,config=ConfigField(c))
+        self.assertEqual(a.f(),1)
+        c = Config(a=2)
+        a = A(i=2,config=ConfigField(c))
+        self.assertEqual(a.f(),2)
+            
 if __name__ == '__main__':
     unittest.main()
 

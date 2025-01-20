@@ -945,21 +945,27 @@ class Config(OrderedDict):
         -------
             String ID
         """
-        inputs = {}
-        for key in self:
-            if key[:1] == "_":
-                continue
-            inputs[key] = self.get_raw(key)
-        for c, child in self._children.items():
-            if c[:1] == "_":
-                continue
-            # collect ID for the child
-            child_data = child.unique_id()
-            # we only register children if they have keys.
-            # this way we do not trigger a change in ID simply due to a failed read access.
-            if child_data != "":
-                inputs[c]  = child_data
-        return uniqueHashExt(length=length,parse_functions=parse_functions)(inputs)
+        def rec(config):
+            """ Recursive version which returns an empty string for empty sub configs """
+            inputs = {}
+            for key in config:
+                if key[:1] == "_":
+                    continue
+                inputs[key] = config.get_raw(key)
+            for c, child in config._children.items():
+                if c[:1] == "_":
+                    continue
+                # collect ID for the child
+                child_data = rec(child)
+                # we only register children if they have keys.
+                # this way we do not trigger a change in ID simply due to a failed read access.
+                if child_data != "":
+                    inputs[c]  = child_data
+            if len(inputs) == 0:
+                return ""
+            return uniqueHashExt(length=length,parse_functions=parse_functions)(inputs)
+        uid = rec(self)
+        return uid if uid!="" else uniqueHashExt(length=length,parse_functions=parse_functions)("")
 
     def used_info(self, key : str) -> tuple:
         """Returns the usage stats for a given key in the form of a tuple (done, record) where 'done' is a boolean and 'record' is a dictionary of information on the key """
