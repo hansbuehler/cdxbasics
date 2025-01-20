@@ -695,6 +695,41 @@ All of these are _silent_, and will not throw errors if 'file' does not exist. I
 * `deleteAllContent`: delete all files with our extension, and all sub directories.
 * `eraseEverything`: delete everything
 
+### Caching
+
+A `SubDir` object offers an context for caching calls to `Callable`s.
+Explicit usage is as follows:
+
+			from cdxbasics.subdir import SubDir
+
+            def f(x,y):
+                return x*y
+
+			subdir = SubDir("!/cache")
+            x = 1
+            y = 2
+            z = subdir.cache_callable( f, unique_args_id=f"{x},{y}", version="1", label="f" )( x, y=y )
+
+Here we specify a version, label and a unique ID specifically.
+The caching behaviour itself can be controlled by specifying a `cache_mode` parameter to `cache_callable`.
+
+A pythonic version uses the decorator
+
+			from cdxbasics.version import version
+			from cdxbasics.subdir import SubDir
+
+            @version("1")  # automatically equip 'f' with a version
+            def f(x,y):
+                return x*y        
+
+			subdir = SubDir("!/cache")
+            z = cache_callable( f )( 1, y=2 )
+
+To use this pattern
+* The callable F must be decorate with cdxbascis.version.version
+* All parameters of F must be convertable to with cdxbasics.util.uniqueHash
+* The function name must be unique.
+
 # filelock
 
 A system wide resource lock using a simplistic but robust implementation via a file lock.
