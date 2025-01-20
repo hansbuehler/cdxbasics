@@ -42,12 +42,14 @@ See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbu
     x  = np.linspace(0,1,100)
     pm = 0.2
 
+	# create figure and plots
     fig = dynaplot.figure(col_size=10)
     ax = fig.add_subplot()
     ax2 = fig.add_subplot()
     ax2.sharey(ax)
     store = fig.store()
 
+	# render the figure: places the plots and draws their frames
     fig.render()
 
     import time
