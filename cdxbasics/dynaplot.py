@@ -81,6 +81,10 @@ class AutoLimits( object ):
 
         Parameters
         ----------
+            *args:
+                Either y or x,y
+            axis: 
+                along which axis to compute min/max/quantiles
         """
         assert len(args) in [1,2], ("'args' must be 1 or 2", len(args))
 
@@ -96,7 +100,7 @@ class AutoLimits( object ):
         if not self.lookback is None:
             y = y[-self.lookback:,...]
             x = x[-self.lookback:,...] if not x is None else None
-
+            
         min_y = np.min( np.quantile( y, self.lo_q, axis=axis ) ) if self.lo_q > 0. and len(y) > self.min_length else np.min( y )
         max_y = np.max( np.quantile( y, self.hi_q, axis=axis ) ) if self.hi_q < 1. and len(y) > self.min_length else np.max( y )
         assert min_y <= max_y, ("Internal error", min_y, max_y, y)
@@ -418,13 +422,15 @@ class DynamicAx(Deferred):
                 my_args = my_args[2:]
         return plot( *args, scalex=scalex, scaley=scaley, data=data, **kwargs )
     
+    """
     def __getattr__(self, name):
-        """ Forward all other functions to 'ax' """
+        # Forward all other functions to 'ax'
         if name[:2] == "__":
-            return object.__getattr__(self, name)
+            raise AttributeError(name)
         if not getattr(self, "__ready__", False):
-            return object.__getattr__(self, name)
+            raise AttributeError(name)
         return getattr( self.ax, name )
+    """
     
     def auto_limits( self, low_quantile, high_quantile, min_length : int = 10, lookback : int = None ):
         """
@@ -536,10 +542,11 @@ class DynamicFig(Deferred):
 
     MODE = 'hdisplay'  # switch to 'canvas' if it doesn't work
 
-    def __init__(self, row_size : int = 5,
+    def __init__(self, title    : str = None, *,
+                       row_size : int = 5,
                        col_size : int = 4,
                        col_nums : int = 5,
-                       title    : str = None,
+                       tight    : bool = True,
                        **fig_kwargs ):
         """
         Setup object with a given output geometry.
@@ -553,23 +560,27 @@ class DynamicFig(Deferred):
         
         Parameters
         ----------
-            fig_id : str
-                ID of the containing figure, typically just hash(fig)
-            row_size : int, optional
-                Size for a row for matplot lib. Default is 5
-            col_size : int, optional
-                Size for a column for matplot lib. Default is 4
-            col_nums : int, optional
-                How many columns to use when add_subplot() is used. If omitted, and grid_spec is None, then the default is 5.
-            title : str, optional
-                An optional title which will be passed to suptitle()
-            fig_kwargs :
-                kwargs for matplotlib figure plus
-                tight : bool, optional (False)
-                    Short cut for tight_layout
-                    https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.figure.html#
-                By default, 'figsize' is derived from col_size and row_size. If 'figsize' is specified,
-                those two values are ignored.
+        title : str, optional
+            An optional title which will be passed to suptitle()
+        row_size : int, optional
+            Size for a row for matplot lib. Default is 5.
+            This is ignored if 'figsize' is specified as part of fig_kwargs
+        col_size : int, optional
+            Size for a column for matplot lib. Default is 4
+            This is ignored if 'figsize' is specified as part of fig_kwargs
+        col_nums : int, optional
+            How many columns to use when add_subplot() is used.
+            If omitted, and grid_spec is not specified in fig_kwargs, then the default is 5.
+            This is ignored if 'figsize' is specified as part of fig_kwargs
+        tight : bool, optional (False)
+            Short cut for tight_layout
+            
+        fig_kwargs :
+            matplotlib oarameters for creating the figure
+            https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.figure.html#
+
+            By default, 'figsize' is derived from col_size and row_size. If 'figsize' is specified,
+            those two values are ignored.
         """
         Deferred.__init__(self, "figure")
         self.hdisplay   = None
@@ -579,9 +590,9 @@ class DynamicFig(Deferred):
         self.row_size   = int(row_size)
         self.col_size   = int(col_size)
         self.col_nums   = int(col_nums)
-        self.tight      = fig_kwargs.get( "tight", True )
+        self.tight      = bool(tight)
         self.tight_para = None
-        self.fig_kwargs = { _ : fig_kwargs[_] for _ in fig_kwargs if not _ == "tight" }
+        self.fig_kwargs = dict(fig_kwargs)
         if self.tight:
             self.fig_kwargs['tight_layout'] = True
         _log.verify( self.row_size > 0 and self.col_size > 0 and self.col_nums > 0, "Invalid input.")
@@ -602,6 +613,7 @@ class DynamicFig(Deferred):
         """
         Add a subplot.
         This function will return a wrapper which defers the creation of the actual sub plot until self.render() or self.close() is called.
+        Thus function cannot be called after render() was called. Use add_axes() in that case.
 
         Parameters
         ----------
@@ -840,9 +852,14 @@ class DynamicFig(Deferred):
         if render:
             self.render()
 
-def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kwargs ) -> DynamicFig:
+def figure( title    : str = None, *, 
+            row_size : int = 5, 
+            col_size : int = 4, 
+            col_nums : int = 5, 
+            tight    : bool = True,
+            **fig_kwargs ) -> DynamicFig:
     """
-    Generates a dynamic figure using matplot lib.
+    Generates a 'DynamicFig' dynamic figure using matplot lib.
     It has the following main functions
 
         add_subplot():
@@ -885,17 +902,25 @@ def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kw
         
     Paraneters
     ----------
+        title : str, optional
+            An optional title which will be passed to suptitle()
         row_size : int, optional
-            Size for a row for matplot lib. Default is 5
+            Size for a row for matplot lib. Default is 5.
+            This is ignored if 'figsize' is specified as part of fig_kwargs
         col_size : int, optional
             Size for a column for matplot lib. Default is 4
+            This is ignored if 'figsize' is specified as part of fig_kwargs
         col_nums : int, optional
-            How many columns. Default is 5
+            How many columns to use when add_subplot() is used.
+            If omitted, and grid_spec is not specified in fig_kwargs, then the default is 5.
+            This is ignored if 'figsize' is specified as part of fig_kwargs
+        tight : bool, optional (False)
+            Short cut for tight_layout
+            
         fig_kwargs :
-            kwargs for matplotlib figure, plus
-            tight : bool, optional (False)
-                Short cut for tight_layout
-                https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.figure.html#
+            matplotlib oarameters for creating the figure
+            https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.figure.html#
+
             By default, 'figsize' is derived from col_size and row_size. If 'figsize' is specified,
             those two values are ignored.
 
@@ -904,7 +929,7 @@ def figure( row_size : int = 5, col_size : int = 4, col_nums : int = 5, **fig_kw
         DynamicFig
             A figure wrapper; see above.
     """
-    return DynamicFig( row_size=row_size, col_size=col_size, col_nums=col_nums, **fig_kwargs )
+    return DynamicFig( title=title, row_size=row_size, col_size=col_size, col_nums=col_nums, tight=tight, **fig_kwargs )
 
 # ----------------------------------------------------------------------------------
 # Utility class for animated content

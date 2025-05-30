@@ -723,7 +723,7 @@ def robust_svd( A : np.ndarray, *, total_rel_floor : float = 0.001,
     s[1:][s[1:] < min_sv] = 0. if cutoff else min_sv
 
     if rescale:
-        s              *= total_var / np.sum( s )
+        s  *= total_var / np.sum( s )
     assert np.all(np.isfinite(s)), ("Infinite 's'") 
     return u, s, vt
 

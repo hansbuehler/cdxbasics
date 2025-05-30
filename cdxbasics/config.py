@@ -10,6 +10,7 @@ from sortedcontainers import SortedDict
 from .util import uniqueHashExt, fmt_list
 from .prettydict import PrettyDict as pdct
 from .logger import Logger
+from dataclasses import Field
 _log = Logger(__file__)
 
 class _ID(object):
@@ -209,6 +210,13 @@ class Config(OrderedDict):
             _log.verify( not n in d, "Cannot convert config to dictionary: found both a regular value, and a child with name '%s'", n)
             d[n] = c
         return d
+    
+    def as_field(self) -> Field:
+        """
+        Returns a ConfigField wrapped around self for dataclasses and flax nn.Mpodule support.
+        See ConfigField documentation for an example.
+        """
+        return ConfigField(self)
 
     # handle finishing config use
     # ---------------------------
@@ -567,7 +575,7 @@ class Config(OrderedDict):
     def __getattr__(self, key : str):
         """
         Returns either the value for 'key', if it exists, or creates on-the-fly a child config
-        with the name 'key' and retruns it
+        with the name 'key' and returns it
         """
         _log.verify( key.find('.') == -1 , "Error in config '%s': key name cannot contain '.'. Found %s", self._name, key )
         if key in self._children:
@@ -678,6 +686,7 @@ class Config(OrderedDict):
             key : str
                 Key to store. Note that keys with underscores are *not* stored as standard values,
                 but become classic members of the object (self.__dict__)
+                'key' may contain '.' for hierarchical access.
             value :
                 If value is a Config object, them its usage information will be reset, and
                 the recorder will be set to the current recorder.
@@ -705,7 +714,14 @@ class Config(OrderedDict):
             update_recorder(value)
             self._children[key]      = value
         else:
-            OrderedDict.__setitem__(self, key, value)
+            keys = key.split(".")
+            if len(keys) == 1:
+                OrderedDict.__setitem__(self, key, value)
+            else:
+                c = self
+                for key in keys[:1]:
+                    c = c.__getattr__(key)
+                OrderedDict.__setitem__(c, key, value)
 
     def update( self, other=None, **kwargs ):
         """
@@ -715,6 +731,7 @@ class Config(OrderedDict):
             update( dictionary )
             update( config )
             update( a=1, b=2 )
+            update( {'x.a':1 } )  # hierarchical assignment self.x.a = 1
 
         Parameters
         ----------
@@ -722,6 +739,7 @@ class Config(OrderedDict):
                 Copy all content of 'other' into 'self'.
                 If 'other' is a config: elements will be clean_copy()ed.
                   'other' will not be marked as 'used'
+                If 'other' is a dictionary, then '.' notation can be used for hierarchical assignments 
             **kwargs
                 Allows assigning specific values.
         """
@@ -1033,31 +1051,33 @@ class Config(OrderedDict):
     @staticmethod
     def config_kwargs( config, kwargs : dict, config_name : str = "kwargs"):
         """
-        Default implementation for a usage pattern where the user can use both a 'config' and kwargs
+        Default implementation for a usage pattern where the user can use both a 'config' and kwargs.
+        This function 'detaches' the current config from 'self' which means done() must be called again.
+        
         Example
 
         def f(config, **kwargs):
             config = Config.config_kwargs( config, kwargs )
             ...
             x = config("x", 1, ...)
+            config.done() # <-- important to do this here. Remembert that config_kwargs() calls 'detach'
 
-        and then one can use eigher
+        and then one can use either
 
             config = Config()
             config.x = 1
             f(config)
 
         or
-
             f(x=1)
 
         """
-        if isinstance(config, Config):
-            if len(kwargs) > 0:
-                config = config.detach()
-                config.update(kwargs)
+        assert isinstance( config_name, str ), "'config_name' must be a string"
+        if type(config).__name__ == Config.__name__: # we allow for import inconsistencies
+            config = config.detach()
+            config.update(kwargs)
         else:
-            if not config is None: _log.throw("'config' must be a Config or None. Found type '%s'", type(config).__name__)
+            if not config is None: raise TypeError("'config' must be of type 'Config'")
             config = Config.to_config( kwargs=kwargs, config_name=config_name )
         return config
 
@@ -1155,27 +1175,41 @@ class ConfigField(object):
         y = a.apply( param, x )    
     """
     def __init__(self, config : Config = None, **kwargs):
-        self.config = Config.config_kwargs( config, kwargs )
+        if not config is None:
+            config = config if type(config).__name__ != type(self).__name__ else config.__config        
+        self.__config = Config.config_kwargs( config, kwargs )
     def __call__(self, *kargs, **kwargs):
-        return self.config(*kargs,**kwargs)
+        return self.__config(*kargs,**kwargs)
     def __getattr__(self, key):
-        return getattr(self.config, key)
+        if key[:2] == "__":
+            return object.__getattr__(self, key)
+        return getattr(self.__config, key)
     def __getitem__(self, key):
-        return self.config[key]
+        return self.__config[key]
     def __eq__(self, other):
         if type(other).__name__ == "Config":
-            return self.config == other
+            return self.__config == other
         else:
-            return self.config == other.config
+            return self.__config == other.config
     def __hash__(self):
         h = 0
         for k, v in self.items():
             h ^= hash(k) ^ hash(v)
         return h
+    def __unique_hash__(self, *kargs, **kwargs):
+        return self.__config.__unique_hash__(*kargs, **kwargs)
+    def __str__(self):
+        return self.__pdct.__str__()
+    def __repr__(self):
+        return self.__pdct.__repr__()
     def as_dict(self):
-        return self.config.as_dict(mark_done=False)
+        return self.__config.as_dict(mark_done=False)
     def done(self):
-        return self.config.done()
+        return self.__config.done()
+
+    @property
+    def config(self) -> Config:
+        return self.__config
 
     @staticmethod
     def default():

@@ -1,12 +1,14 @@
 """
-config
-Utility object for ML project configuration
+prettyict
+Dictionaries with member synthax access
 Hans Buehler 2022
 """
 
 from collections import OrderedDict
 from sortedcontainers import SortedDict
+from dataclasses import Field
 import types as types
+from collections.abc import Mapping, Collection
 
 class PrettyDict(dict):
     """
@@ -60,6 +62,13 @@ class PrettyDict(dict):
         if len(default) > 1:
             raise NotImplementedError("Cannot pass more than one default parameter.")
         return self.get(key,default[0]) if len(default) == 1 else  self.get(key)
+
+    def as_field(self) -> Field:
+        """
+        Returns a PrettyDictField wrapper around self for use in dataclasses
+        See PrettyDictField documentation for an example
+        """
+        return PrettyDictField(self)
         
 class PrettyOrderedDict(OrderedDict):
     """
@@ -114,6 +123,13 @@ class PrettyOrderedDict(OrderedDict):
             raise NotImplementedError("Cannot pass more than one default parameter.")
         return self.get(key,default[0]) if len(default) == 1 else  self.get(key)
     
+    def as_field(self) -> Field:
+        """
+        Returns a PrettyDictField wrapper around self for use in dataclasses
+        See PrettyDictField documentation for an example
+        """
+        return PrettyDictField(self)
+
     @property
     def at_pos(self):
         """
@@ -140,6 +156,7 @@ class PrettyOrderedDict(OrderedDict):
     
 class PrettySortedDict(SortedDict):
     """
+    *NOT WORKING WELL*
     Sorted dictionary which allows accessing its members with member notation, e.g.        
         pdct = PrettyDict()
         pdct.x = 1
@@ -192,7 +209,7 @@ class PrettySortedDict(SortedDict):
         if len(default) > 1:
             raise NotImplementedError("Cannot pass more than one default parameter.")
         return self.get(key,default[0]) if len(default) == 1 else  self.get(key)
-        
+    
 class PrettyDictField(object):
     """
     Simplististc 'read only' wrapper for PrettyOrderedDict objects.
@@ -214,24 +231,48 @@ class PrettyDictField(object):
                 a = self.pdct.a
                 return self.dense(x)*a
         
-        a = A( PrettyOrderedDictField(a=1.) )
+        r = PrettyOrderedDict(a=1.)
+        a = A( r.as_field() )
         
         key1, key2 = jax.random.split(jax.random.key(0))
         x = jnp.zeros((10,10))
         param = a.init( key1, x )
         y = a.apply( param, x )
+        
+    The class will traverse pretty dictionaries of pretty dictionaries correctly.
+    However, it has some limitations as it does not handle custom lists of pretty dicts.
     """
     def __init__(self, pdct : PrettyOrderedDict = None, **kwargs):
+        """ Initialize with an input dictionary and potential overwrites """
         if not pdct is None:
-            self.pdct = PrettyOrderedDict(pdct if type(pdct).__name__ == type(self).__name__ else pdct.pdct)
-            self.pdct.update(kwargs)
+            if type(pdct).__name__ == type(self).__name__ and len(kwargs) == 0:
+                # copy
+                self.__pdct = PrettyOrderedDict( pdct.__pdct )
+                return
+            if not isinstance(pdct, Mapping): raise ValueError("'pdct' must be a Mapping")
+            self.__pdct = PrettyOrderedDict(pdct)
+            self.__pdct.update(kwargs)
         else:
-            self.pdct = PrettyOrderedDict(kwargs) 
+            self.__pdct = PrettyOrderedDict(**kwargs) 
+        def rec(x):
+            for k, v in x.items():
+                if isinstance(v, (PrettyDict, PrettyOrderedDict, PrettySortedDict)):
+                    x[k] = PrettyDictField(v)
+                elif isinstance(v, Mapping):
+                    rec(v)
+        rec(self.__pdct)
             
-    @property
     def as_dict(self) -> PrettyOrderedDict:
         """ Return copy of underlying dictionary """
-        return PrettyOrderedDict( self.pdct )
+        return PrettyOrderedDict( self.__pdct )
+
+    def as_field(self) -> Field:
+        """
+        Returns a PrettyDictField wrapper around self for use in dataclasse
+        This function makes a (shallow enough) copy of the current field.
+        It is present so iterative applications of as_field() are convenient.        
+        """
+        return PrettyDictField(self)
             
     @staticmethod
     def default():
@@ -246,27 +287,37 @@ class PrettyDictField(object):
     # -------------------------------
     
     def __getattr__(self, key):
-        return self.pdct.__getattr__(key)
+        if key[:2] == "__":
+            return object.__getattr__(self,key)
+        return self.__pdct.__getattr__(key)
     def __getitem__(self, key):
-        return self.pdct[key]
+        return self.__pdct[key]
+    def __call__(self, *kargs, **kwargs):
+        return self.__pdct(*kargs, **kwargs)
     def __eq__(self, other):
         if type(other).__name__ == "PrettyOrderedDict":
-            return self.pdct == other
+            return self.__pdct == other
         else:
-            return self.pdct == other.pdct
+            return self.__pdct == other.pdct
     def keys(self):
-        return self.pdct.keys()
+        return self.__pdct.keys()
     def items(self):
-        return self.pdct.items()
+        return self.__pdct.items()
     def values(self):
-        return self.pdct.values()
+        return self.__pdct.values()
     def __hash__(self):
         h = 0
         for k, v in self.items():
             h ^= hash(k) ^ hash(v)
         return h
     def __iter__(self):
-        return self.pdct.__iter__()
+        return self.__pdct.__iter__()
+    def __contains__(self, key):
+        return self.__pdct.__contains__(key)
     def __len__(self):
-        return self.pdct.__len__()
-
+        return self.__pdct.__len__()
+    def __str__(self):
+        return self.__pdct.__str__()
+    def __repr__(self):
+        return self.__pdct.__repr__()
+    
