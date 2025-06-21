@@ -1124,11 +1124,11 @@ class ConfigField(object):
         import dataclasses as dataclasses
         import jax.numpy as jnp
         import jax as jax
-        from options.cdxbasics.config import Config, ConfigField
+        from cdxbasics.config import Config, ConfigField
         import types as types
         
         class A( nn.Module ):
-            config : ConfigField = ConfigField.field()
+            config : ConfigField = ConfigField.Field()
         
             def setup(self):
                 self.dense = nn.Dense(1)
@@ -1216,7 +1216,7 @@ class ConfigField(object):
         return ConfigField()
     
     @staticmethod
-    def field():
+    def Field():
         import dataclasses as dataclasses
         return dataclasses.field( default_factory=ConfigField )
 

@@ -6,9 +6,10 @@ Hans Buehler 2022
 
 from collections import OrderedDict
 from sortedcontainers import SortedDict
+import dataclasses as dataclasses
 from dataclasses import Field
 import types as types
-from collections.abc import Mapping, Collection
+from collections.abc import Mapping
 
 class PrettyDict(dict):
     """
@@ -133,6 +134,8 @@ class PrettyOrderedDict(OrderedDict):
     @property
     def at_pos(self):
         """
+        Element access
+        
         at_pos[position] returns an element or elements at an ordinal position.
             It returns a single element if 'position' refers to only one field.
             If 'position' is a slice then the respecitve list of fields is returned
@@ -140,19 +143,60 @@ class PrettyOrderedDict(OrderedDict):
         at_pos[position] = item assigns an item or an ordinal position
             If 'position' refers to a single element, 'item' must be that item
             If 'position' is a slice then 'item' must resolve to a list of the required size.
+            
+        Key access
+        
+        at_pos.keys[position] returns the key or keys at 'position'
+        
+        at_pos.items[position] returns the tuple (key, element) or a list thereof for `position`            
         """
         class Access:
+            """ 
+            Wrapper object to allow index access for at_pos
+            """
+            def __init__(self):
+                self.__keys = None
+            
             def __getitem__(_, position):
-                key = list(self.keys())[position]
+                key = _.keys[position]
                 return self[key] if not isinstance(key,list) else [ self[k] for k in key ]
             def __setitem__(_, position, item ):
-                key = list(self.keys())[position]
+                key = _.keys[position]
                 if not isinstance(key,list):
                     self[key] = item
                 else:
                     for k, i in zip(key, item):
                         self[k] = i
+            @property
+            def keys(_) -> list:
+                """ Returns the list of keys of the original dictionary """
+                if _.__keys is None:
+                    _.__keys = list(self.keys())
+                return _.__keys
+            @property
+            def items(_) -> list:
+                """ Returns the list of keys of the original dictionary """
+                class ItemAccess(object):
+                    def __getitem__(_x, position):
+                        key = _.keys[position]
+                        return (key, self[key]) if not isinstance(key,list) else [ (k,self[k]) for k in key ]                
+                return ItemAccess()
+                
         return Access()
+
+    @property
+    def key_at_pos(self) -> list:
+        """
+        key_at_pos returns the list of keys, hence key_at_pos[i] returns the ith key
+        """
+        return list(self)
+
+    @property
+    def item_at_pos(self) -> list:
+        """
+        key_at_pos returns the list of keys, hence key_at_pos[i] returns the ith key
+        """
+        return list(self)
     
 class PrettySortedDict(SortedDict):
     """
@@ -222,7 +266,7 @@ class PrettyDictField(object):
         import types as types
         
         class A( nn.Module ):
-            pdct : PrettyOrderedDictField = PrettyOrderedDictField.field()
+            pdct : PrettyOrderedDictField = PrettyOrderedDictField.Field()
         
             def setup(self):
                 self.dense = nn.Dense(1)
@@ -279,9 +323,20 @@ class PrettyDictField(object):
         return PrettyDictField()
     
     @staticmethod
-    def field():
-        import dataclasses as dataclasses
-        return dataclasses.field( default_factory=PrettyDictField )
+    def Field( default : PrettyOrderedDict = None, **kwargs):
+        """
+        Returns a dataclasses.field for PrettyDictField
+        """
+        if default is None and len(kwargs) == 0:
+            return dataclasses.field( default_factory=PrettyDictField )
+        
+        if not default is None:
+            default.upate(kwargs)
+        else:
+            default = kwargs
+        def factory():
+            return PrettyDictField(default)
+        return dataclasses.field( default_factory=factory )
 
     # mimic the underlying dictionary
     # -------------------------------

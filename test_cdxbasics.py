@@ -40,6 +40,7 @@ fmt = util.fmt
 PrettyDict = prettydict.PrettyDict
 PrettySortedDict = prettydict.PrettySortedDict
 PrettyOrderedDict = prettydict.PrettyOrderedDict
+PrettyDictField = prettydict.PrettyDictField
 uniqueHash   = util.uniqueHash
 uniqueHash32 = util.uniqueHash32
 uniqueHash48 = util.uniqueHash48
@@ -118,7 +119,7 @@ class CDXBasicsTest(unittest.TestCase):
 
         g1.update({ 'd':4 },d=3)
         self.assertEqual(g1.d, 3)
-
+        
         # functions
         def F(self,x):
             self.x = x
@@ -175,6 +176,44 @@ class CDXBasicsTest(unittest.TestCase):
         with self.assertRaises(AttributeError):
             getattr(g, "__z",)
 
+        # at_pos
+        g1 = PrettyOrderedDict()
+        g1.a=1
+        g1.b=2
+        g1.d=4
+        g1.c=3
+        self.assertEqual(g1.a, 1)
+        self.assertEqual(g1.b, 2)
+        self.assertEqual(g1.c, 3)
+        self.assertEqual(g1.d, 4)
+        self.assertEqual( g1.at_pos[3], 3)
+        self.assertEqual( g1.at_pos[0:2], [1,2])
+        self.assertEqual( g1.at_pos.keys[3], 'c')
+        self.assertEqual( g1.at_pos.keys[0:2], ['a', 'b'])
+        self.assertEqual( g1.at_pos.items[3], ('c',3))
+        self.assertEqual( g1.at_pos.items[0:2], [('a',1), ('b',2)])
+        
+        import dataclasses as dataclasses
+        @dataclasses.dataclass
+        class Data:
+            data : PrettyDictField = PrettyDictField.Field()
+        data = Data()
+        with self.assertRaises(KeyError):
+            _ = data.data.x
+        data = Data(PrettyOrderedDict(x=1))
+        self.assertEqual(data.data.x,1)
+
+        @dataclasses.dataclass
+        class Data:
+            data : PrettyDictField = PrettyDictField.Field(x=2)
+        data = Data()
+        self.assertEqual(data.data.x,2)
+        data = Data( data=PrettyOrderedDict({'x':3}))
+        self.assertEqual(data.data.x,3)
+        data = Data( data={'x':3})
+        self.assertEqual(data.data['x'],3)
+
+
         # sorted dict
         g1 = PrettySortedDict(a=1)
         g1.b = 2
@@ -196,6 +235,8 @@ class CDXBasicsTest(unittest.TestCase):
             _ = g['_y']   # does not work: cannot use protected members as dictionary elements
         with self.assertRaises(AttributeError):
             _ = g.__z      # must throw attribute errors otherwise various class handling processes get confused
+
+
 
     def test_basics(self):
 
@@ -1133,6 +1174,7 @@ class CDXCConfigTest(unittest.TestCase):
         config2.sub._y = 3
         self.assertEqual( uniqueHash(config1), uniqueHash(config2) )
 
+
     def test_detach(self):
         """ testing detach/copy/clean_cooy """
 
@@ -1168,7 +1210,7 @@ class CDXCConfigTest(unittest.TestCase):
         @dataclasses.dataclass
         class A:
             i : int = 0
-            config : ConfigField = ConfigField.field()
+            config : ConfigField = ConfigField.Field()
             
             def f(self):
                 return self.config("a", 1, int, "Test")
@@ -1180,6 +1222,8 @@ class CDXCConfigTest(unittest.TestCase):
         self.assertEqual(a.f(),1)
         c = Config(a=2)
         a = A(i=2,config=ConfigField(c))
+        self.assertEqual(a.f(),2)
+        a = A(i=2,config=Config(a=2))
         self.assertEqual(a.f(),2)
             
 if __name__ == '__main__':

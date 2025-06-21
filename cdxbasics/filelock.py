@@ -54,7 +54,7 @@ class FileLock(object):
                        verbose         : Context = Context.quiet ):
         """
         Initialize new lock with name 'filename'
-        Aquire the lock if 'acquire' is True
+        Acquire the lock if 'acquire' is True
 
         Parameters
         ----------
@@ -138,7 +138,7 @@ class FileLock(object):
                          timeout_retry   : int = 5,
                          raise_on_fail   : bool = True) -> int:
         """
-        Aquire lock
+        Acquire lock
 
         Parameters
         ----------
@@ -322,3 +322,109 @@ class FileLock(object):
         self.release( force=True )
         return False # raise exceptions
 
+def AttemptLock(filename, * ,
+                release_on_exit : bool = True,
+                wait            : bool = True,
+                timeout_seconds : int = None,
+                timeout_retry   : int = None,
+                verbose         : Context = Context.quiet ) -> FileLock:
+        """
+        Attempt to acquire a new lock with name 'filename', and return None upon failure.
+        Note that in contrast to FileLock() 'raise_on_fail' defaults to False for this function call.
+
+        Parameters
+        ----------
+            filename :
+                Filename of the lock.
+                'filename' may start with '!/' to refer to the temp directory, or '~/' to refer to the user directory.
+                On Unix /dev/shm/ can be used to refer to shared memory.
+            release_on_exit :
+                Whether to auto-release the lock upon exit.
+            wait :
+                If False, return immediately if the lock cannot be acquired. 
+                If True, wait with below parameters; in particular if these are left as defaults the lock will wait indefinitely.
+            timeout_seconds :
+                Number of seconds to wait before retrying.
+                Set to 0 to fail immediately.
+                If set to None, then its value will depend on 'wait'.
+                If wait is True, then timeout_seconds==1; if wait is False, then timeout_seconds==0
+            timeout_retry :
+                How many times to retry before timing out.
+                Set to None to retry indefinitely.
+            verbose :
+                Context which will print out operating information of the lock. This is helpful for debugging.
+                In particular, it will track __del__() function calls.
+                Set to None to print all context.
+
+        Exceptions
+        ----------
+            Will not raise any exceptions
+                
+        Returns
+        -------
+            Filelock if acquired or None
+        """
+        
+        lock = FileLock( filename=filename,
+                         acquire=True,
+                         release_on_exit=release_on_exit, 
+                         wait=wait, 
+                         timeout_seconds=timeout_seconds, 
+                         timeout_retry=timeout_retry,
+                         raise_on_fail=False,
+                         verbose=verbose ) 
+        return lock if lock.locked else None
+    
+def AcquireLock(filename, * ,
+                wait            : bool = True,
+                timeout_seconds : int = None,
+                timeout_retry   : int = None,
+                verbose         : Context = Context.quiet ) -> FileLock:
+        """
+        Aquires a filelock indentified by `filename`. Raises an exception of this was not successful.
+        This function is a short cut for FileLock(..., acquire=True ) to be used in context blocks:
+            
+        with AcquireLock( "!/my.lock" ):
+            ...
+            ....
+
+        Parameters
+        ----------
+            filename :
+                Filename of the lock.
+                'filename' may start with '!/' to refer to the temp directory, or '~/' to refer to the user directory.
+                On Unix /dev/shm/ can be used to refer to shared memory.
+            wait :
+                If False, return immediately if the lock cannot be acquired. 
+                If True, wait with below parameters; in particular if these are left as defaults the lock will wait indefinitely.
+            timeout_seconds :
+                Number of seconds to wait before retrying.
+                Set to 0 to fail immediately.
+                If set to None, then its value will depend on 'wait'.
+                If wait is True, then timeout_seconds==1; if wait is False, then timeout_seconds==0
+            timeout_retry :
+                How many times to retry before timing out.
+                Set to None to retry indefinitely.
+            verbose :
+                Context which will print out operating information of the lock. This is helpful for debugging.
+                In particular, it will track __del__() function calls.
+                Set to None to print all context.
+
+        Exceptions
+        ----------
+            Will raise an exception if timeout is not indefinitely and the lock could not be acquired.
+                
+        Returns
+        -------
+            Filelock if acquired or None
+        """
+        
+        return FileLock( filename=filename,
+                         acquire=True,
+                         release_on_exit=True, 
+                         wait=wait, 
+                         timeout_seconds=timeout_seconds, 
+                         timeout_retry=timeout_retry,
+                         raise_on_fail=True,
+                         verbose=verbose ) 
+    

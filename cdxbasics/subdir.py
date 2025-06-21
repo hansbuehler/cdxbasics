@@ -1806,15 +1806,15 @@ class SubDir(object):
         """
         Wraps a callable into a cachable function.
         It will attempt to read an existing cache for the parameter set with the correct function version.
-        
-        Explicit usage:
+
+        `cache_callable` will need a unique ID of the function call. There are two methods to provide this:        
+        Explicit usage where we specify `unique_args_id`:
             
             def f(x,y):
                 return x*y
             x = 1
             y = 2
             z = cache_callable( f, unique_args_id=f"{x},{y}", version="1", label="f" )( x, y=y )
-        
         
         Fully implicit usage utilizing cdxbasics.version:
 

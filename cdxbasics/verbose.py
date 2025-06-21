@@ -4,7 +4,7 @@ Utility for verbose printing with indentation
 Hans Buehler 2022
 """
 
-from .util import fmt
+from .util import fmt, Timer
 from .crman import CRMan
 from .logger import Logger
 _log = Logger(__file__)
@@ -306,6 +306,22 @@ class Context(object):
         s1 = ' ' * (self.indent * (self.level + sub_level))
         s2 = self.fmt_level if self.fmt_level.find("%") == -1 else self.fmt_level % (self.level + sub_level)
         return s2+s1
+    
+    # Misc
+    # ----
+    
+    @property
+    def timer(self) -> Timer:
+        """
+        Returns a new util.Timer object to measure time spent in a block of code
+        
+        verbose = Context("all")
+        with verbose.timer as t:
+            verbose.write("Starting... ", end='')
+            ...
+            verbose.write(f"this took {t}.", head=False)
+        """
+        return Timer()        
 
     # uniqueHash
     # ----------
