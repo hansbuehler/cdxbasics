@@ -71,14 +71,14 @@ def tofile( file,
             ):
     """
     Write 'array' into file using a binary format.
-    This function will work for files exceeding 2GB which is the usual unbuffered write() limitation on Linux.
-    This functio will only work with the subset of atomnic dtypes
+    This function will work for unbuffered files exceeding 2GB which is the usual unbuffered write() limitation on Linux.
+    This function will only work with the types contained in 'dtype_map'
     
     Parameters
     ----------
         file  : file name passed to open() or an open file handle
         array : numpy or sharedarray
-        buffering : see open()
+        buffering : see open(). Use 0 to turn off buffering.
     """
     if isinstance(file, str):
         with open( file, "wb", buffering=buffering ) as f:
@@ -146,11 +146,11 @@ def readfromfile( file,
     Parameters
     ----------
         file      : file name passed to open(), or a file handle from open()
-        target    : either an array, or a function which returns an array for a given shape
+        target    : either an array, or a function which returns an array for a given shape and dtype
                     def create( shape ):
-                        return np.empty( shape, dtype=np.float32 )
+                        return np.empty( shape, dtype )
         read_only : whether to clear the 'writable' flag of the array 
-        buffering : see open(); -1 is the default.
+        buffering : see open(); -1 is the default, 0 for no buffering.
         validate_dtype: if specified, check that the array has the specified dtype
         validate_shape: if specified, check that the array has the specified shape
         
@@ -216,28 +216,28 @@ def read_shape_dtype( file, buffering : int = -1 ) -> tuple:
             return read_shape_dtype( f, buffering=buffering )
     return _readheader(file)
 
-def readinto( file, array : np.ndarray, *, read_only : bool = False ):
+def readinto( file, array : np.ndarray, *, read_only : bool = False, buffering : int = -1 ):
     """
-    Read array from disk into an existing array.    
+    Read an array from disk into an existing array.    
     The receiving array must have the same shape and dtype as the array on disk. 
-    No buffering. This function will work for files exceeding 2GB (the usual write() limitation on Linux)
 
     Parameters
     ----------
         file  : file name passed to open(), or an open file
         array : target array to write into. This array must have the same shape and dtype as the source data.
         read_only : whether to clear the 'writable' flag of the array after the file was read
-
+        buffering : see open(); -1 is the default, 0 for no buffering.
+        
     Returns
     -------
         The array.
     """
-    return readfromfile( file, target = array, read_only=read_only )
+    return readfromfile( file, target = array, read_only=read_only, buffering=buffering )
 
-def fromfile( file, *, validate_dtype = None, validate_shape = None, read_only : bool = False, ) -> np.ndarray:
+def fromfile( file, *, validate_dtype = None, validate_shape = None, read_only : bool = False, buffering : int = -1  ) -> np.ndarray:
     """
     Read array from disk into a new numpy array.
-    Use shared_fromfile() to create a shared array
+    Use sharedarray.shared_fromfile() to create a shared array
 
     Parameters
     ----------
@@ -245,12 +245,18 @@ def fromfile( file, *, validate_dtype = None, validate_shape = None, read_only :
         read_only: if True, clears the 'writable' flag for the returned array
         validate_dtype: if specified, check that the array has the specified dtype
         validate_shape: if specified, check that the array has the specified shape
+        buffering : see open(); -1 is the default, 0 for no buffering.
 
     Returns
     -------
         Newly created numpy array
     """
-    return readfromfile( file, target=lambda shape, dtype : np.empty( shape=shape, dtype=dtype ), read_only = read_only, validate_dtype=validate_dtype, validate_shape=validate_shape )
+    return readfromfile( file,
+                         target=lambda shape, dtype : np.empty( shape=shape, dtype=dtype ),
+                         read_only = read_only, 
+                         validate_dtype=validate_dtype, 
+                         validate_shape=validate_shape,
+                         buffering=buffering )
         
 
 
