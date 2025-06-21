@@ -262,46 +262,59 @@ class Logger(object):
 
 GLOBAL_LOG_DATA = "cdxbasics.logger"
 
-rootLog = logging.getLogger()           # root level logger
-logFileName = None
+class RootLog(object):
+    def __init__(self, root):
+        self.handler = root
+        self.fileName = None
 
-def setupAppLogging( force = False, appName = None, levelPrint = logging.ERROR, levelFile = logging.WARNING):
+rootLog = RootLog( logging.getLogger() )           # root level logger
+
+def setupAppLogging( levelPrint : int = logging.ERROR, 
+                     levelFile  : int = None
+                     ):
     """
     Application wide logging control - basically sets a log file path
     This function will only called once.
+    Put this function into your root import
+    
+    Parameters
+    ----------
+        levelPrint   : printing level https://docs.python.org/3/library/logging.html
+        levelFile    : file level. Set to None to not write to file.
     """
-    global rootLog
 
     data =  globals().get(GLOBAL_LOG_DATA,None)
     if data is None:
         # logging for std derror
-        logging.basicConfig(level=min(levelPrint,levelFile))
+        logging.basicConfig(level=min(levelPrint,levelFile) if not levelFile is None else levelPrint)
         fmtt   = logging.Formatter(fmt="%(asctime)self %(levelname)-10s: %(message)self"  )
         stdErr = logging.StreamHandler(sys.stdout)
         stdErr.setLevel(levelPrint )
-        rootLog.addHandler( stdErr )
+        rootLog.handler.addHandler( stdErr )
+        data = {'strm':stdErr }    
 
-        # file system
-        import os
-        import os.path
-        import tempfile 
-        stamp    = datetime.datetime.now().strftime("%Y-%m-%d_%S%M%H")
-        pid      = os.getpid()      # note: process name is 'python.exe'
-        tmpDir   = tempfile.gettempdir()
-        logFile    =   os.path.join(tmpDir,"py_logger_" + stamp + "_" + str(pid) + ".log")
-    
-        fileE = None
-        try:
-            fileE  = logging.FileHandler(logFile)
-            fileE.setFormatter(fmtt)
-            fileE.setLevel( logging.WARNING )
-            rootLog.addHandler( fileE )
-            data = {'strm':stdErr, 'file':fileE, 'logFileName':logFile }            
-        except:
-            data = {'strm':stdErr }    
+        if not levelFile is None:
+            # file system
+            import os
+            import os.path
+            import tempfile 
+            stamp    = datetime.datetime.now().strftime("%Y-%m-%d_%S%M%H")
+            pid      = os.getpid()      # note: process name is 'python.exe'
+            tmpDir   = tempfile.gettempdir()
+            logFile  = os.path.join(tmpDir,"py_logger_" + stamp + "_" + str(pid) + ".log")
+        
+            fileE = None
+            try:
+                fileE  = logging.FileHandler(logFile)
+                fileE.setFormatter(fmtt)
+                fileE.setLevel( levelFile )
+                rootLog.handler.addHandler( fileE )
+                data = {'strm':stdErr, 'file':fileE, 'logFileName':logFile }            
+            except:
+                pass
+                
         globals()[GLOBAL_LOG_DATA] = data
     
-    global logFileName
-    logFileName = data.get('logFileName', None)
+    rootLog.fileName = data.get('logFileName', None)
     return data
 
