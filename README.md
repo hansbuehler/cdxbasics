@@ -10,11 +10,12 @@ Most useful additions:
 * *config* allows robust managements of configurations. It automates help, validation checking, and detects misspelled configuration arguments
 * *subdir* wraps various file and directory functions into convenient objects. Useful if files have commons extensions. Supports versioned file i/o
 with `version`. With that it offers a simple but effective caching methodology.
+* *filelock* implements a simple locking mechanism for parallel taks.
 * *npio* has a low lever interface for binary i/o for numpy files for fast read/write.
 * *version* adds version information including dependencies to functions and objects.
 * *verbose* provides user-controllable context output.
 * *utils* offers a number of utility functions such as uniqueHashes, standard formatting for lists, dictionaries etc
-* *prettydict* if you do not like the item access method but prefer attribute access.
+* *prettydict*, *prettyobject* if you do not like the item access method but prefer attribute access.
 
 # dynaplot
 
@@ -1047,14 +1048,15 @@ For derivative pricing:
 
 * `np_european(...)` computes European option prices and greeks.
 
-# npio (experimental)
-Hard efficency numpy file i/io functions. They offer unbuffereed reading/writing numpy arrays in their native byte form from and to disk. 
+# npio
+High efficency numpy file i/io functions. They offer reading/writing numpy arrays in their native byte form from and to disk, and support files larger than 2GB on linux for unbuffered i/o (cf. [unbuffered 2GB Linux write limit](https://man7.org/linux/man-pages/man2/write.2.html). These methods only work with a number of supported file types contained in `dtype_map` (all the standard numerical and date/time types are supported).
 
-* `tofile(file,array)` writes a numpy `array` in an efficient native binary format to `file` without buffering. The [unbuffered 2GB Linux write limit](https://man7.org/linux/man-pages/man2/write.2.html) is circumvented.
-* `fromfile(file, dtype)` reads from a numpy binary file into a new numpy array given a known dtype. The [unbuffered 2GB Linux read limit](https://man7.org/linux/man-pages/man2/read.2.html) is circumvented.
-* `readinto(file, array)` reads `file` into an existing target `array`.
-* `readfromfile(file, target)` reads `file` into an existing numpy array, or into a new one.
-
+* `tofile(file,array,buffering)` writes a numpy array in an efficient native binary format to `file`.
+* `fromfile(file, validate_dtype, validate_shape, read_only )` reads from a numpy binary file into a new numpy array. It can validate against a correct dtype and shape, and can set the returned memory to read only.
+* `readinto(file, array, read_only)` reads `file` into an existing target `array` which must have the correct size and shape. 
+* `readfromfile(file, target, read_only, buffering, validate_dtype, validate_shape)` reads `file` into an existing numpy array, or into a new one. For this purpose `target` can be a numpy array or a function to create arrays of a given shape and dtype.
+* `read_shape_dtype(file, buffering)` reads shape and dtype information from a previously stored file.
+  
 # verbose
 
 **The `verbose` interface has changed in 0.2.36**
