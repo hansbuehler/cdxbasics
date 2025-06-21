@@ -20,13 +20,12 @@ with `version`. With that it offers a simple but effective caching methodology.
 
 Tools for dynamic (animated) plotting in Jupyer/IPython. The aim of the toolkit is making it easy to develop visualization with `matplotlib` which dynamically updates, for example during training with machine learing kits such as `tensorflow`. This has been tested with Anaconda's JupyterHub and `%matplotlib inline`. 
 
-Some users reported that the package does not work in some versions of Jupyter. In this case, please try setting `dynaplot.DynamicFig.MODE = 'canvas'`. I appreciate if you let me know whether this resolved
-the problem.
+It also makes the creation of subplots more streamlined.
 
 The package now contains a lazy method to manage updates. Instead of updating individual names, we recommend to simply remove the previous element and redraw. This is implemented as follows
 * Once a figure `fig` is created, call `fig.store()` to return a element store.
 * When creating new matplotlib elements such as plots, figures, fills, lines, add them to the store with `store +=`.
-* Before the next update call `store.remove()` to remove all old updates; create the renewed elements, and only then call `fig.render()` or `fig.close()`.
+* Before the next update call `store.remove()` to remove all old updates; create the renewed elements, and only then call `fig.render()` or `fig.close()`. See example below.
 
 ### Animated Matplotlib in Jupyter
 
@@ -35,103 +34,106 @@ See the jupyter notebook [notebooks/DynamicPlot.ipynb](https://github.com/hansbu
 ![dynamic line plot](https://raw.githubusercontent.com/hansbuehler/cdxbasics/master/media/dynaplot.gif)
 ![dynamic 3D plot](https://raw.githubusercontent.com/hansbuehler/cdxbasics/master/media/dynaplot3D.gif)
 
-    %matplotlib inline
-    import numpy as np
-    import cdxbasics.dynaplot as dynaplot
+```
+%matplotlib inline
+import numpy as np
+import cdxbasics.dynaplot as dynaplot
     
-    x  = np.linspace(0,1,100)
-    pm = 0.2
+x  = np.linspace(0,1,100)
+pm = 0.2
 
-	# create figure and plots
-    fig = dynaplot.figure(col_size=10)
-    ax = fig.add_subplot()
-    ax2 = fig.add_subplot()
-    ax2.sharey(ax)
-    store = fig.store()
+# create figure and plots
+fig = dynaplot.figure(col_size=10)
+ax = fig.add_subplot()
+ax2 = fig.add_subplot()
+ax2.sharey(ax)
+store = fig.store()
 
-	# render the figure: places the plots and draws their frames
+# render the figure: places the plots and draws their frames
+fig.render()
+
+import time
+for i in range(5):
+    y = np.random.random(size=(100,))
+    ax.set_title(f"Test {i}")
+    ax2.set_title(f"Test {i}")
+        
+    store.remove() # delete all prviously stored elements
+    store += ax.plot(x,y,":", label=f"data {i}")
+    store += ax2.plot(x,y,"-",color="red", label=f"data {i}")
+    store += ax2.fill_between( x, y-pm, y+pm, color="blue", alpha=0.2 )
+    store += ax.legend()
+        
     fig.render()
-
-    import time
-    for i in range(5):
-        y = np.random.random(size=(100,))
-        ax.set_title(f"Test {i}")
-        ax2.set_title(f"Test {i}")
-        
-        store.remove() # delete all prviously stored elements
-        store += ax.plot(x,y,":", label=f"data {i}")
-        store += ax2.plot(x,y,"-",color="red", label=f"data {i}")
-        store += ax2.fill_between( x, y-pm, y+pm, color="blue", alpha=0.2 )
-        store += ax.legend()
-        
-        fig.render()
-        time.sleep(1)
-    fig.close()
-
+    time.sleep(1)
+fig.close()
+```
 See example notebook for how to use the package for lines, confidence intervals, and 3D graphs.
+
+### Issues
+
+Some users reported that the package does not work in some versions of Jupyter, in particular with VS Code.
+In this case, please try setting `dynaplot.DynamicFig.MODE = 'canvas'`. I appreciate if you let me know whether this resolved
+the problem.
 
 ### Simpler sub_plot
 
-The package lets you create sub plots without having to know the number of plots in advance: you do not need to specify `rol, col, num` when calling `add_subplot`. The underlying figure object will automatically arrange them on a grid for you. 
+The package lets you create sub plots without having to know the number of plots in advance.
+You can combine the following features:
+* Define as usual `figsize`, and add `col_num`. In this case the size of the figure is specified by the former argument as usual, while the number of plots per columns is controlled by the latter.
+* Use `col_size`, `row_size`, and `col_num`: the first two define the size per subplot. Assuming you add `N` subplots, the overall `figsize` will be `(col_size* (N%col_num),  row_size (N//col_num))`.
 
-    # create figure
-    from cdxbasics.dynaplot import figure
-    fig = figure(col_size=4, row_size=4, col_num=3, title="Figure title") 
+You can force another row with `next_row` if need be. The example also shows that we can specify titles for subplots and figures easily.
+
+### Example
+```
+# create figure
+from cdxbasics.dynaplot import figure
+fig = figure("Example", col_size=4, row_size=4, col_num=3) 
                                     # equivalent to matplotlib.figure
-    ax  = fig.add_subplot()         # no need to specify row,col,num
-    ax.plot( x, y )
-    ax  = fig.add_subplot()         # no need to specify row,col,num
-    ax.plot( x, y )
-    ...
-    fig.next_row()                  # another row
-    ax  = fig.add_subplot()         # no need to specify row,col,num
-    ax.plot( x, y )
-    ...
+ax  = fig.add_subplot("First")      # no need to specify row,col,num
+ax.plot( x, y )
+ax  = fig.add_subplot("Second")     # no need to specify row,col,num
+ax.plot( x, y )
+...
+fig.next_row()                      # another row
+ax  = fig.add_subplot()             # no need to specify row,col,num
+ax.plot( x, y )
+...
     
-    fig.render()                    # draws the plots
-   
-### Other features
-
-There are a number of other functions to aid plotting
-
-* `figure()` which returns a `DynamicFig` object:
-
-    Function to replace `matplotlib.figure()` which will defer creation of the figure until the first call of `render()`. The effect is that we no longer need to provide  the total number of rows and columns in advance - i.e. you won't need to call the equivalent of `fig.add_subplot(3,4,14)` but can just call `fig.add_subplot()`. You can also pass a `title` argument.
-    
-    Instead of `figsize` the function `figure()` accepts `row_size`, `col_size` and `col_nums` to dynamically generate an appropriate figure size.
-
-    Key member functions of `DynamicFig` are:
-    * `add_subplot()` to add a new plot without having to specify the grid, e.g. you do not need to provide any arguments. Supports an additional `title` argument for plot titles.
-    * `next_row()` to skip to the next row.
-    * `render()` to draw the figure. When called the first time will create all the underlying matplotlib objects. Subsequent calls will re-draw the canvas if the figure was modified. See examples in https://github.com/hansbuehler/cdxbasics/blob/master/cdxbasics/notebooks/DynamicPlot.ipynb
-    * `close()` to close the figure. If not called, Jupyter creates an unseemly second copy of the graph when the current cell is finished running.
-
-* `color_css4, color_base, color_tableau, color_xkcd`:
-
-    Each function returns the _i_'th element of the respective matplotlib color
-    table. The purpose is to simplify using consistent colors accross different plots.
-    
-    **Example:**
-    
-        fig = dynaplot.figure()
-        ax = fig.add_subplot()
-        # draw 10 lines in the first sub plot, and add a legend
-        for i in range(10):
-            ax.plot( x, y[i], color=color_css4(i), label=labels[i] )
-        ax.legend()
-        # draw 10 lines in the second sub plot. No legend needed as colors are shared with first plot
-        ax = fig.add_subplot()
-        for i in range(10):
-            ax.plot( x, z[i], color=color_css4(i) )
-        fig.render()
-    
-* `colors_css4, colors_base, colors_tableau, colors_xkcd`:
-
-    Generator versions of the `color_` functions.
+fig.render()                        # draws the plots
+```
 
 ### Implementation Note
 
-The `DynamicFig` object returned by `dynaplot.figure()` will keep track of all function calls and other operations, and will defer them until the first time `render()`. It does this so it can figure out the desired layout before actually creating any plots. Each deferred function call in turn returns a deferring object. Read the Python comments in `deferred.py` for implementation details.
+The `DynamicFig` object returned by `dynaplot.figure()` will keep track of all function calls and other operations, and will defer calling
+them until the first time `render()` is called. Once `render()` is called you can no longer add plots. It does this so it can figure out the desired layout before actually creating any plots. Each deferred function call in turn returns a deferring object. Read the Python comments in `deferred.py` for implementation details.
+
+### Color Management
+
+##### `color_css4, color_base, color_tableau, color_xkcd`:
+
+Each function returns the _i_'th element of the respective matplotlib color
+table. The purpose is to simplify using consistent colors accross different plots.
+    
+**Example:**
+```
+fig = dynaplot.figure()
+ax = fig.add_subplot()
+# draw 10 lines in the first sub plot, and add a legend
+for i in range(10):
+    ax.plot( x, y[i], color=color_css4(i), label=labels[i] )
+ax.legend()
+
+# draw 10 lines in the second sub plot. No legend needed as colors are shared with first plot
+ax = fig.add_subplot()
+for i in range(10):
+    ax.plot( x, z[i], color=color_css4(i) )
+fig.render()
+```
+##### `colors_css4, colors_base, colors_tableau, colors_xkcd`:
+
+Generator versions of the `color_` functions.
 
 # prettydict
 
@@ -144,14 +146,18 @@ A number of simple extensions to standard dictionaries which allow accessing any
     _ = pdct.b          # read access
     _ = pdct("c",3)     # short cut for pdct.get("c",3)
 
-There are three versions:
+There are two versions:
 
 * `PrettyDict`:
     Pretty version of standard dictionary.
 * `PrettyOrderedDict`:
-    Pretty version of ordered dictionary.
-* `PrettySortedDict`:
-    Pretty version of sorted dictionary.
+    Pretty version of ordered dictionary. This object allows access by numerical index:
+     * `at_pos[i]` returns the `i`th element
+     * `at_pos.keys[i]` returns the `i`th key
+     * `at_pos.items[i]` returns the `i`th item
+
+Each of them is derived from the respective dictionary class. This can have some odd side effects for example when using `pickle`. In this case, consider
+`prettyobject`.
 
 ### Assigning member functions
 
@@ -175,26 +181,61 @@ The reason for this is as follows: consider
  
     pdct['mult'] = mult
     pdct.mult(3,4) --> 12
- 
+
 ### Dataclasses
 
 Dataclasses have difficulties with derived dictionaries.
 This applies as well to `Flax` modules.
 For fields in dataclasses use `PrettyDictField`:
 
-	from cdxbasics.prettydict import PrettyDictField
-	from dataclasses import dataclass
+```
+from cdxbasics.prettydict import PrettyDictField
+from dataclasses import dataclass
 
-	@dataclass
-	class Data:
-		...
-		data : PrettyDictField = PrettyDictField.field()
+@dataclass
+class Data:
+	...
+	data : PrettyDictField = PrettyDictField.Field()
 
-		def f(self):
-			return self.data.x
+	def f(self):
+		return self.data.x
 
-	d = Data( PrettDictField(x=1) )
-	f.f()
+p = PrettyDict(x=1)
+d = Data( p.as_field() )
+f.f()
+```
+
+This ca
+
+# prettyobject
+
+A barebone base class object which implements basic dictionary semantics.
+In contrast to `prettydict` this class does not derive from `dict` and is therefore more natural for `pickle`. As element assignments
+are simply attributes, the object's contents are not ordered.
+
+Usage pattern:
+```
+class M( PrettyObject ):
+    pass
+
+m = M()
+m.x = 1          # standard object handling
+m['y'] = 1       # mimic dictionary
+print( m['x'] )  # mimic dictionary
+print( m.y )     # standard object handling
+```
+
+Mimics a dictionary:    
+```
+u = dict( m )
+print(u)   --> {'x': 1, 'y': 2}
+
+u = { k: 2*v for k,v in m.items() }
+print(u)   --> {'x': 2, 'y': 4}
+
+l = list( m ) 
+print(l)   --> ['x', 'y']
+```
 
 # config
 
@@ -442,6 +483,32 @@ Another pattern is to allow both `config` and `kwargs`:
             b = config("b", 20, int)
             config.done()
 
+### Dataclasses
+
+To support data classes, use `ConfigField`:
+
+```
+import dataclasses as dataclasses
+from cdxbasics.config import Config, ConfigField
+import types as types
+
+@dataclasses.dataclass
+class A:
+    i      : int = 3
+    config : ConfigField = ConfigField.Field()
+    
+    def f(self):
+	return self.config("a", 2, int, "Test")
+    
+a = A()
+a.i --> prints 3 as usual
+a.config.f() --> prints 2
+
+a = A(i=2,config=Config(a=1))
+a.i --> prints 3 as usual
+a.config.f() --> prints 1
+```
+
 # logger
 
 Tools for defensive programming a'la the C++ ASSERT/VERIFY macros. Aim is to provide one line validation of inputs to functions with intelligible error messages:
@@ -453,7 +520,7 @@ Tools for defensive programming a'la the C++ ASSERT/VERIFY macros. Aim is to pro
         _log.verify( a==1, "'a' is not one but %s", a)
         _log.warn_if( a!=1, "'a' was not one but %s", a)
         
-### Member functions; mostly self-explanatory:
+### Member functions
 
 Exceptions independent of logging level
         
@@ -700,37 +767,41 @@ All of these are _silent_, and will not throw errors if 'file' does not exist. I
 ### Caching
 
 A `SubDir` object offers an context for caching calls to `Callable`s.
-Explicit usage is as follows:
+This involves keying the cache by the function name and its current parameters, and monitoring the functions version.  The caching behaviour itself can be controlled by specifying a `CacheMode` parameter (see below).
 
-			from cdxbasics.subdir import SubDir
+1. Explicit: we specify a version, label and a unique ID explicitly.
+	```
+	from cdxbasics.subdir import SubDir
+	
+	def f(x,y):
+	    return x*y
+	
+	subdir = SubDir("!/cache")
+	x = 1
+	y = 2
+	z = subdir.cache_callable( f, unique_args_id=f"{x},{y}", version="1", label="f" )( x, y=y )
+	```
 
-            def f(x,y):
-                return x*y
+3. A pythonic version uses the `version` decorator.
+   
+    To use this pattern
+    * The callable `F` must be decorated with `cdxbascis.version.version`
+    * All parameters of `F` must be compatible with `cdxbasics.util.uniqueHash`
+    * The function name must be unique.
+      
+    Example:
+   
+	````
+	from cdxbasics.version import version
+	from cdxbasics.subdir import SubDir
 
-			subdir = SubDir("!/cache")
-            x = 1
-            y = 2
-            z = subdir.cache_callable( f, unique_args_id=f"{x},{y}", version="1", label="f" )( x, y=y )
-
-Here we specify a version, label and a unique ID specifically.
-The caching behaviour itself can be controlled by specifying a `cache_mode` parameter to `cache_callable`.
-
-A pythonic version uses the decorator
-
-			from cdxbasics.version import version
-			from cdxbasics.subdir import SubDir
-
-            @version("1")  # automatically equip 'f' with a version
-            def f(x,y):
-                return x*y        
-
-			subdir = SubDir("!/cache")
-            z = cache_callable( f )( 1, y=2 )
-
-To use this pattern
-* The callable F must be decorate with cdxbascis.version.version
-* All parameters of F must be convertable to with cdxbasics.util.uniqueHash
-* The function name must be unique.
+	@version("1")  # automatically equip 'f' with a version
+	def f(x,y):
+		return x*y        
+	
+	subdir = SubDir("!/cache")
+	z = cache_callable( f )( 1, y=2 )
+ 	```
 
 # filelock
 
@@ -747,7 +818,7 @@ Simplest form - will throw an exception if the lock could not be attained:
     from cdxbasics.filelock import FileLock
     fl = FileLock("!/resource.lock", acquire=True, wait=False)
 
-With timeout up to 5*10 seconds:
+With timeout up to 5*10 seconds, exception thereafter:
 
     from cdxbasics.filelock import FileLock
     fl = FileLock("!/resource.lock", acquire=True, wait=True, timeout_seconds=5, timeout_repeat=10 )
@@ -756,6 +827,20 @@ Wait forever
 
     from cdxbasics.filelock import FileLock
     fl = FileLock("!/resource.lock", acquire=True, wait=True, timeout_seconds=5, timeout_repeat=None )
+
+With timeout up to 5*10 seconds, return an unlocked lock if failed
+
+    from cdxbasics.filelock import FileLock
+    fl = FileLock("!/resource.lock", acquire=True, wait=True, timeout_seconds=5, timeout_repeat=10, raise_on_fail=False )
+    if not fl.locked:
+    	return
+
+Sligthly more elegant version of the above:
+
+    from cdxbasics.filelock import AttemptLock
+    fl = AttemptLock("!/resource.lock", acquire=True, wait=True, timeout_seconds=5, timeout_repeat=10 )
+    if fl is None:
+    	return
 
 A more verbose use case is to not automatically aqcuire the lock upon construction.
 In this case call `acquire()` to obtain a lock:
@@ -777,23 +862,15 @@ Note that a `FileLock` will by default release the lock upon destruction of the 
 
 ### FileLock Context Manager
 
-A better method is to use `FileLock` is as a context manager in which case the lock will be released upon leaving the while block.
-*Note that unless `acquire` is set to `True` the lock is not obtained.*
+You can use `AcquireLock` is as a context manager in which case the lock will be released upon leaving the while block.
 
-    from cdxbasics.filelock import FileLock
-    with FileLock("!/resource.lock", acquire=True):
-        ...
-        ...
-
+    from cdxbasics.filelock import AcquireLock
+    with AcquireLock("!/resource.lock"):
+    	...
 
 ### Debugging FileLock
 
 To debug usage of the lock one may use a `Context` object from the `verbose` sub-module. To display all verbose information, pass `None`:
-
-    from cdxbasics.filelock import FileLock
-    fl = FileLock("!/resource.lock", aqcuire=True, verbose=None )
-
-
 
 # util
 
@@ -801,10 +878,12 @@ A collection of utility functions.
 
 ## uniqueHash
 
-    uniqueHash( *kargs, **kwargs )
-    uniqueHash32( *kargs, **kwargs )
-    uniqueHash48( *kargs, **kwargs )
-    uniqueHash64( *kargs, **kwargs )
+```
+uniqueHash( *kargs, **kwargs )
+uniqueHash32( *kargs, **kwargs )
+uniqueHash48( *kargs, **kwargs )
+uniqueHash64( *kargs, **kwargs )
+```
 
 Each of these functions returns a unique hash key for the arguments provided for the respective function. The functions *32,*48,*64 return hashes of the respective length, while `uniqueHash` returns the hashes of standard length. These functions will make an effort to robustify the hashes against Python particulars: for example, dictionaries are hashed with sorted keys. 
 
