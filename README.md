@@ -15,7 +15,7 @@ with `version`. With that it offers a simple but effective caching methodology.
 * *version* adds version information including dependencies to functions and objects.
 * *verbose* provides user-controllable context output.
 * *utils* offers a number of utility functions such as uniqueHashes, standard formatting for lists, dictionaries etc
-* *prettydict*, *prettyobject* if you do not like the item access method but prefer attribute access.
+* *prettydict*, *prettyobject* are dictionary objects with attribute item access. Just looks better than a dict.
 
 # dynaplot
 
