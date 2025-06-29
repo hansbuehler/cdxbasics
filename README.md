@@ -8,14 +8,14 @@ Install by
 Most useful additions:
 * *dynaplot* is a framework for simple dynamic graphs with matplotlib.
 * *config* allows robust managements of configurations. It automates help, validation checking, and detects misspelled configuration arguments
-* *subdir* wraps various file and directory functions into convenient objects. Useful if files have commons extensions. Supports versioned file i/o
+* *subdir* wraps various file and directory functions into convenient objects. Useful if files have common extensions. Supports versioned file i/o
 with `version`. With that it offers a simple but effective caching methodology.
 * *filelock* implements a simple locking mechanism for parallel taks.
-* *npio* has a low lever interface for binary i/o for numpy files for fast read/write.
+* *npio* has a low level interface for binary i/o for numpy files for fast read/write.
 * *version* adds version information including dependencies to functions and objects.
 * *verbose* provides user-controllable context output.
 * *utils* offers a number of utility functions such as uniqueHashes, standard formatting for lists, dictionaries etc
-* *prettydict*, *prettyobject* if you do not like the item access method but prefer attribute access.
+* *prettydict*, *prettyobject* are dictionary objects with attribute item access. Just looks better than a dict.
 
 # dynaplot
 
