@@ -116,6 +116,29 @@ class Context(object):
         """
         self.report( 0, message, *args, end=end, head=head, **kwargs )
 
+    def write_t( self, message : str, *args, end : str = "\n", head : bool = True, **kwargs ) -> Timer:
+        """
+        Same as using write() first and then timer()
+        
+        Report message at level 0 with the formattting arguments at curent context level.
+        The message will be formatted as util.fmt( message, *args, **kwargs )
+        It will be displayed in all cases except if the context is 'quiet'.
+
+        The parameter 'end' matches 'end' in print, e.g. end='' avoids a newline at the end of the message.
+        If 'head' is True, then the first line of the text will be preceeded by proper indentation.
+        If 'head' is False, the first line will be printed without preamble.
+        
+        This function returns a util.Timer() object which can be used to measure
+        time taken for a given task:
+
+            verbose = Context()
+            with verbose.write_t("Doing something... ", end='') as t:
+                # do something
+                verbose.write("done; this took {t}.", head=False)
+        """
+        self.report( 0, message, *args, end=end, head=head, **kwargs )
+        return Timer()
+
     def report( self, level : int, message : str, *args, end : str = "\n", head : bool = True, **kwargs ):
         """
         Print message with the formattting arguments at curent context level plus 'level'
@@ -310,13 +333,12 @@ class Context(object):
     # Misc
     # ----
     
-    @property
     def timer(self) -> Timer:
         """
         Returns a new util.Timer object to measure time spent in a block of code
         
         verbose = Context("all")
-        with verbose.timer as t:
+        with verbose.timer() as t:
             verbose.write("Starting... ", end='')
             ...
             verbose.write(f"this took {t}.", head=False)

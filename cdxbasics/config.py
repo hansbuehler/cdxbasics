@@ -125,12 +125,24 @@ class Config(OrderedDict):
     def __init__(self, *args, config_name : str = None, **kwargs):
         """
         See help(Config) for a description of this class.
+        
+        Two patterns:
+            __init__(config):
+                is the copy constructor; see copy()
+        or
+            __init__( dict, x=1, y=2 ):
+                creates a new config by first iteratively loading all positional dictionary arguments,
+                and then copying the keyword arguments as provided.
+            
+        See also Config.config_kwargs().
 
         Parameters
         ----------
             *args : list
-                List of dictionaries to update() with, iteratively.
-                If the first element is a config, and no other parameters are passed, then this object will be full copy of that config. It shares all usage recording. See copy().
+                List of dictionaries to create a new config with, iteratively.
+                If the first element is a config, and no other parameters are passed,
+                then this object will be full copy of that config.
+                It then shares all usage recording. See copy().
             config_name : str, optional
                 Name of the configuration for report_usage. Default is 'config'
             **kwargs : dict
@@ -1055,6 +1067,7 @@ class Config(OrderedDict):
         This function 'detaches' the current config from 'self' which means done() must be called again.
         
         Example
+        -------
 
         def f(config, **kwargs):
             config = Config.config_kwargs( config, kwargs )
@@ -1070,7 +1083,16 @@ class Config(OrderedDict):
 
         or
             f(x=1)
-
+            
+        Parameters
+        ----------
+            config : a Config object or None
+            kwargs : a dictionary. If 'config' is provided, the function will call config.update(kwargs).
+            config_name : a declarative name for the config if 'config' is not proivded
+            
+        Returns
+        -------
+            A Config
         """
         assert isinstance( config_name, str ), "'config_name' must be a string"
         if type(config).__name__ == Config.__name__: # we allow for import inconsistencies
