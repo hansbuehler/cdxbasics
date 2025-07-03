@@ -1130,6 +1130,7 @@ class Config(OrderedDict):
         return hash(self._name) ^ OrderedDict.__hash__(self)
         
 to_config = Config.to_config
+config_kwargs = Config.config_kwargs
 
 # ==============================================================================
 # New in version 0.1.45

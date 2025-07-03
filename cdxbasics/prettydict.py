@@ -198,6 +198,8 @@ class PrettyOrderedDict(OrderedDict):
         """
         return list(self)
     
+pdct = PrettyOrderedDict
+    
 class PrettySortedDict(SortedDict):
     """
     *NOT WORKING WELL*
