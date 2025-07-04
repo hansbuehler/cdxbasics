@@ -138,10 +138,11 @@ Generator versions of the `color_` functions.
 
 # prettydict
 
-A number of simple extensions to standard dictionaries which allow accessing any element of the dictionary with "." notation. The purpose is to create a functional-programming style method of generating complex objects.
+A number of simple extensions to standard dictionaries which allow accessing any element of the dictionary with "." notation.
+The purpose is to create a functional-programming style method of generating complex objects.
 
-    from cdxbasics.prettydict import PrettyDict
-    pdct = PrettyDict(z=1)
+    from cdxbasics.prettydict import PrettyOrderedDict
+    pdct = PrettyOrderedDict(z=1)
     pdct['a'] = 1       # standard dictionary write access
     pdct.b = 2          # pretty write access
     _ = pdct.b          # read access
@@ -166,7 +167,9 @@ Each of them is derived from the respective dictionary class. This can have some
 
     def mult_b( self, x ):
         return self.b * x
-    pdct = mult_a 
+    pdct = PrettyOrderedDict()
+    pdct = mult_a
+    pdct.mult_a(3)
 
 Calling `pdct.mult_a(3)` with above config will return `6` as expected. This only works when using the member synthax for assigning values
 to a pretty dictionary; if the standard `[]` operator is used then functions will be assigned to the dictionary as usual, hence they are static members of the object.
@@ -175,14 +178,25 @@ The reason for this is as follows: consider
 
     def mult( a, b ):
         return a*b
+    pdct = PrettyOrderedDict()
     pdct.mult = mult
-    mult(3,4) --> produces am error as three arguments as are passed if we count 'self'
+    pdct.mult(3,4) --> produces am error as three arguments as are passed if we count 'self'
  
  In this case, use:
  
+    pdct = PrettyOrderedDict()
     pdct['mult'] = mult
     pdct.mult(3,4) --> 12
 
+### Functions passed to the Constructor
+
+The constructor works like an item assignment, i.e.
+
+    def mult( a, b ):
+        return a*b
+    pdct = PrettyOrderedDict(mult=mult)
+    pdct.mult(3,4) --> 12
+    
 ### Dataclasses
 
 Dataclasses have difficulties with derived dictionaries.
