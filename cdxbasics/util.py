@@ -1027,6 +1027,12 @@ class CacheMode(object):
         self._delete = self.mode in [self.UPDATE, self.CLEAR]
         self._del_in = self.mode in [self.UPDATE, self.CLEAR, self.ON]
 
+    def __new__(cls, *kargs, **kwargs):
+        """ Copy constructor """
+        if len(kargs) == 1 and len(kwargs) == 0 and isinstance( kargs[0], CacheMode):
+            return kargs[0]
+        return super().__new__(cls)
+
     @property
     def read(self) -> bool:
         """ Whether to load any existing data when starting """

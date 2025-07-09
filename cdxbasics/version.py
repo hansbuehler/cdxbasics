@@ -251,7 +251,7 @@ class Version(object):
 # @version
 # =======================================================
 
-def version( version : str = "0.0.1" , dependencies : list = [] ):
+def version( version : str = "0.0.1" , dependencies : list = [], *, raise_if_has_version : bool = True ):
     """
     Decorator for a versioned function or class, which may depend on other versioned functions or classes.
     The point of this decorate is being able to find out the code version of a sequence of function calls, and be able to update cached or otherwise stored
@@ -267,6 +267,9 @@ def version( version : str = "0.0.1" , dependencies : list = [] ):
         The list can contain explicit function references, or strings.
         If strings are used, then the function's global context and, if appliable, it 'self' will be searched
         for the respective function.
+    raise_if_has_version : bool
+        Whether to throw an exception of version are already present.
+        This is usually the desired behaviour except if used in another wrapper, see for example vcache.        
 
     Returns
     -------
@@ -318,8 +321,13 @@ def version( version : str = "0.0.1" , dependencies : list = [] ):
         dep = dependencies
         existing = getattr(f, "version", None)
         if not existing is None:
-            # auto-create dependencies to base classes
-            if existing._original == f: _log.throw("@version: %s '%s' already has a member 'version'", "type" if isinstance(f,type) else "function", f.__qualname__ )
+            # make sure we were not called twice
+            if existing._original == f:
+                if not raise_if_has_version:
+                    return f
+                _log.throw("@version: %s '%s' already has a member 'version'", "type" if isinstance(f,type) else "function", f.__qualname__ )
+            # auto-create dependencies to base classes:
+            # in this case 'existing' is a member of the base class.
             if not existing._original in dependencies and not existing._original.__qualname__ in dependencies:
                 dep = list(dep)
                 dep.append( existing._original )

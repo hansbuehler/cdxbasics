@@ -804,6 +804,102 @@ This involves keying the cache by the function name and its current parameters, 
 	z = cache_callable( f )( 1, y=2 )
  	```
 
+    Note that you can exclude or include parameters with `exclude_args` and `include_args`, respectively.
+	````
+	from cdxbasics.version import version
+	from cdxbasics.subdir import SubDir
+    from cdxbasics.verbose import Context
+
+	@version("1")  # automatically equip 'f' with a version
+	def f(x,y,verbose : Context = Context.all):
+		return x*y        
+	
+	subdir = SubDir("!/cache")
+    # exclude 'verbose'
+	z = cache_callable( f, exclude_args=['verbose'] )( 1, y=2 )
+ 	```
+
+
+## CacheMode
+
+A simple enum-type class to help implement a standard caching pattern.
+It implements the following decision matrix
+
+|                                        |on    |off     |update   |clear   |readonly|
+|----------------------------------------|------|--------|---------|--------|--------|
+|load cache from disk if exists          |x     |-       |-        |-       |x|
+|write updates to di.sk                  |x     |-       |x        |-       |-|
+|delete existing object                  |-     |-       |-        |x       |-|
+|delete existing object if incompatible  |x     |-       |x        |x       |-|
+
+(For debugging purposes, an additional mode `gen` behaves like `on` except that it does not delete files with the wrong version.)
+
+Typically, the user is allowed to set the desired `CacheMode` using a `Config` element. The corresponding `CacheMode` object then implements the properties `read`, `write`, `delete` and `del_incomp`.
+Caching of versioned functions with the above logic is implemented in `cdxbasics.cached`, see below. It used `cdxbasics.version` to determine the version of a function, and all its dependencies.
+
+This is used in `SubDir.cache_callable` and by cachable functions descorated with versioned caches
+implemented in ``cdxbasics.vcache`.
+
+**Prototype code is to be implemented as follows:**
+
+    from cdxbasics.util import uniqueHash48
+    from cdxbasics.subdir import SubDir, CacheMode
+    from cdxbasics.version import version
+
+    @version("0.0.1")
+    def compute( *kargs, **kwargs ):
+        ... my function
+        return ...
+
+    def compute_cached( *kargs, cache_mode : CacheMode, cache_dir : SubDir, **kargs ):
+        # compute a unique hash from the input parameters.
+        # the default method used here may not work for all parameter types
+        # (most notable, uniqueHash48 will ignore members of any objects starting with '_'; see above)        
+
+        unique_id  = unqiueHash48( kargs, kwarg )   
+
+        # obtain a unique summary of the version of this function
+        # and all its dependents.
+
+        version_id = compute.version.unique_id48
+
+        # delete existing cache
+        # if requested by the user
+
+        if cache_mode.delete:
+            cache_dir.delete(unique_id)
+
+        # attempt to read cache
+        # by providing a version we ensure that changes to the function
+        # code will trigger an update of the cache by deleting any
+        # existing files with different versions
+
+        if cache_mode.read:
+            ret = cache_dir.read(unique_id, 
+                                 default=None, 
+                                 version=version_id,
+                                 delete_wrong_version=cache_model.del_incomp
+                                 )
+            if not ret is None:
+                return ret                                 
+        
+        # compute new object
+        # using main function
+
+        ret = compute( *kargs, **kwargs )
+
+        # write new object to disk if so desired
+        # include version
+
+        if cache_mode.write:
+            cache_dir.write(unique_id, ret, version=version_id )
+
+        return ret
+
+# vcache
+
+Project-wide caching based on `SubDir.cache_callable`.
+
 # filelock
 
 A system wide resource lock using a simplistic but robust implementation via a file lock.
@@ -900,81 +996,6 @@ To change default behaviour, use
     
  The returned function `myUniqueHash` will parse functions, and will also include `protect` members.
 
-## CacheMode
-
-A simple enum-type class to help implement a standard caching pattern.
-It implements the following decision matrix
-
-|                                        |on    |off     |update   |clear   |readonly|
-|----------------------------------------|------|--------|---------|--------|--------|
-|load cache from disk if exists          |x     |-       |-        |-       |x|
-|write updates to di.sk                  |x     |-       |x        |-       |-|
-|delete existing object                  |-     |-       |-        |x       |-|
-|delete existing object if incompatible  |x     |-       |x        |x       |-|
-
-(For debugging purposes, an additional mode `gen` behaves like `on` except that it does not delete files with the wrong version.)
-
-Typically, the user is allowed to set the desired `CacheMode` using a `Config` element. The corresponding `CacheMode` object then implements the properties `read`, `write`, `delete` and `del_incomp`.
-Caching of versioned functions with the above logic is implemented in `cdxbasics.cached`, see below. It used `cdxbasics.version` to determine the version of a function, and all its dependencies.
-
-
-**Prototype code is to be implemented as follows:**
-
-    from cdxbasics.util import CacheMode, uniqueHash48
-    from cdxbasics.subdir import SubDir
-    from cdxbasics.version import version
-
-    @version("0.0.1")
-    def compute( *kargs, **kwargs ):
-        ... my function
-        return ...
-
-    def compute_cached( *kargs, cache_mode : CacheMode, cache_dir : SubDir, **kargs ):
-        # compute a unique hash from the input parameters.
-        # the default method used here may not work for all parameter types
-        # (most notable, uniqueHash48 will ignore members of any objects starting with '_'; see above)        
-
-        unique_id  = unqiueHash48( kargs, kwarg )   
-
-        # obtain a unique summary of the version of this function
-        # and all its dependents.
-
-        version_id = compute.version.unique_id48
-
-        # delete existing cache
-        # if requested by the user
-
-        if cache_mode.delete:
-            cache_dir.delete(unique_id)
-
-        # attempt to read cache
-        # by providing a version we ensure that changes to the function
-        # code will trigger an update of the cache by deleting any
-        # existing files with different versions
-
-        if cache_mode.read:
-            ret = cache_dir.read(unique_id, 
-                                 default=None, 
-                                 version=version_id,
-                                 delete_wrong_version=cache_model.del_incomp
-                                 )
-            if not ret is None:
-                return ret                                 
-        
-        # compute new object
-        # using main function
-
-        ret = compute( *kargs, **kwargs )
-
-        # write new object to disk if so desired
-        # include version
-
-        if cache_mode.write:
-            cache_dir.write(unique_id, ret, version=version_id )
-
-        return ret
-
-A decorator with associated behaviour is being built.
 
 ## WriteLine (superseded by crman.CRMan)
 

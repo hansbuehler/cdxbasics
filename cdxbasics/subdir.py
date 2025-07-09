@@ -16,10 +16,13 @@ import pickle
 import tempfile
 import shutil
 import datetime
+import inspect
 from collections.abc import Collection, Mapping, Callable
 from enum import Enum
 import json as json
 import platform as platform
+from functools import update_wrapper
+from .prettydict import pdct
 
 try:
     import numpy as np
@@ -79,6 +82,25 @@ def mkFormat( name ):
     if not name in FORMAT_NAMES:
         _log.throw("Unknown format name '%s'. Must be one of: %s", name, fmt_list(name))
     return Format[name.upper()]
+
+class CacheTracker(object):
+    """ Utility class to track caching and be able to delete all dependent objects """
+    def __init__(self):
+        """ track cache files """
+        self._files = []
+    def __iadd__(self, new_file):
+        """ Add a new file to the tracker """
+        self._files.append( new_file )
+    def delete_cache_files(self):
+        """ Delete all tracked files """
+        for file in self._files:
+            if os.path.exists(file):
+                os.remove(file)
+        self._files = []
+    def __str__(self) -> str:#NOQA
+        return f"Tracked: {self._files}"
+    def __repr__(self) -> str:#NOQA
+        return f"Tracked: {self._files}"
 
 # SubDir
 # ======
@@ -375,6 +397,12 @@ class SubDir(object):
                 self.eraseEverything(keepDirectory=self._crt)
             if self._crt:
                 self.createDirectory()
+
+    def __new__(cls, *kargs, **kwargs):
+        """ Copy constructor """
+        if len(kargs) == 1 and len(kwargs) == 0 and isinstance( kargs[0], SubDir ):
+            return kargs[0]
+        return super().__new__(cls)
 
     @staticmethod
     def expandStandardRoot( name ):
@@ -1802,6 +1830,9 @@ class SubDir(object):
                              unique_args_id : str = None, *, 
                              version : str = "**", 
                              name : str = None, 
+                             exclude_args : list[str] = None,
+                             include_args : list[str] = None,
+                             exclude_arg_types : list[type] = None, 
                              cache_mode : CacheMode = CacheMode.ON):
         """
         Wraps a callable into a cachable function.
@@ -1824,10 +1855,17 @@ class SubDir(object):
             z = cache_callable( f )( 1, y=2 )
 
             In this case:
-                * The callable F must be decorate with cdxbascis.version.version
-                * All parameters of F must be convertable to with cdxbasics.util.uniqueHash
+                * The callable F must be decorated with cdxbascis.version.version
+                * All parameters of F must be convertable with cdxbasics.util.uniqueHash
                 * The function name must be unique.
-        
+                * Use exclude_args/include_args if need be to exclude some or only include some arguments.
+
+        See also
+        --------                
+        For project-wide use it is usually inconvenient to control caching at the level of a 'directory'.
+        See cdxbasics.vcache.VersionedCacheRoot is a thin wrapper around the present function to be used
+        accross a project.
+
         Parameters
         ----------
         F : Callable
@@ -1836,29 +1874,51 @@ class SubDir(object):
             A hash string for the arguments. You may use cdxbasics.util.uniqueHash or similar.
             If this argument is None then the function will call uniqueHash on the parameters passed to f.
         version : str, optional
-            Version of the function. If not provided, then F must have been decorated with cdxbasics.version.version.
+            Version of the function. If not provided (and is left at its default '**'),
+            then F must have been decorated with cdxbasics.version.version.
             This works for both classes and functions.
         name : str, optional
             Readable label to identify the callable.
-            If not provided, F.__qualname__ or type(F).__name__ are used if available; must be specified otherwise.
+            If not provided, F.__module__+"."+F.__qualname__ or type(F).__name__ are used if available; must be specified otherwise.
+        exclude_args :
+            If 'unique_args_id' is None, then use this keyword to exclude arguments from the automated calculation using the parameters to the function.
+            Will work with keyword arguments.
+        include_args :
+            If 'unique_args_id' is None, then use this keyword to include only these arguments from the automated calculation using the parameters to the function.
+            Will work with keyword arguments.
+        exclude_arg_types :
+            A list of types of arguments to exlude.
         cache_mode : CacheMode, optional
             Controls cache usage. See cdxbasics.CacheMode.
             
         Returns
         -------
             A callable to execute F if need be.
-
+            This callable has a member 'cache_info' which can be used to access information on caching activity:
+                F.cache_info.name : qualified name of the function
+                F.cache_info.version : unique version string including all dependencies.
+                F.cache_info.cached : whether the last function call returned a cached object
+                F.cache_info.last_file_name : full filename used to cache the last function call.
+                F.cache_info.last_id_arguments : arguments parsed to create a unique call ID, or None of unique_args_id was provided
+                
+            The function F has additional function parameters
+                override_cache_mode : allows to override caching mode temporarily, in particular "off"
+                track_cached_files : pass a CacheTracker object to keep track of all files used (loaded from or saved to).
+                      This can be used to delete intermediary files when a large operation was completed.
         """
         if name is None:
             try:
                 name = F.__qualname__
-            finally:
-                pass
+            except:
+                try:
+                    name = F.__name__
+                finally:
+                    pass
+                _log.verify( not name is None, "Cannot determine string name for 'F': it has neither __qualname__ nor a type with a name. Please specify 'name'")
             try:
-                name = F.__name__
-            finally:
-                pass
-            _log.verify( not name is None, "Cannot determine string name for 'F': it has neither __qualname__ nor a type with a name. Must specify 'name'")
+                name = name + "@" + F.__module__
+            except:
+                _log.warning( f"Cannot determine module name for 'F' of {type(F)}")
 
         if version != "**":
             version_ = version
@@ -1869,35 +1929,81 @@ class SubDir(object):
             except Exception:
                 _log.throw( f"Cannot determine version string for 'F' ({name}): must specify 'version'." )
                 
-        cache_mode = CacheMode(cache_mode)
+        exclude_args  = set(exclude_args) if not exclude_args is None and len(exclude_args) > 0 else None
+        include_args  = set(include_args) if not include_args is None and len(include_args) > 0 else None
+        exclude_arg_types = set(exclude_arg_types) if not exclude_arg_types is None and len(exclude_arg_types) > 0 else None
+        cache_mode    = CacheMode(cache_mode)
+        sig           = inspect.signature(F)
         
-        def execute( *kargs, **kwargs ):            
+        def execute( *kargs, override_cache_mode : CacheMode = None, track_cached_files : CacheTracker = None, **kwargs ):     
+            """
+            Cached execution of the wrapped function
+            """
+            
             if not unique_args_id is None:
                 filename = uniqueNamedFileName48_16( name, unique_args_id )
+                execute.cache_info.last_id_arguments = None
             else:
-                filename = uniqueNamedFileName48_16( name, kargs, kwargs )
+                arguments = sig.bind(*kargs,**kwargs)
+                arguments.apply_defaults()
+                arguments = arguments.arguments # ordered dict
+                argus = set(arguments)
 
-            if cache_mode.delete:
+                if not exclude_args is None or not include_args is None:
+                    excl = set(exclude_args) if not exclude_args is None else set()
+                    assert exclude_args is None or exclude_args <= argus, ("'exclude_args' contains unknown argument names. 'exclude_args'", exclude_args, "argument names", argus)
+                    if not include_args is None:     
+                        assert include_args is None or include_args <= argus, ("'include_args' contains unknown argument names. 'include_args'", include_args, "argument names", argus)
+                        excl = argus - include_args
+                    if not exclude_args is None:
+                        excl |= exclude_args
+                    for arg in excl:
+                        if arg in arguments:
+                            del arguments[arg]
+                    del excl
+
+                if not exclude_arg_types is None:
+                    print(exclude_arg_types)
+                    excl = []
+                    for k, v in arguments.items():
+                        print(type(v), type(v).__name__)
+                        if type(v) in exclude_arg_types or type(v).__name__ in exclude_arg_types:
+                            excl.append( k )
+                    for arg in excl:
+                        if arg in arguments:
+                            del arguments[arg]
+                            
+                filename = uniqueNamedFileName48_16( name, **arguments )
+                execute.cache_info.last_id_arguments = str(arguments)
+                del arguments, argus
+
+            execute.cache_info.last_file_name = filename
+
+            override_cache_mode = CacheMode(override_cache_mode) if not override_cache_mode is None else cache_mode
+
+            if override_cache_mode.delete:
                 self.delete( filename )
-            elif cache_mode.read:
+            elif override_cache_mode.read:
                 r = self.read( filename, None, version=version_ )
                 if not r is None:
+                    track_cached_files += self.fullFileName(filename)
+                    execute.cache_info.last_cached = True 
                     return r
             
             r = F(*kargs, **kwargs)
             _log.verify( not r is None, "Cannot use caching with functions which return None")
             
-            if cache_mode.write:
+            if override_cache_mode.write:
                 self.write(filename,r,version=version_)                
+                track_cached_files += self.fullFileName(filename)
+            execute.cache_info.last_cached = False
             return r
-        
+        update_wrapper( wrapper=execute, wrapped=F )
+        execute.cache_info = pdct()
+        execute.cache_info.name = name
+        execute.cache_info.version = version
         return execute
             
-
-        
-    
-    
-    
     
     
     
