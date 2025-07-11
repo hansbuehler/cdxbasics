@@ -1827,12 +1827,14 @@ class SubDir(object):
     # -------
     
     def cache_callable(self, F : Callable, 
-                             unique_args_id : str = None, *, 
-                             version : str = "**", 
-                             name : str = None, 
-                             exclude_args : list[str] = None,
-                             include_args : list[str] = None,
-                             exclude_arg_types : list[type] = None, 
+                             unique_args_id      : str = None, *, 
+                             version             : str = "**", 
+                             name                : str = None, 
+                             name_fmt            : str = None,
+                             unique_id_fmt       : str = None,
+                             exclude_args        : list[str] = None,
+                             include_args        : list[str] = None,
+                             exclude_arg_types   : list[type] = None, 
                              cache_mode : CacheMode = CacheMode.ON):
         """
         Wraps a callable into a cachable function.
@@ -1869,7 +1871,8 @@ class SubDir(object):
         Parameters
         ----------
         F : Callable
-            The callable; if this is not a function or an object then 'name' must be specified        
+            The callable; if this is not a function or an object then 'name' must be specified   
+            
         unique_args_id : str
             A hash string for the arguments. You may use cdxbasics.util.uniqueHash or similar.
             If this argument is None then the function will call uniqueHash on the parameters passed to f.
@@ -1880,6 +1883,17 @@ class SubDir(object):
         name : str, optional
             Readable label to identify the callable.
             If not provided, F.__module__+"."+F.__qualname__ or type(F).__name__ are used if available; must be specified otherwise.
+        name_fmt : str
+            A format string to identify a function call for better readability, using {} notation see https://docs.python.org/3/library/string.html#custom-string-formatting
+            Use 'name' to refer to above function name.   
+            A unique hash of all parameters is appended to this name, hence name_fmt does not have to be unique.
+            Use unique_fmt if your name is guarnateed to be unique.                
+        unique_id_fmt : str
+            A format string to identify a unique function name, using {} notation see https://docs.python.org/3/library/string.html#custom-string-formatting
+            It should contain all parameters which uniquely identify the function call.
+            Use 'name' to refer to above function name.  
+            This function must return unique identifier for all parameter choices.
+            Use name_fmt to create an identifier which is amended by a unique hash.
         exclude_args :
             If 'unique_args_id' is None, then use this keyword to exclude arguments from the automated calculation using the parameters to the function.
             Will work with keyword arguments.
@@ -1897,7 +1911,7 @@ class SubDir(object):
             This callable has a member 'cache_info' which can be used to access information on caching activity:
                 F.cache_info.name : qualified name of the function
                 F.cache_info.version : unique version string including all dependencies.
-                F.cache_info.cached : whether the last function call returned a cached object
+                F.cache_info.last_cached : whether the last function call returned a cached object
                 F.cache_info.last_file_name : full filename used to cache the last function call.
                 F.cache_info.last_id_arguments : arguments parsed to create a unique call ID, or None of unique_args_id was provided
                 
@@ -1929,9 +1943,9 @@ class SubDir(object):
             except Exception:
                 _log.throw( f"Cannot determine version string for 'F' ({name}): must specify 'version'." )
                 
-        exclude_args  = set(exclude_args) if not exclude_args is None and len(exclude_args) > 0 else None
-        include_args  = set(include_args) if not include_args is None and len(include_args) > 0 else None
-        exclude_arg_types = set(exclude_arg_types) if not exclude_arg_types is None and len(exclude_arg_types) > 0 else None
+        exclude_args  = set(exclude_args) if unique_args_id is None and not exclude_args is None and len(exclude_args) > 0 else None
+        include_args  = set(include_args) if unique_args_id is None and not include_args is None and len(include_args) > 0 else None
+        exclude_arg_types = set(exclude_arg_types) if unique_args_id is None and not exclude_arg_types is None and len(exclude_arg_types) > 0 else None
         cache_mode    = CacheMode(cache_mode)
         sig           = inspect.signature(F)
         
@@ -1940,9 +1954,14 @@ class SubDir(object):
             Cached execution of the wrapped function
             """
             
+            name_ = name
+            
             if not unique_args_id is None:
-                filename = uniqueNamedFileName48_16( name, unique_args_id )
+                assert unique_id_fmt is None, ("Cannot use both 'unique_args_id' and 'unique_id_fmt'")
+                assert name_fmt is None, ("Cannot use both 'unique_args_id' and 'name_fmt'")
+                filename = uniqueNamedFileName48_16( name_, unique_args_id )
                 execute.cache_info.last_id_arguments = None
+                
             else:
                 arguments = sig.bind(*kargs,**kwargs)
                 arguments.apply_defaults()
@@ -1963,17 +1982,22 @@ class SubDir(object):
                     del excl
 
                 if not exclude_arg_types is None:
-                    print(exclude_arg_types)
                     excl = []
                     for k, v in arguments.items():
-                        print(type(v), type(v).__name__)
                         if type(v) in exclude_arg_types or type(v).__name__ in exclude_arg_types:
                             excl.append( k )
                     for arg in excl:
                         if arg in arguments:
                             del arguments[arg]
                             
-                filename = uniqueNamedFileName48_16( name, **arguments )
+                if not unique_id_fmt is None:
+                    assert name_fmt is None, ("Cannot use both 'unique_id_fmt' and 'name_fmt'")
+                    name_ = str.format( unique_id_fmt, name=name_, **arguments )
+                    filename = uniqueNamedFileName48_16( name_ )
+                else:
+                    if not name_fmt is None:
+                        name_ = str.format( name_fmt, name=name_, **arguments )
+                    filename = uniqueNamedFileName48_16( name, **arguments )
                 execute.cache_info.last_id_arguments = str(arguments)
                 del arguments, argus
 
@@ -1986,7 +2010,8 @@ class SubDir(object):
             elif override_cache_mode.read:
                 r = self.read( filename, None, version=version_ )
                 if not r is None:
-                    track_cached_files += self.fullFileName(filename)
+                    if not track_cached_files is None:
+                        track_cached_files += self.fullFileName(filename)
                     execute.cache_info.last_cached = True 
                     return r
             
@@ -1994,8 +2019,9 @@ class SubDir(object):
             _log.verify( not r is None, "Cannot use caching with functions which return None")
             
             if override_cache_mode.write:
-                self.write(filename,r,version=version_)                
-                track_cached_files += self.fullFileName(filename)
+                self.write(filename,r,version=version_)      
+                if not track_cached_files is None:
+                    track_cached_files += self.fullFileName(filename)
             execute.cache_info.last_cached = False
             return r
         update_wrapper( wrapper=execute, wrapped=F )

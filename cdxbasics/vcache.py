@@ -71,8 +71,10 @@ class VersionedCacheDirectory( object ):
 
     def cache( self,  version : str = "0.0.1" , *,
                       dependencies : list = [], 
-                      unique_args_id : str = None, 
+                      fmt_unique_args_id : str = None, 
                       name : str = None,
+                      name_fmt : str = None,
+                      unique_id_fmt : str = None,
                       exclude_args : list = None,
                       include_args : list = None,
                       ):
@@ -80,29 +82,85 @@ class VersionedCacheDirectory( object ):
         Decorator to cache a function.
         Usage:
             
-        In a central file, define a root directory                
-            vroot = VersionedCacheRoot("!/cache")
+            In a central file, define a root directory                
+                vroot = VersionedCacheRoot("!/cache")
+    
+            and a sub-directory
+                vtest = vroot("test")
+                
+            @vtest.cache("1.0")
+            def f1( x=1, y=2 ):
+                print(x,y)
+                
+            @vtest.cache("1.0", dps=[f1])
+            def f2( x=1, y=2, z=3 ):
+                f1( x,y )
+                print(z)
 
-        and a sub-directory
-            vtest = vroot("test")
+        Store with a given name
+        
+            @vtest.cache("1.0", name_fmt="{name} {user}", dps=[f1])
+            def f2( x=1, y=2, z=3 ):
+                f1( x,y )
+                print(z)
+
+        
             
-        @vtest.cache("1.0")
-        def f1( x=1, y=2 ):
-            print(x,y)
+        Parameters
+        ----------
+        Version Management
+            version : str
+                A version string. A cache is invalidated if the version does not match; see cdxbasics.version.version
+            dependencies : list
+                A list of version dependencies, either strings or python functions or objects; see cdxbasics.version.version
+
+        Identifying unique functions calls
+            name : str
+                Readable label to identify the callable.
+                If not provided, F.__module__+"."+F.__qualname__ or type(F).__name__ are used if available; must be specified otherwise.
+            name_fmt : str
+                A format string to identify a function call for better readability, using {} notation see https://docs.python.org/3/library/string.html#custom-string-formatting
+                Use 'name' to refer to above function name.   
+                A unique hash of all parameters is appended to this name, hence name_fmt does not have to be unique.
+                Use unique_fmt if your name is guarnateed to be unique.                
+            unique_id_fmt : str
+                A format string to identify a unique function name, using {} notation see https://docs.python.org/3/library/string.html#custom-string-formatting
+                It should contain all parameters which uniquely identify the function call.
+                Use 'name' to refer to above function name.  
+                This function must return unique identifier for all parameter choices.
+                Use name_fmt to create an identifier which is amended by a unique hash.
+            exclude_args : list[str]
+                Use this keyword to exclude arguments from the automated calculation using the parameters to the function.
+                Will work with keyword arguments.
+            include_args :
+                Use this keyword to include only these arguments from the automated calculation using the parameters to the function.
+                Will work with keyword arguments.
+            self.exclude_arg_types are used 'globally' to exclude particular types from unique function name generation
             
-        @vtest.cache("1.0", dps=[f1])
-        def f2( x=1, y=2, z=3 ):
-            f1( x,y )
-            print(z)
-        """            
+        Returns
+        -------
+            A function wrapper.
+            The wrapped function has a member 'cache_info' which can be used to access information on caching activity:
+                F.cache_info.name : qualified name of the function
+                F.cache_info.version : unique version string including all dependencies.
+                F.cache_info.last_cached : whether the last function call returned a cached object
+                F.cache_info.last_file_name : full filename used to cache the last function call.
+                F.cache_info.last_id_arguments : arguments parsed to create a unique call ID, or None of unique_args_id was provided
+                
+            The wrapped function has additional function parameters
+                override_cache_mode : allows to override caching mode temporarily, in particular "off"
+                track_cached_files : pass a CacheTracker object to keep track of all files used (loaded from or saved to).
+                      This can be used to delete intermediary files when a large operation was completed.
+        """
         
         f_version = version_version( version=version, dependencies=dependencies, raise_if_has_version=False )
 
         def vwrap(f):
             # equip 'f' with a version and remember it
             f = f_version(f) # equip 'f' with a version string
-            f = self._dir.cache_callable(f, unique_args_id=unique_args_id, 
-                                            name=name, 
+            f = self._dir.cache_callable(f, name=name, 
+                                            name_fmt=name_fmt,
+                                            unique_id_fmt=unique_id_fmt,
                                             exclude_args=exclude_args, 
                                             include_args=include_args,
                                             exclude_arg_types=self._controller._exclude_arg_types ) 
