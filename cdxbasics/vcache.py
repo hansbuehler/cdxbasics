@@ -69,6 +69,38 @@ class VersionedCacheDirectory( object ):
         """        
         return VersionedCacheDirectory( sub_directory, parent=self, ext=ext, fmt=fmt, createDirectory=createDirectory  )
 
+    @property
+    def dir(self) -> SubDir:
+        """ Return underlying directory object """
+        return self._dir
+    
+    @property
+    def path(self) -> str:
+        """ Returns the fully qualified path ending in '/' """
+        return self._dir.path
+    
+    @property
+    def cache_mode(self) -> CacheMode:
+        """ Return caching mode """
+        return self._controller._cache_mode
+    
+    def fullFileName(self, filename : str, *, ext : str = None):
+        """ Return fully qualified name for 'filename' """
+        return self._dir.fullFileName(filename,ext=ext)
+
+    def files(self, *, ext : str = None) -> list[str]:
+        """ Return list of files """
+        return self._dir.files(ext=ext)
+
+    def subDirs(self) -> list[str]:
+        """ Return list of files """
+        return self._dir.subDirs()
+
+    """
+    Caching
+    -------
+    """
+
     def cache( self,  version : str = "0.0.1" , *,
                       dependencies : list = [], 
                       fmt_unique_args_id : str = None, 
@@ -103,8 +135,6 @@ class VersionedCacheDirectory( object ):
             def f2( x=1, y=2, z=3 ):
                 f1( x,y )
                 print(z)
-
-        
             
         Parameters
         ----------

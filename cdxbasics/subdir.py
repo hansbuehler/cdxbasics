@@ -969,9 +969,9 @@ class SubDir(object):
 
         Returns
         -------
-            True or False
+            Returns True only if the file exists and has the correct version.
         """
-        return self._read( key=key,default=None,raiseOnError=raiseOnError,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,handle_version=SubDir.VER_CHECK )
+        return self._read( key=key,default=False,raiseOnError=raiseOnError,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,handle_version=SubDir.VER_CHECK )
 
     def get_version( self, key : str, raiseOnError : bool = False, *, ext : str = None, fmt : Format = None ):
         """
@@ -1264,7 +1264,7 @@ class SubDir(object):
         -- "" then this function will return all files in this directory.
         -- a Format, then the default extension of the format will be used.
 
-        This function ignores directories.
+        This function ignores directories. Use subDirs() to retrieve those.
 
         [This function has an alias 'keys']
         """
@@ -1289,7 +1289,7 @@ class SubDir(object):
     def subDirs(self) -> list:
         """
         Returns a list of all sub directories
-        If self is None, then this function returns an empty list.
+        If self does not refer to an existing directory, then this function returns an empty list.
         """
         # do not do anything if the object was deleted
         if not self.pathExists():
@@ -1867,6 +1867,29 @@ class SubDir(object):
         For project-wide use it is usually inconvenient to control caching at the level of a 'directory'.
         See cdxbasics.vcache.VersionedCacheRoot is a thin wrapper around the present function to be used
         accross a project.
+        
+        Unique cache filenames
+        ----------------------
+        A main part of this function is to generate unique file names for the combination of the function name and of the relevant arameters.
+        
+            Function name
+            -------------
+            By defaul the qualified name plus the module name are used. This shoud be sufficient for most use cass, but you can use
+            name= to overwrite this behaviour.
+            
+            Parameters
+            ----------
+            By default the function will parse all parameters with cdxbasics.util.namedUniqueHashExt().
+            That means specifically:
+                - Any parameters starting with _ will be ignored.
+                - For Python objects __dict__ will be used. An object may provide a function to customize this process:
+                    __unique_hash__( self, length : int, parse_functions : bool, parse_underscore : str ) 
+                - Functions are not parsed.
+                
+            Additional support:
+                - It is common to want to exclude process related function parameters such as logfile references, graphical output etc.
+                  You can either specify those by name using exclude_args=, or by type via exclude_arg_types=
+                - Reversely, if only few of the parameters truly define a unique function call you can use  include_args= 
 
         Parameters
         ----------
@@ -1997,7 +2020,7 @@ class SubDir(object):
                 else:
                     if not name_fmt is None:
                         name_ = str.format( name_fmt, name=name_, **arguments )
-                    filename = uniqueNamedFileName48_16( name, **arguments )
+                    filename = uniqueNamedFileName48_16( name_, **arguments )
                 execute.cache_info.last_id_arguments = str(arguments)
                 del arguments, argus
 
