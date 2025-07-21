@@ -123,6 +123,14 @@ class PrettyOrderedDict(OrderedDict):
         if len(default) > 1:
             raise NotImplementedError("Cannot pass more than one default parameter.")
         return self.get(key,default[0]) if len(default) == 1 else  self.get(key)
+
+    # pickling    
+    def __getstate__(self):
+        """ Return state to pickle """
+        return self.__dict__
+    def __setstate__(self, state):
+        """ Restore pickle """
+        self.__dict__.update(state)
     
     def as_field(self) -> Field:
         """

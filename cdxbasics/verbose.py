@@ -360,6 +360,7 @@ class Context(object):
 
     def __reduce__(self):
         """ Turn off pickling; see https://docs.python.org/3/library/pickle.html#object.__reduce__ """
+        assert False, ("You might have tried to pickle a Context object")
         return None
 
     def __setstate__(self, state):

@@ -226,7 +226,7 @@ def quantile( P : np.ndarray, x : np.ndarray, quantiles : np.ndarray, axis : int
         x = x.flatten() if axis is None else x
         return np.quantile( x, quantiles, axis if not axis is None else -1, keepdims=keepdims )
     p, x, axis = _prep_P_and_X( P, x, axis )
-    p = P.flatten()
+    p = p.flatten()
 
     def pfunc( vec, *args, **kwargs ):
         assert len(vec) == len(p), ("Internal error", len(vec), len(p) )
@@ -846,6 +846,204 @@ def orth_project( XtX, XtY, YtY, * , total_rel_floor : float = 0.001,
     assert YtoZ.dtype == dtype, ("Dtype error", YtoZ.dtype, dtype)
     return XtoZ, YtoZ
     
+# ------------------------------------------------
+# Normnalization
+# -------------------------------------------------
+
+madf = 1.4826
+log2 = math.log(2.)
+nano_y = 1./(255.*24.*60.*60.*1000.*1000.) # a nanosecond in years
+              
+@njit(nogil=True)
+def rolling_ew_std( x : np.ndarray, window, init : int = 10, cutoff : float = 2.5 ):
+    """
+    Comnputes standard recursive exponential weighted mean and volatility, initialized over 'init' steps.
+    The update rule for w=1/window if there is no outlier is
+        m_t := (1-w) m_{t-1} + w x_t 
+        v_t := (1-w) v_{t-1} + w ( x_t - m_t )**2
+    Where v is variance. The function returns sqrt{v}
+    
+    An outlier is identified if the absolute value of the normalized innovation excdeeds cutoff.
+    In that case:
+        m_t = m_{t-1}
+        v_t is updated using the capped and floored innovation.
+
+    Parameters
+    -----------
+        x : time series in the first coordinate
+        window : The parametrization w=1/window means that any new observation gets the same weight as it would get
+                in a rolling estimator with size 'window'.
+        init : initial period. All elements loc, vol up to init have the same value
+        cutoff : normalized values exceeding this level are considered outliers.
+        
+    Returns
+    -------
+        Mean and vol
+    """
+    loc          = np.zeros_like( x )
+    dis          = np.zeros_like( x )    
+    loc[:init]   = np.mean( x[:init] ) 
+    dis[:init]   = np.mean( (x[:init] - loc[init-1])**2 ) 
+    w            = 1./float(window)
+
+    for i in range(init, x.shape[0]):
+        vol    = np.sqrt( dis[i-1] ) + 0.0001 / 255.
+        z_i    = ( x[i] - loc[i-1] ) / vol
+        skip_i = np.abs( z_i ) > cutoff
+        xx_i   = np.minimum( cutoff, np.maximum( -cutoff, ( x[i] - loc[i-1] ) / vol ) ) * vol + loc[i-1]
+        loc[i] = np.where( skip_i, loc[i-1], (1.-w) * loc[i-1] + w * xx_i )
+        dis[i] = (1.-w) * dis[i-1] + w * ( xx_i - loc[i] )**2
+    return loc, np.sqrt( dis )
+
+@njit(nogil=True)
+def robust_rolling_ew( x, window, init=10, cutoff=2.5 ):
+    """
+    Comnputes robust recursive exponential weighted mean and volatility, initialized over 'init' steps using median and MAD, respectively.
+    The update rule for w=1/window if there is no outlier is:
+        m_t := (1-w) m_{t-1} + w x_t 
+        v_t := (1-w) v_{t-1} + w 1.4826 | x_t - m_t |
+        
+    An outlier is identified if the absolute value of the normalized innovation excdeeds cutoff.
+    In that case:
+        m_t = m_{t-1}
+        v_t is updated using the capped and floored innovation.
+        
+    Parameters
+    ----------
+        x : time series in the first coordinate
+        window : The parametrization w=1/window means that any new observation gets the same weight as it would get
+                in a rolling estimator with size 'window'.
+        init : initial period. All elements loc, vol up to init have the same value
+        cutoff : normalized values exceeding this level are considered outliers.
+        
+    Returns
+    -------
+        Robust Mean, vol, and outlier detections
+    """
+    loc          = np.zeros_like( x )
+    dis          = np.zeros_like( x )
+    otl          = np.zeros_like( x, dtype=np.bool_ ) 
+
+    # robust initial values
+    loc[:init]   = np.median( x[:init] ) 
+    dis[:init]   = madf * np.median( np.abs(x[:init] - loc[init-1]) ) 
+    w            = 1./float(window)
+
+    for i in range(init, x.shape[0]):
+        vol    = dis[i-1] + 0.0001 / 255.
+        z_i    = ( x[i] - loc[i-1] ) / vol
+        otl[i] = np.abs( z_i ) > cutoff
+        xx_i   = np.minimum( cutoff, np.maximum( -cutoff, ( x[i] - loc[i-1] ) / vol ) ) * vol + loc[i-1]
+        loc[i] = np.where( otl[i], loc[i-1], (1.-w) * loc[i-1] + w * xx_i )
+        dis[i] = (1.-w) * dis[i-1] + w * madf * np.abs( xx_i - loc[i] )
+    return loc, dis, otl
+
+@njit(nogil=True)
+def _inner_robust_rolling_dt_ew( *,
+        x  : np.ndarray,
+        dt : np.ndarray,
+        w : np.ndarray,
+        loc : np.ndarray,
+        dis : np.ndarray,
+        otl : np.ndarray,
+        twindow : float,
+        init : int,
+        cutoff : float,
+        scale_by_dt : bool,
+        normalize_by_dt : bool
+        ):
+
+    if not scale_by_dt:
+        for i in range(init, x.shape[0]):
+            vol    = dis[i-1] + 0.0001 / 255.
+            z_i    = ( x[i] - loc[i-1] ) / vol
+            otl[i] = np.abs( z_i ) > cutoff
+            xx_i   = np.minimum( cutoff, np.maximum( -cutoff, z_i ) ) * vol + loc[i-1]
+            loc[i] = np.where( otl[i], loc[i-1], (1.-w[i]) * loc[i-1] + w[i] * xx_i )
+            dis[i] = (1.-w[i]) * dis[i-1] + w[i] * madf * np.abs( xx_i - loc[i-1] )
+            
+        if normalize_by_dt:
+            loc /= dt
+            dis /= np.sqrt(dt)
+    else:
+        assert np.min( dt ) >= nano_y, ("Found too smaLL 'dt':", np.min(dt), "which is less than a nanosecond", nano_y )
+        for i in range(init, x.shape[0]):
+            vol    = dis[i-1] + 0.0001 / 255.
+            sqtdt  = np.sqrt(dt[i])
+            z_i    = ( x[i] - loc[i-1]*dt[i] ) / ( vol*sqtdt )
+            otl[i] = np.abs( z_i ) > cutoff
+            xx_i   = np.minimum( cutoff, np.maximum( -cutoff, z_i ) ) * vol * sqtdt  + loc[i-1] * dt[i]
+            loc[i] = np.where( otl[i], loc[i-1], (1.-w[i]) * loc[i-1] + w[i] * xx_i / dt[i] )
+            dis[i] = (1.-w[i]) * dis[i-1] + w[i] * madf * np.abs( xx_i - loc[i]*dt[i] ) / sqtdt
+        if not normalize_by_dt:
+            loc *= dt
+            dis *= np.sqrt(dt)
+    return loc, dis, otl
+
+def robust_rolling_dt_ew( x  : np.ndarray,
+                          dt : np.ndarray,
+                          twindow : float = 0.25,
+                          init : int = 10,
+                          cutoff : float = 2.5,
+                          scale_by_dt : bool = False,
+                          normalize_by_dt : bool = False ):
+    r"""
+    Comnputes robust recursive exponential weighted mean and volatility, initialized over 'init' steps using median and MAD, respectively.
+    The update rule for w=1-exp(-dt/twindow) ~ dt/twindow if there is no outlier is:
+        scale_by_dt False:
+            m_t := (1-w_t) m_{t-1} + w_t x_t 
+            v_t := (1-w_t) v_{t-1} + w_t 1.4826 | x_t - m_t |
+            
+    In case 'x' is itself a return-type such as dS for a stock, then you may want to use:
+        scale_by_dt True:
+            m_t := (1-w_t) m_{t-1} + w_t x_t/dt
+            v_t := (1-w_t) v_{t-1} + w_t 1.4826 | x_t - m_t*dt | / sqrt{dt}
+            If each time step is of the same dt and if twindow=window*dt then this functionis equivalent to robust_rolling_ew except that the quantity
+            estimated is the mean of dx/dt and the vol is of (dx-m*dt)/sqrt{dt}.
+            
+        
+    An outlier is identified if the absolute value of the normalized innovation excdeeds cutoff.
+    In that case:
+        m_t = m_{t-1}
+        v_t is updated using the capped and floored innovation.
+        
+        
+    Parameters
+    ----------
+        x : time series in the first coordinate
+        window : The parametrization w=1/window means that any new observation gets the same weight as it would get
+                in a rolling estimator with size 'window'.
+        init : initial period. All elements loc, vol up to init have the same value
+        cutoff : normalized values exceeding this level are considered outliers.
+        scale_by_dt : scale returns by 'dt' and volatilties by sqrt(dt) during estimation [see above]
+        normalize_by_dt: if True, take the time series of means m and volatilities v and divide by 'dt' and sqrt(dt), respectively.
+        
+    Returns
+    -------
+        Robust Mean, vol, and outlier detections
+    """
+    loc          = np.zeros_like( x )
+    dis          = np.zeros_like( x )
+    otl          = np.zeros_like( x, dtype=np.bool_ ) 
+    w            = - np.expm1( - dt / twindow )
+    q            = w[:init] / np.sum( w[:init] )
+
+    # TODO: current numba does not support quantiles with weights
+    if not scale_by_dt:
+        loc[:init]   = np.quantile( x[:init], 0.5, weights=q, method="inverted_cdf" ) 
+        dis[:init]   = madf *  np.quantile( np.abs(x[:init] - loc[init-1]), 0.5, weights=q, method="inverted_cdf" ) 
+    else:
+        assert np.min( dt ) >= nano_y, ("Found too smaLL 'dt':", np.min(dt), "which is less than a nanosecond", nano_y )
+        loc[:init]   = np.quantile( x[:init]/dt[:init], 0.5, weights=q, method="inverted_cdf" ) 
+        dis[:init]   = madf * np.quantile( np.abs(x[:init] - loc[init-1]*dt[:init]) / np.sqrt( dt[:init] ), 0.5, weights=q, method="inverted_cdf" ) 
+
+    return _inner_robust_rolling_dt_ew( x=x, dt=dt, w=w, loc=loc, dis=dis, otl=otl,
+                                       twindow =twindow,
+                                       init =init,
+                                       cutoff =cutoff,
+                                       scale_by_dt =scale_by_dt,
+                                       normalize_by_dt=normalize_by_dt )
+
 # ------------------------------------------------
 # Data management
 # -------------------------------------------------

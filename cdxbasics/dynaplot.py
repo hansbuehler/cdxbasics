@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import matplotlib.colors as mcolors
 from matplotlib.artist import Artist
+from matplotlib.axes import Axes
 from IPython import display
 import io as io
 import gc as gc
@@ -325,6 +326,19 @@ class DynamicAx(Deferred):
         'rows' and 'cols' count the columns and rows specified by add_subplot() and are ignored by add_axes()
         """
         assert self.ax is None, "Internal error; function called twice?"
+        
+        def handle_kw_share( kw ):
+            v = self.kwargs.pop(kw, None)
+            if v  is None:
+                return
+            if isinstance( v, Axes ):
+                self.kwargs[kw] = v
+            assert isinstance( v, DynamicAx ), ("Cannot",kw,"with type:", type(v))
+            assert not v.ax is None, ("Cannot", kw, "with provided axis: it has bnot been creatred yet. That usually means that you mnixed up the order of the plots")
+            self.kwargs[kw] = v.ax
+            
+        handle_kw_share("sharex")
+        handle_kw_share("sharey")
         
         if not self.row is None:
             # add_axes

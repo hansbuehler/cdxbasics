@@ -217,7 +217,7 @@ class SubDir(object):
     DEFAULT_RAISE_ON_ERROR = False
     RETURN_SUB_DIRECTORY = __RETURN_SUB_DIRECTORY
     DEFAULT_FORMAT = Format.PICKLE
-    DEFAULT_CREATE_DIRECTORY = True  # legacy behaviour so that self.path is a valid path
+    DEFAULT_CREATE_DIRECTORY = False  # legacy behaviour so that self.path is a valid path
     EXT_FMT_AUTO = "*"
 
     MAX_VERSION_BINARY_LEN = 128
@@ -1823,6 +1823,20 @@ class SubDir(object):
         _log.verify( key[:1] != "_", "Deleting protected or private members disabled. Fix __delattr__ to support this")
         return self.delete( key=key, raiseOnError=False )
 
+    # pickling
+    # --------
+    
+    def __getstate__(self):
+        """ Return state to pickle """
+        return dict( path=self._path, ext=self._ext, fmt=self._fmt, crt=self._crt )    
+
+    def __setstate__(self, state):
+        """ Restore pickle """
+        self._path = state['path']
+        self._ext = state['ext']
+        self._fmt = state['fmt']
+        self._crt = state['crt']
+        
     # caching
     # -------
     
