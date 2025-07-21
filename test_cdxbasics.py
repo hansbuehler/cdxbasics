@@ -18,6 +18,8 @@ import cdxbasics.version as ver
 import datetime as datetime
 import dataclasses as dataclasses
 import numpy as np
+import hashlib as hashlib
+
 if False:
     import importlib as imp
     imp.reload(mdl_kwargs)
@@ -339,16 +341,23 @@ class CDXBasicsTest(unittest.TestCase):
         x = np.array([1,2,3,4.])
         u = uniqueHash(x)
         self.assertEqual( u, "d819f0b72b849d66112e139fa3b7c9f1" )
-
-
-        self.assertEqual( uniqueHash( np.float32(0) ), "30565a8911a6bb487e3745c0ea3c8224" )
-        self.assertEqual( uniqueHash( np.float64(0) ), "30565a8911a6bb487e3745c0ea3c8224" )
-        self.assertEqual( uniqueHash( np.int32(0) ), "cfcd208495d565ef66e7dff9f98764da" )
-        self.assertEqual( uniqueHash( np.int64(0) ), "cfcd208495d565ef66e7dff9f98764da" )
+        
+        def encode(s):
+            m = hashlib.md5() 
+            s_ =  repr(s).encode('utf-8')
+            m.update(s_)
+            return m.hexdigest()
+        self.assertEqual( encode( np.float32(0) ), "93fe72b21c78617a74670874d9abf0cd" )
+        self.assertEqual( encode( np.float64(0) ), "db878eaf3018e02fc0d14f43a6f0caa3" )
+        
+        self.assertEqual( uniqueHash( np.float32(0) ), "93fe72b21c78617a74670874d9abf0cd" )
+        self.assertEqual( uniqueHash( np.float64(0) ), "db878eaf3018e02fc0d14f43a6f0caa3" )
+        self.assertEqual( uniqueHash( np.int32(0) ), "a8e1fd9116a604412cd489af694eaa79" )
+        self.assertEqual( uniqueHash( np.int64(0) ), "e7f989a9a51f504c8d110e408f843618" )
 
         o2 = [ np.float32(0), np.float64(0), np.int32(0), np.int64(0) ]
         u = uniqueHash(o2)
-        self.assertEqual( u, "818745c4d2c2ac8393b1d9571dc0d1bc" )
+        self.assertEqual( u, "2c46d6a76b1f39f01468ce63b0196f6d" )
 
         o = Object()
         u = uniqueHash(o)
@@ -468,6 +477,17 @@ class CDXBasicsTest(unittest.TestCase):
         s2 = sub("subDir2/")
         s3 = SubDir("subDir3/",parent=sub)
         s4 = SubDir("subDir4", parent=sub)
+        self.assertEqual(s1.path, sub.path + "subDir1/")
+        self.assertEqual(s2.path, sub.path + "subDir2/")
+        self.assertEqual(s3.path, sub.path + "subDir3/")
+        self.assertEqual(s4.path, sub.path + "subDir4/")
+        lst = str(sorted(sub.subDirs()))
+        self.assertEqual(lst, "[]")
+        sub = SubDir("!/.tmp_test_for_cdxbasics.subdir", eraseEverything=True )
+        s1 = sub("subDir1", createDirectory=True)
+        s2 = sub("subDir2/", createDirectory=True)
+        s3 = SubDir("subDir3/",parent=sub, createDirectory=True)
+        s4 = SubDir("subDir4", parent=sub, createDirectory=True)
         self.assertEqual(s1.path, sub.path + "subDir1/")
         self.assertEqual(s2.path, sub.path + "subDir2/")
         self.assertEqual(s3.path, sub.path + "subDir3/")
