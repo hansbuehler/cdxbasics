@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="cdxbasics",
-    version="0.2.126",  # will auto-update via pip_modify_setup.py
+    version="0.2.127",  # will auto-update via pip_modify_setup.py
     author="Hans Buehler",
     author_email="github@buehler.london",
     description="Basic Python tools",
@@ -16,7 +16,7 @@ setuptools.setup(
     url="https://github.com/hansbuehler/cdxbasics",
     packages=setuptools.find_packages(),
     install_requires=[
-         'numpy', 'pandas', 'matplotlib', 'sortedcontainers', 'psutil', 'jsonpickle', 'setuptools'
+         'numpy', 'pandas', 'matplotlib', 'sortedcontainers', 'psutil', 'jsonpickle', 'setuptools', 'numba'
      ],
     classifiers=[
         "Programming Language :: Python :: 3",
