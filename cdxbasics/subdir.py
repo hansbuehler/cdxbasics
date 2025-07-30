@@ -1846,7 +1846,9 @@ class SubDir(object):
                              version             : str = "**", 
                              name                : str = None, 
                              name_fmt            : str = None,
+                             name_call           : Callable = None,
                              unique_id_fmt       : str = None,
+                             unique_id_call      : Callable = None,
                              exclude_args        : list[str] = None,
                              include_args        : list[str] = None,
                              exclude_arg_types   : list[type] = None, 
@@ -1927,13 +1929,19 @@ class SubDir(object):
             A format string to identify a function call for better readability, using {} notation see https://docs.python.org/3/library/string.html#custom-string-formatting
             Use 'name' to refer to above function name.   
             A unique hash of all parameters is appended to this name, hence name_fmt does not have to be unique.
-            Use unique_fmt if your name is guaranteed to be unique.                
+            Use unique_fmt if your name is guaranteed to be unique.       
+        name_call : Callable
+            A callable which will be called with the named arguments which were included and not excluded.
+            Not needed to return a unique name
         unique_id_fmt : str
             A format string to identify a unique function name, using {} notation see https://docs.python.org/3/library/string.html#custom-string-formatting
             It should contain all parameters which uniquely identify the function call.
             Use 'name' to refer to above function name.  
             This function must return unique identifier for all parameter choices.
-            Use name_fmt to create an identifier which is amended by a unique hash.
+            Use name_fmt to create an identifier which is not itself unique, and is therefore amended by a unique hash.
+        unique_id_call : Callable
+            A callable which will be called with the named arguments which were included and not excluded.
+            Must return a unique name
         exclude_args :
             If 'unique_args_id' is None, then use this keyword to exclude arguments from the automated calculation using the parameters to the function.
             Will work with keyword arguments.
@@ -2000,6 +2008,8 @@ class SubDir(object):
                 # generate name with the unique args
                 assert unique_id_fmt is None, ("Cannot use both 'unique_args_id' and 'unique_id_fmt'")
                 assert name_fmt is None, ("Cannot use both 'unique_args_id' and 'name_fmt'")
+                assert name_call is None, ("Cannot use both 'unique_args_id' and 'name_call'")
+                assert unique_id_call is None, ("Cannot use both 'unique_args_id' and 'unique_id_call'")
                 filename = uniqueLabelledFileName48_16( name_ + ' ' + unique_args_id )
                 execute.cache_info.last_id_arguments = None
                 
@@ -2034,8 +2044,19 @@ class SubDir(object):
                 if not unique_id_fmt is None:
                     # user guarantees that the formatted name is unique
                     assert name_fmt is None, ("Cannot use both 'unique_id_fmt' and 'name_fmt'")
+                    assert name_call is None, ("Cannot use both 'unique_id_fmt' and 'name_call'")
+                    assert unique_id_call is None, ("Cannot use both 'unique_id_fmt' and 'unique_id_call'")
                     name_ = str.format( unique_id_fmt, name=name_, **arguments )
                     filename = uniqueLabelledFileName48_16( name_ )
+                elif not unique_id_call is None:
+                    assert name_fmt is None, ("Cannot use both 'unique_id_call' and 'name_fmt'")
+                    assert name_call is None, ("Cannot use both 'unique_id_call' and 'name_call'")
+                    name_ = unique_id_call( name=name_, **arguments )
+                    filename = uniqueLabelledFileName48_16( name_ )
+                elif not name_call is None:
+                    assert name_fmt is None, ("Cannot use both 'name_call' and 'name_fmt'")
+                    name_ = name_call( name=name_, **arguments )
+                    filename = uniqueNamedFileName48_16( name_, **arguments )
                 else:
                     # user does not guarantee that the formatted name is unique
                     if not name_fmt is None:
