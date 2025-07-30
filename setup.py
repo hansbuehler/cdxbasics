@@ -16,7 +16,7 @@ setuptools.setup(
     url="https://github.com/hansbuehler/cdxbasics",
     packages=setuptools.find_packages(),
     install_requires=[
-         'numpy', 'pandas', 'matplotlib', 'sortedcontainers', 'psutil', 'jsonpickle'
+         'numpy', 'pandas', 'matplotlib', 'sortedcontainers', 'psutil', 'jsonpickle', 'setuptools'
      ],
     classifiers=[
         "Programming Language :: Python :: 3",
