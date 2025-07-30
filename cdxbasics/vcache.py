@@ -5,7 +5,7 @@ Hans Buehler June 2023
 
 from .version import version as version_version
 from .logger import Logger
-from .subdir import SubDir, Format, CacheMode, CacheTracker
+from .subdir import SubDir, Format, CacheMode, CacheTracker, Callable
 from .verbose import Context
 from .prettydict import pdct
 from functools import update_wrapper
@@ -106,7 +106,9 @@ class VersionedCacheDirectory( object ):
                       fmt_unique_args_id : str = None, 
                       name : str = None,
                       name_fmt : str = None,
+                      name_call : Callable = None,
                       unique_id_fmt : str = None,
+                      unique_id_call : Callable = None,
                       exclude_args : list = None,
                       include_args : list = None,
                       ):
@@ -190,7 +192,9 @@ class VersionedCacheDirectory( object ):
             f = f_version(f) # equip 'f' with a version string
             f = self._dir.cache_callable(f, name=name, 
                                             name_fmt=name_fmt,
+                                            name_call=name_call,
                                             unique_id_fmt=unique_id_fmt,
+                                            unique_id_call=unique_id_call,
                                             exclude_args=exclude_args, 
                                             include_args=include_args,
                                             exclude_arg_types=self._controller._exclude_arg_types ) 
