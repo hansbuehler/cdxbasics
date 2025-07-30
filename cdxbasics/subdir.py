@@ -52,6 +52,7 @@ except ModuleNotFoundError:
 
 uniqueFileName48 = uniqueHash48
 uniqueNamedFileName48_16 = namedUniqueHashExt(max_length=48,id_length=16,filename_by=DEF_FILE_NAME_MAP)
+uniqueLabelledFileName48_16 = uniqueLabelExt(max_length=48,id_length=16,filename_by=DEF_FILE_NAME_MAP)
 
 def _remove_trailing( path ):
     if len(path) > 0:
@@ -1861,14 +1862,16 @@ class SubDir(object):
                 return x*y
             x = 1
             y = 2
-            z = cache_callable( f, unique_args_id=f"{x},{y}", version="1", label="f" )( x, y=y )
+            subdir = SubDir("!/")
+            z = subdir.cache_callable( f, unique_args_id=f"{x},{y}", version="1", label="f" )( x, y=y )
         
         Fully implicit usage utilizing cdxbasics.version:
 
             @version
             def f(x,y):
                 return x*y        
-            z = cache_callable( f )( 1, y=2 )
+            subdir = SubDir("!/")
+            z = subdir.cache_callable( f )( 1, y=2 )
 
             In this case:
                 * The callable F must be decorated with cdxbascis.version.version
@@ -1924,7 +1927,7 @@ class SubDir(object):
             A format string to identify a function call for better readability, using {} notation see https://docs.python.org/3/library/string.html#custom-string-formatting
             Use 'name' to refer to above function name.   
             A unique hash of all parameters is appended to this name, hence name_fmt does not have to be unique.
-            Use unique_fmt if your name is guarnateed to be unique.                
+            Use unique_fmt if your name is guaranteed to be unique.                
         unique_id_fmt : str
             A format string to identify a unique function name, using {} notation see https://docs.python.org/3/library/string.html#custom-string-formatting
             It should contain all parameters which uniquely identify the function call.
@@ -1994,9 +1997,10 @@ class SubDir(object):
             name_ = name
             
             if not unique_args_id is None:
+                # generate name with the unique args
                 assert unique_id_fmt is None, ("Cannot use both 'unique_args_id' and 'unique_id_fmt'")
                 assert name_fmt is None, ("Cannot use both 'unique_args_id' and 'name_fmt'")
-                filename = uniqueNamedFileName48_16( name_, unique_args_id )
+                filename = uniqueLabelledFileName48_16( name_ + ' ' + unique_args_id )
                 execute.cache_info.last_id_arguments = None
                 
             else:
@@ -2028,10 +2032,12 @@ class SubDir(object):
                             del arguments[arg]
                             
                 if not unique_id_fmt is None:
+                    # user guarantees that the formatted name is unique
                     assert name_fmt is None, ("Cannot use both 'unique_id_fmt' and 'name_fmt'")
                     name_ = str.format( unique_id_fmt, name=name_, **arguments )
-                    filename = uniqueNamedFileName48_16( name_ )
+                    filename = uniqueLabelledFileName48_16( name_ )
                 else:
+                    # user does not guarantee that the formatted name is unique
                     if not name_fmt is None:
                         name_ = str.format( name_fmt, name=name_, **arguments )
                     filename = uniqueNamedFileName48_16( name_, **arguments )
