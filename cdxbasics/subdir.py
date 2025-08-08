@@ -1857,8 +1857,10 @@ class SubDir(object):
         Wraps a callable into a cachable function.
         It will attempt to read an existing cache for the parameter set with the correct function version.
 
-        `cache_callable` will need a unique ID of the function call. There are two methods to provide this:        
-        Explicit usage where we specify `unique_args_id`:
+        `cache_callable` will need a unique ID of the function call so it can cache the results.
+        There are two methods to provide this:
+            
+        1) Explicit usage where we specify `unique_args_id`:
             
             def f(x,y):
                 return x*y
@@ -1867,7 +1869,7 @@ class SubDir(object):
             subdir = SubDir("!/")
             z = subdir.cache_callable( f, unique_args_id=f"{x},{y}", version="1", label="f" )( x, y=y )
         
-        Fully implicit usage utilizing cdxbasics.version:
+        2) Fully implicit usage utilizing cdxbasics.version:
 
             @version
             def f(x,y):
@@ -1909,6 +1911,29 @@ class SubDir(object):
                 - It is common to want to exclude process related function parameters such as logfile references, graphical output etc.
                   You can either specify those by name using exclude_args=, or by type via exclude_arg_types=
                 - Reversely, if only few of the parameters truly define a unique function call you can use  include_args= 
+                - Finally, you can also specify your own hash and pass it along as unique_args_id
+
+            Formatting
+            ----------
+            Assume now we have a 'name' and a dictionary of 'parameters'.
+            Then the actual file name can be constructed as follows
+            
+                Default:
+                    Return: name uniqueHash (*)
+                    
+                Using name_fmt:
+                    Use reduced string.format() formatting with {}.
+                    Does not assume that the returned string is unique and adds a hash. 
+                    
+                    Return: name_fmt.format(name=name,*parameters) uniqueHash (*)
+            
+                Using name_call:
+                    Treats name_call as a function and calls name_call(name=name,*parameters).
+                    Does not assume that the returned string is unique and adds a hash:                        
+                                        
+                    Return: name_call(name=name,*parameters) uniqueHash (*)
+                    
+                
 
         Parameters
         ----------
@@ -1991,11 +2016,11 @@ class SubDir(object):
             except Exception:
                 _log.throw( f"Cannot determine version string for 'F' ({name}): must specify 'version'." )
                 
-        exclude_args  = set(exclude_args) if unique_args_id is None and not exclude_args is None and len(exclude_args) > 0 else None
-        include_args  = set(include_args) if unique_args_id is None and not include_args is None and len(include_args) > 0 else None
+        exclude_args      = set(exclude_args) if unique_args_id is None and not exclude_args is None and len(exclude_args) > 0 else None
+        include_args      = set(include_args) if unique_args_id is None and not include_args is None and len(include_args) > 0 else None
         exclude_arg_types = set(exclude_arg_types) if unique_args_id is None and not exclude_arg_types is None and len(exclude_arg_types) > 0 else None
-        cache_mode    = CacheMode(cache_mode)
-        sig           = inspect.signature(F)
+        cache_mode        = CacheMode(cache_mode)
+        sig               = inspect.signature(F)
         
         def execute( *kargs, override_cache_mode : CacheMode = None, track_cached_files : CacheTracker = None, **kwargs ):     
             """
@@ -2049,11 +2074,13 @@ class SubDir(object):
                     name_ = str.format( unique_id_fmt, name=name_, **arguments )
                     filename = uniqueLabelledFileName48_16( name_ )
                 elif not unique_id_call is None:
+                    # user guarantees that the formatted name is unique
                     assert name_fmt is None, ("Cannot use both 'unique_id_call' and 'name_fmt'")
                     assert name_call is None, ("Cannot use both 'unique_id_call' and 'name_call'")
                     name_ = unique_id_call( name=name_, **arguments )
                     filename = uniqueLabelledFileName48_16( name_ )
                 elif not name_call is None:
+                    # user does not guarantee that the formatted name is unique
                     assert name_fmt is None, ("Cannot use both 'name_call' and 'name_fmt'")
                     name_ = name_call( name=name_, **arguments )
                     filename = uniqueNamedFileName48_16( name_, **arguments )
