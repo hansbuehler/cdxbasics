@@ -1842,36 +1842,27 @@ class SubDir(object):
     # -------
     
     def cache_callable(self, F : Callable, 
-                             unique_args_id      : str = None, *, 
-                             version             : str = "**", 
+                             version             : str = "**", *,
+                             id                  : Callable = None,
                              name                : str = None, 
-                             name_fmt            : str = None,
-                             name_call           : Callable = None,
-                             unique_id_fmt       : str = None,
-                             unique_id_call      : Callable = None,
+                             unique              : bool = False,
                              exclude_args        : list[str] = None,
                              include_args        : list[str] = None,
                              exclude_arg_types   : list[type] = None, 
-                             cache_mode : CacheMode = CacheMode.ON):
+                             max_filename_length : int = 48,
+                             hash_length         : int = 16,                             
+                             cache_mode          : CacheMode = CacheMode.ON):
         """
         Wraps a callable into a cachable function.
         It will attempt to read an existing cache for the parameter set with the correct function version.
-
-        `cache_callable` will need a unique ID of the function call so it can cache the results.
-        There are two methods to provide this:
-            
-        1) Explicit usage where we specify `unique_args_id`:
-            
-            def f(x,y):
-                return x*y
-            x = 1
-            y = 2
-            subdir = SubDir("!/")
-            z = subdir.cache_callable( f, unique_args_id=f"{x},{y}", version="1", label="f" )( x, y=y )
+        If not successful it will call F to compute the result.
         
-        2) Fully implicit usage utilizing cdxbasics.version:
+        In order to determine whether and which result to read from disk, the function must be able to identify
+        different function parameter calls.
+        
+        1) Fully implicit usage utilizing cdxbasics.version:
 
-            @version
+            @version("0.1")
             def f(x,y):
                 return x*y        
             subdir = SubDir("!/")
@@ -1879,102 +1870,135 @@ class SubDir(object):
 
             In this case:
                 * The callable F must be decorated with cdxbascis.version.version
-                * All parameters of F must be convertable with cdxbasics.util.uniqueHash
-                * The function name must be unique.
-                * Use exclude_args/include_args if need be to exclude some or only include some arguments.
+                * The full qualified function name must be unique.
+                * All parameters of F must be convertable with cdxbasics.util.uniqueHash.
+                    Note that parameters with leading '_' will be ignored
+                    Note that functions will not be hashed by default
+                    Objects will be treated as their respective __dict__'s. If this is not sufficient, overwrite __unique_hash__. See uniqueHash
+                * Use exclude_args/include_args/exclude_arg_types if need be to exclude some or only include some arguments.
 
+            The main drawback is that the filename will only identify explcitly the function name by its fully qualfiied name,
+            but not any of the arguments.
+            
+        3) Dynamic specification with custom formatting:
+
+            a) Provide simple string formatting using {}.
+     
+                @version("0.1")
+                def f(x,y):
+                    return x*y        
+                subdir = SubDir("!/")
+                z = subdir.cache_callable( f, id="{name} {x} {y}" )( 1, y=2 )
+                
+                In this case:
+                    * The filename is generated using id.format(name=name,**arguments) where 'name' is the fully qualified name.
+                    * Note that str.format() does not provide full formatting capabilities. If not sufficient, pass a Callable
+                    * If the resulting filename is guaranteed to be unique, set unique=True. Otherwise unique=False will add another hash to the filename.
+    
+            b) Provide a callable 'id':
+     
+                    @version("0.1")
+                    def f(x,y):
+                        return x*y        
+                    subdir = SubDir("!/")
+                    z = subdir.cache_callable( f, id=lambda: name, x, y: f"{name} {x} {y}" )( 1, y=2 )
+                
+                To ignore the qualified name:
+
+                    z = subdir.cache_callable( f, id=lambda: name, x, y: f"f {x} {y}" )( 1, y=2 )
+                    
+                If the parameters are listed, all pertinent parameters must be listed by the callable.
+                This can be avoided using a catch-all **p:
+
+                    z = subdir.cache_callable( f, id=lambda:y, **p: f"f {y{}" )( 1, y=2 )
+
+                In all of these cases:
+                    * All pertinent arguments and 'name' are passed to 'id()'.
+                    * If the resulting filename is guaranteed to be unique, set unique=True. Otherwise unique=False will add another hash to the filename.
+    
+            c) Set it to a fixed id: 
+    
+                @version("0.1")
+                def f(x,y):
+                    return x*y        
+                subdir = SubDir("!/")
+                id = f"f {x} {y}"
+                z = subdir.cache_callable( f, id=id, unique=True )
+                
+                In this case 'id' will be used as-is. Note the 'unique' keyword.
+                
+            By default, the function assumes that the string provided by any of these functions is descriptive, but not necessarily
+            identify a function uniquely. It therefore appends a hash to the name which identifies the function by name and all pertinent parameters.
+            If this the id generated above is indeed unique, specify unique=True. In this case the function name will be the id if
+                * The id does not contain any invalid characters for a filename
+                * The id's length does not exceed max_filename_length.
+                
+        Pertinent parameters
+        --------------------
+        Often functions have parameters which do not alter the output of the function but control i/o or other aspects of the overall environment.
+        An example is a function parameter 'quiet', 
+        
+            def f(x,y,debug=False):
+                z = x*y
+                if not debug:
+                    print(f"x={x}, y={y}, z={z}")
+                return z
+
+        To specify which parameters are pertinent for identiying a unique id, use:
+            
+            a) include_args: list of functions arguments to include. If None, use all as input in the next step
+            b) exclude_args: list of funciton arguments to exclude, if not None.
+            c) exclude_arg_types: a list of types to exclude. This is helpful if control flow is managed with dedicated data types.
+               An example of such a type is cdxbasics.verbose.Context which is used to print hierarchical output messages.
+                
         See also
         --------                
         For project-wide use it is usually inconvenient to control caching at the level of a 'directory'.
         See cdxbasics.vcache.VersionedCacheRoot is a thin wrapper around the present function to be used
         accross a project.
         
-        Unique cache filenames
-        ----------------------
-        A main part of this function is to generate unique file names for the combination of the function name and of the relevant arameters.
-        
-            Function name
-            -------------
-            By defaul the qualified name plus the module name are used. This shoud be sufficient for most use cass, but you can use
-            name= to overwrite this behaviour.
-            
-            Parameters
-            ----------
-            By default the function will parse all parameters with cdxbasics.util.namedUniqueHashExt().
-            That means specifically:
-                - Any parameters starting with _ will be ignored.
-                - For Python objects __dict__ will be used. An object may provide a function to customize this process:
-                    __unique_hash__( self, length : int, parse_functions : bool, parse_underscore : str ) 
-                - Functions are not parsed.
-                
-            Additional support:
-                - It is common to want to exclude process related function parameters such as logfile references, graphical output etc.
-                  You can either specify those by name using exclude_args=, or by type via exclude_arg_types=
-                - Reversely, if only few of the parameters truly define a unique function call you can use  include_args= 
-                - Finally, you can also specify your own hash and pass it along as unique_args_id
-
-            Formatting
-            ----------
-            Assume now we have a 'name' and a dictionary of 'parameters'.
-            Then the actual file name can be constructed as follows
-            
-                Default:
-                    Return: name uniqueHash (*)
-                    
-                Using name_fmt:
-                    Use reduced string.format() formatting with {}.
-                    Does not assume that the returned string is unique and adds a hash. 
-                    
-                    Return: name_fmt.format(name=name,*parameters) uniqueHash (*)
-            
-                Using name_call:
-                    Treats name_call as a function and calls name_call(name=name,*parameters).
-                    Does not assume that the returned string is unique and adds a hash:                        
-                                        
-                    Return: name_call(name=name,*parameters) uniqueHash (*)
-                    
-                
-
         Parameters
         ----------
         F : Callable
             The callable; if this is not a function or an object then 'name' must be specified   
             
-        unique_args_id : str
-            A hash string for the arguments. You may use cdxbasics.util.uniqueHash or similar.
-            If this argument is None then the function will call uniqueHash on the parameters passed to f.
         version : str, optional
-            Version of the function. If not provided (and is left at its default '**'),
-            then F must have been decorated with cdxbasics.version.version.
-            This works for both classes and functions.
-        name : str, optional
-            Readable label to identify the callable.
-            If not provided, F.__module__+"."+F.__qualname__ or type(F).__name__ are used if available; must be specified otherwise.
-        name_fmt : str
-            A format string to identify a function call for better readability, using {} notation see https://docs.python.org/3/library/string.html#custom-string-formatting
-            Use 'name' to refer to above function name.   
-            A unique hash of all parameters is appended to this name, hence name_fmt does not have to be unique.
-            Use unique_fmt if your name is guaranteed to be unique.       
-        name_call : Callable
-            A callable which will be called with the named arguments which were included and not excluded.
-            Not needed to return a unique name
-        unique_id_fmt : str
-            A format string to identify a unique function name, using {} notation see https://docs.python.org/3/library/string.html#custom-string-formatting
-            It should contain all parameters which uniquely identify the function call.
-            Use 'name' to refer to above function name.  
-            This function must return unique identifier for all parameter choices.
-            Use name_fmt to create an identifier which is not itself unique, and is therefore amended by a unique hash.
-        unique_id_call : Callable
-            A callable which will be called with the named arguments which were included and not excluded.
-            Must return a unique name
-        exclude_args :
-            If 'unique_args_id' is None, then use this keyword to exclude arguments from the automated calculation using the parameters to the function.
-            Will work with keyword arguments.
-        include_args :
-            If 'unique_args_id' is None, then use this keyword to include only these arguments from the automated calculation using the parameters to the function.
-            Will work with keyword arguments.
-        exclude_arg_types :
-            A list of types of arguments to exlude.
+            Version of the function.
+            * If set to '*' (the default) then F must be decorated with cdxbasics.version.version
+            * Specify the function 
+            
+
+        id : str, Callable
+            Inpout into an id for the function call and its parameters.
+            See above for a description.
+            * A plain string without {} formatting: this is the fully qualified id
+            * A string with {} formatting: id.str( name=name, **parameters ) will be used to generate the fully qualified id
+            * A Callable, in which case id( name=name, **parameters ) will be used to generate the fully qualified id
+        
+        unique : bool
+            Whether the 'id' generated by 'id' is unique for this function call with its parameters.
+            If True, then the function will attempt to use 'id' as filename as long as it has no invalid characters and is short
+            enough (see 'max_filename_length').
+            If False, the function will append to the 'id' a unique hash of the qualified function name and all pertinent parameters
+        
+        name : str
+            The name of the function, or None for using the fully qualified function name.
+            
+        include_args : list[str]
+            List of arguments to include in generating a unqiue id, or None for all.
+        
+        exclude_args : list[str]:
+            List of argumernts to exclude
+            
+        exclude_arg_types : list[type]
+            List of types to exclude.
+
+        max_filename_length : int
+            Maximum filename length
+            
+        hash_length : int
+            Length of the hashes used.
+            
         cache_mode : CacheMode, optional
             Controls cache usage. See cdxbasics.CacheMode.
             
@@ -1986,13 +2010,14 @@ class SubDir(object):
                 F.cache_info.version : unique version string including all dependencies.
                 F.cache_info.last_cached : whether the last function call returned a cached object
                 F.cache_info.last_file_name : full filename used to cache the last function call.
-                F.cache_info.last_id_arguments : arguments parsed to create a unique call ID, or None of unique_args_id was provided
+                F.cache_info.last_id : last id generated, or None (if id was a string and unique was True)
+                F.cache_info.last_id_arguments : arguments parsed to create a unique call ID, or None (if id was a string and unique was True)
                 
             The function F has additional function parameters
                 override_cache_mode : allows to override caching mode temporarily, in particular "off"
                 track_cached_files : pass a CacheTracker object to keep track of all files used (loaded from or saved to).
                       This can be used to delete intermediary files when a large operation was completed.
-        """
+        """ 
         if name is None:
             try:
                 name = F.__qualname__
@@ -2001,24 +2026,26 @@ class SubDir(object):
                     name = F.__name__
                 finally:
                     pass
-                _log.verify( not name is None, "Cannot determine string name for 'F': it has neither __qualname__ nor a type with a name. Please specify 'name'")
+                _log.verify( not name is None, "Cannot determine qualified name for 'F': it has neither __qualname__ nor a type with a name. Please specify 'name'")
             try:
                 name = name + "@" + F.__module__
             except:
                 _log.warning( f"Cannot determine module name for 'F' of {type(F)}")
-
+    
         if version != "**":
             version_ = version
         else:
-            version_ = None
             try:
                 version_ = F.version.unique_id64
             except Exception:
-                _log.throw( f"Cannot determine version string for 'F' ({name}): must specify 'version'." )
+                _log.throw( f"Cannot determine version string for 'F' ({name}): must specify 'version' or decorate 'F' with cdxbasics.version.version" )
                 
-        exclude_args      = set(exclude_args) if unique_args_id is None and not exclude_args is None and len(exclude_args) > 0 else None
-        include_args      = set(include_args) if unique_args_id is None and not include_args is None and len(include_args) > 0 else None
-        exclude_arg_types = set(exclude_arg_types) if unique_args_id is None and not exclude_arg_types is None and len(exclude_arg_types) > 0 else None
+        uniqueNamedFileName    = namedUniqueHashExt(max_length=max_filename_length,id_length=hash_length,filename_by=DEF_FILE_NAME_MAP)
+        uniqueLabelledFileName = uniqueLabelExt(max_length=max_filename_length,id_length=hash_length,filename_by=DEF_FILE_NAME_MAP)
+
+        exclude_args      = set(exclude_args) if not exclude_args is None and len(exclude_args) > 0 else None
+        include_args      = set(include_args) if not include_args is None and len(include_args) > 0 else None
+        exclude_arg_types = set(exclude_arg_types) if not exclude_arg_types is None and len(exclude_arg_types) > 0 else None
         cache_mode        = CacheMode(cache_mode)
         sig               = inspect.signature(F)
         
@@ -2027,23 +2054,29 @@ class SubDir(object):
             Cached execution of the wrapped function
             """
             
-            name_ = name
-            
-            if not unique_args_id is None:
+            id_ = None
+            if isinstance(id, str) and unique:
+                # if 'id' does not contain formatting codes, and the result is 'unqiue' then do not bother collecting
+                # function arguments
+                try:
+                    id_ = id.format()   # throws a KeyError if 'id' contains formatting information
+                except KeyError:
+                    pass
+
+            if not id_ is None:
                 # generate name with the unique args
-                assert unique_id_fmt is None, ("Cannot use both 'unique_args_id' and 'unique_id_fmt'")
-                assert name_fmt is None, ("Cannot use both 'unique_args_id' and 'name_fmt'")
-                assert name_call is None, ("Cannot use both 'unique_args_id' and 'name_call'")
-                assert unique_id_call is None, ("Cannot use both 'unique_args_id' and 'unique_id_call'")
-                filename = uniqueLabelledFileName48_16( name_ + ' ' + unique_args_id )
-                execute.cache_info.last_id_arguments = None
+                filename = uniqueLabelledFileName( id )
+                arguments = None
+                id_ = None
                 
             else:
+                # get dictionary of named arguments
                 arguments = sig.bind(*kargs,**kwargs)
                 arguments.apply_defaults()
                 arguments = arguments.arguments # ordered dict
                 argus = set(arguments)
 
+                # filter dictionary
                 if not exclude_args is None or not include_args is None:
                     excl = set(exclude_args) if not exclude_args is None else set()
                     assert exclude_args is None or exclude_args <= argus, ("'exclude_args' contains unknown argument names. 'exclude_args'", exclude_args, "argument names", argus)
@@ -2065,35 +2098,31 @@ class SubDir(object):
                     for arg in excl:
                         if arg in arguments:
                             del arguments[arg]
-                            
-                if not unique_id_fmt is None:
-                    # user guarantees that the formatted name is unique
-                    assert name_fmt is None, ("Cannot use both 'unique_id_fmt' and 'name_fmt'")
-                    assert name_call is None, ("Cannot use both 'unique_id_fmt' and 'name_call'")
-                    assert unique_id_call is None, ("Cannot use both 'unique_id_fmt' and 'unique_id_call'")
-                    name_ = str.format( unique_id_fmt, name=name_, **arguments )
-                    filename = uniqueLabelledFileName48_16( name_ )
-                elif not unique_id_call is None:
-                    # user guarantees that the formatted name is unique
-                    assert name_fmt is None, ("Cannot use both 'unique_id_call' and 'name_fmt'")
-                    assert name_call is None, ("Cannot use both 'unique_id_call' and 'name_call'")
-                    name_ = unique_id_call( name=name_, **arguments )
-                    filename = uniqueLabelledFileName48_16( name_ )
-                elif not name_call is None:
-                    # user does not guarantee that the formatted name is unique
-                    assert name_fmt is None, ("Cannot use both 'name_call' and 'name_fmt'")
-                    name_ = name_call( name=name_, **arguments )
-                    filename = uniqueNamedFileName48_16( name_, **arguments )
-                else:
-                    # user does not guarantee that the formatted name is unique
-                    if not name_fmt is None:
-                        name_ = str.format( name_fmt, name=name_, **arguments )
-                    filename = uniqueNamedFileName48_16( name_, **arguments )
-                execute.cache_info.last_id_arguments = str(arguments)
-                del arguments, argus
+                      
+                # apply logics
+                id_ = id
+                
+                if id_ is None:
+                    id_ = name
+                    
+                elif isinstance( id_, str ):
+                    id_ = str.format( id_, name=name, **arguments )
 
+                elif isinstance( id_, Callable ):
+                    id_ = id_(name=name, **arguments)
+                    assert isinstance(id_, str), ("'id': callable must return a string. Found",type(id_))
+
+                if unique:
+                    filename = uniqueLabelledFileName( id_ )
+                else:
+                    filename = uniqueNamedFileName( id_, name=name, **arguments )
+
+            # store information for calling entity
+            execute.cache_info.last_id = str(id_) if not id_ is None else None
+            execute.cache_info.last_id_arguments = str(arguments) if not arguments is None else None
             execute.cache_info.last_file_name = filename
 
+            # determine cache mode
             override_cache_mode = CacheMode(override_cache_mode) if not override_cache_mode is None else cache_mode
 
             if override_cache_mode.delete:

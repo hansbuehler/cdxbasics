@@ -8,7 +8,6 @@ from .logger import Logger
 from .subdir import SubDir, Format, CacheMode, CacheTracker, Callable
 from .verbose import Context
 from .prettydict import pdct
-from functools import update_wrapper
 
 _log = Logger(__file__)
 
@@ -19,24 +18,37 @@ class VersionController( object ):
     """
     
     def __init__(self,
-                    cache_mode        : CacheMode = None,
-                    debug_verbose     : Context = None,
-                    exclude_arg_types : list[type] = None
+                    cache_mode         : CacheMode = None,
+                    debug_verbose      : Context = None,
+                    exclude_arg_types  : list[type] = None,
+                    max_filename_length: int = 48,
+                    hash_length        : int = 16
                     ):
-        self._cache_mode        = CacheMode(cache_mode if not cache_mode is None else CacheMode.ON)
-        self._debug_verbose     = debug_verbose if not debug_verbose is None else Context.quiet
-        self._exclude_arg_types = set(exclude_arg_types) if not exclude_arg_types is None else None
+        """ Initialize the controller """
+        max_filename_length       = int(max_filename_length)
+        hash_length               = int(hash_length)
+        assert max_filename_length>0, ("'max_filename_length' must be positive")
+        assert hash_length>0, ("'hash_length' must be positive")
+        assert max_filename_length>=hash_length, ("'hash_length' must not exceed 'max_filename_length")
+        self._cache_mode          = CacheMode(cache_mode if not cache_mode is None else CacheMode.ON)
+        self._debug_verbose       = debug_verbose if not debug_verbose is None else Context.quiet
+        self._exclude_arg_types   = set(exclude_arg_types) if not exclude_arg_types is None else None
+        self._max_filename_length = max_filename_length
+        self._hash_length         = hash_length
+
         self._versioned         = pdct()
 
 class VersionedCacheDirectory( object ):
     
     CacheTracker = CacheTracker
 
-    def __init__(self, directory       : str, *,
-                       parent          = None, 
-                       ext             : str = None, 
-                       fmt             : Format = None,
-                       createDirectory : bool = None ):                       
+    def __init__(self, directory           : str, *,
+                       parent              : SubDir = None, 
+                       ext                 : str = None, 
+                       fmt                 : Format = None,
+                       createDirectory     : bool = None,
+                       controller          : VersionController = None
+                       ):                       
         """
         Initialize a versioned sub directory cache.
         You do not usually call this function. Call VersionedCache() 
@@ -48,14 +60,14 @@ class VersionedCacheDirectory( object ):
             # copy constructor
             assert parent is None, ("You cannot specify 'parent' when using the copy constructor")
             self._dir           = SubDir(directory._dir, ext=ext, fmt=fmt, createDirectory=createDirectory )
-            self._controller    = directory._controller
+            self._controller    = directory._controller if controller is None else controller
         elif isinstance(directory, SubDir):
             # subdir constructor
             self._dir           = SubDir(directory, ext=ext, fmt=fmt, createDirectory=createDirectory )
-            self._controller    = parent._controller if not parent is None else VersionController()
+            self._controller    = parent._controller if not parent is None else (controller if not controller is None else VersionController())
         else:
             self._dir           = SubDir(directory, parent=parent._dir if not parent is None else None, ext=ext, fmt=fmt, createDirectory=createDirectory) 
-            self._controller    = parent._controller if not parent is None else VersionController()
+            self._controller    = parent._controller if not parent is None else (controller if not controller is None else VersionController())
 
     def __new__(cls, *kargs, **kwargs):
         """ Copy constructor """
@@ -101,16 +113,14 @@ class VersionedCacheDirectory( object ):
     -------
     """
 
-    def cache( self,  version : str = "0.0.1" , *,
-                      dependencies : list = [], 
-                      fmt_unique_args_id : str = None, 
-                      name : str = None,
-                      name_fmt : str = None,
-                      name_call : Callable = None,
-                      unique_id_fmt : str = None,
-                      unique_id_call : Callable = None,
-                      exclude_args : list = None,
-                      include_args : list = None,
+    def cache( self,  version             : str = "0.0.1" , *,
+                      dependencies        : list = [], 
+                      id                  : Callable = None,
+                      name                : str = None, 
+                      unique              : bool = False,
+                      exclude_args        : list[str] = None,
+                      include_args        : list[str] = None,
+                      exclude_arg_types   : list[type] = None
                       ):
         """
         Decorator to cache a function.
@@ -190,25 +200,27 @@ class VersionedCacheDirectory( object ):
         def vwrap(f):
             # equip 'f' with a version and remember it
             f = f_version(f) # equip 'f' with a version string
-            f = self._dir.cache_callable(f, name=name, 
-                                            name_fmt=name_fmt,
-                                            name_call=name_call,
-                                            unique_id_fmt=unique_id_fmt,
-                                            unique_id_call=unique_id_call,
+            f = self._dir.cache_callable(f, id=id, 
+                                            name=name,
+                                            unique=unique,
                                             exclude_args=exclude_args, 
                                             include_args=include_args,
-                                            exclude_arg_types=self._controller._exclude_arg_types ) 
+                                            exclude_arg_types=self._controller._exclude_arg_types,
+                                            max_filename_length=self._controller._max_filename_length,
+                                            hash_length=self._controller._hash_length
+                                            ) 
             fname = f.cache_info.name
             self._controller._versioned[fname] = pdct(f=f, version=f.version.unique_id64, path=self._dir.path)
             return f
         return vwrap
 
 
-def VersionedCacheRoot( directory         : str, *,
-                        ext               : str = None, 
-                        fmt               : Format = None,
-                        createDirectory   : bool = None,
-                        exclude_arg_types : list[str] = None):
+def VersionedCacheRoot( directory          : str, *,
+                        ext                : str = None, 
+                        fmt                : Format = None,
+                        createDirectory    : bool = None,
+                        **controller_kwargs
+                        ):
     """
     Create a root directory for versioning caching on disk
     
@@ -237,15 +249,16 @@ def VersionedCacheRoot( directory         : str, *,
         ext : extension, which will automatically be appended to file names (see SubDir). Default depends on format. For Format.PICKLE it is 'pck'
         fmt : format, see SubDir.Format. Default is Format.PICKLE
         createDirectory : whether to create the directory upon creation. Default is no.
-        exclude_arg_types : list of types or names of types to exclude when auto-generating function signatures from function arguments.
-                         A standard example from cdxbasics is "Context" as it is used to print progress messages.
-    
+        controller_kwargs: parameters passed to VersionController, for example:
+            exclude_arg_types : list of types or names of types to exclude when auto-generating function signatures from function arguments.
+                             A standard example from cdxbasics is "Context" as it is used to print progress messages.
+            max_filename_length : maximum filename length
+            hash_length: length used for hashes, see cdxbasics.util.uniqueHash() 
+        
     Returns
     -------
-        A root directory
+        A root cache directory
     """    
-    vcd = VersionedCacheDirectory( directory=directory, ext=ext, fmt=fmt, createDirectory=createDirectory )
-    if not exclude_arg_types is None:
-        vcd._controller._exclude_arg_types = exclude_arg_types
-    return vcd
+    controller = VersionController(**controller_kwargs) if len(controller_kwargs) > 0 else None
+    return VersionedCacheDirectory( directory=directory, ext=ext, fmt=fmt, createDirectory=createDirectory, controller=controller )
 
