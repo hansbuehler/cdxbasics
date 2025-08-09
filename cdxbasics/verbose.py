@@ -31,8 +31,9 @@ class Context(object):
 
     def __init__(self,   verbose_or_init = None, *,
                          indent    : int = 2,
-                         init_level: int = None,
-                         fmt_level : str = "%02ld: " ):
+                         fmt_level : str = "%02ld: ",
+                         level     : int = None                         
+                         ):
         """
         Create a Context object.
 
@@ -61,19 +62,19 @@ class Context(object):
                 if a Context: copy constructor.
             indent : int
                 How much to indent prints per level
-            init_level :
+            level :
                 Initial level. This can also be set if verbose_or_init is another context.
-                If 'init_level' is None:
+                If 'level' is None:
                     If 'verbose_or_init' is another Context object, use that object's level
                     If 'verbose_or_init' is an integer or one of the keywords above, use 0
             fmt_level :
                 How to format output given level*indentm using %ld for the current level.
         """
-        if not init_level is None: _log.verify( init_level>=0, "'init_level' must not be negative; found %ld", init_level)
+        if not level is None: _log.verify( level>=0, "'level' must not be negative; found %ld", level)
         if isinstance( verbose_or_init, Context ) or type(verbose_or_init).__name__ == "Context":
             # copy constructor
             self.verbose     = verbose_or_init.verbose
-            self.level       = verbose_or_init.level if init_level is None else init_level
+            self.level       = verbose_or_init.level if level is None else level
             self.indent      = verbose_or_init.indent
             self.fmt_level   = verbose_or_init.fmt_level
             self.crman       = CRMan()
@@ -93,7 +94,7 @@ class Context(object):
         _log.verify( indent >=0, "'indent' cannot be negative. Found %ld", indent)
 
         self.verbose     = verbose_or_init    # print up to this level
-        self.level       = 0 if init_level is None else init_level
+        self.level       = 0 if level is None else level
         self.indent      = indent             # indentation level
         self.fmt_level   = str(fmt_level)     # output format
         self.crman       = CRMan()
@@ -360,17 +361,6 @@ class Context(object):
         This function always returns an empty string, which means that the object is never hashed.
         """
         return ""
-
-    # pickling
-    # --------
-
-    def __reduce__(self):
-        """ Turn off pickling; see https://docs.python.org/3/library/pickle.html#object.__reduce__ """
-        assert False, ("You might have tried to pickle a Context object")
-        return None
-
-    def __setstate__(self, state):
-        pass
 
 # Recommended default parameter 'quiet' for functions accepting a context parameter
 quiet = Context(Context.QUIET)
