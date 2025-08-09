@@ -1229,9 +1229,11 @@ class Timer(object):
     
     def __init__(self):
         self.time = time.time()
+        self.intv = None
         
     def reset(self):
         self.time = time.time()
+        self.intv = None
         
     def __enter__(self):
         self.reset()
@@ -1239,6 +1241,26 @@ class Timer(object):
     
     def __str__(self):
         return self.fmt_seconds
+    
+    def interval_test( self, interval : float ):
+        """
+        Tests if 'interval' seconds have passed.
+        If yes, reset timer and return True. Otherwise return False
+        
+        Usage:
+        ------
+            tme = Timer()
+            for i in range(n):
+                if tme.test_dt_seconds(2.): print(f"\r{i+1}/{n} done. Time taken so far {tme}.", end='', flush=True)
+            print("\rDone. This took {tme}.")
+        """
+        if self.intv is None:
+            self.intv = self.seconds
+            return True
+        if self.seconds - self.intv > interval:
+            self.intv = self.seconds
+            return True
+        return False            
 
     @property
     def fmt_seconds(self):

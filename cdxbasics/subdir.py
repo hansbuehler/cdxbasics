@@ -23,6 +23,7 @@ import json as json
 import platform as platform
 from functools import update_wrapper
 from .prettydict import pdct
+from .verbose import Context
 
 try:
     import numpy as np
@@ -917,7 +918,7 @@ class SubDir(object):
                 If not None, specifies the version of the current code base.
                 In this case, this version will be compared to the version of the file being read.
                 If they do not match, read fails (either by returning default or throwing an exception).
-                You can specify version "*" in which case reading never fails.
+                You can specify version "*" to read any version. This is distrinct from reading a file without version.
             delete_wrong_version : bool
                 If True, and if a wrong version was found, delete the file.
             ext : str
@@ -1148,6 +1149,7 @@ class SubDir(object):
         version  = str(version) if not version is None else None
         assert ext != self.EXT_FMT_AUTO, ("'ext' is '*'...?")
 
+        if version=='*': _log.throw("You cannot write version '*'. Use None to write a file without version.")
         if version is None and fmt in [Format.BLOSC, Format.GZIP]:
             version = ""
 
@@ -1728,7 +1730,8 @@ class SubDir(object):
                 By default this function fails silently and returns the default.
             version : str
                 If not None, specifies the version of the current code base.
-                In this case, this version will be compared to the version of the file being read.
+                Use '*' to read any version (this is distrinct from reading a file without version).
+                If version  is not' '*', then this version will be compared to the version of the file being read.
                 If they do not match, read fails (either by returning default or throwing an exception).
             delete_wrong_version : bool
                 If True, and if a wrong version was found, delete the file.
@@ -1842,7 +1845,7 @@ class SubDir(object):
     # -------
     
     def cache_callable(self, F : Callable, 
-                             version             : str = "**", *,
+                             version             : str = "*", *,
                              id                  : Callable = None,
                              name                : str = None, 
                              unique              : bool = False,
@@ -1851,7 +1854,8 @@ class SubDir(object):
                              exclude_arg_types   : list[type] = None, 
                              max_filename_length : int = 48,
                              hash_length         : int = 16,                             
-                             cache_mode          : CacheMode = CacheMode.ON):
+                             cache_mode          : CacheMode = CacheMode.ON,
+                             debug_verbose       : Context = None):
         """
         Wraps a callable into a cachable function.
         It will attempt to read an existing cache for the parameter set with the correct function version.
@@ -2002,6 +2006,9 @@ class SubDir(object):
         cache_mode : CacheMode, optional
             Controls cache usage. See cdxbasics.CacheMode.
             
+        debug_verbose : None or a cdxbasics.verbose.Context
+            Print out debug information.
+            
         Returns
         -------
             A callable to execute F if need be.
@@ -2032,11 +2039,9 @@ class SubDir(object):
             except:
                 _log.warning( f"Cannot determine module name for 'F' of {type(F)}")
     
-        if version != "**":
-            version_ = version
-        else:
+        if version == "*":
             try:
-                version_ = F.version.unique_id64
+                version = F.version.unique_id64
             except Exception:
                 _log.throw( f"Cannot determine version string for 'F' ({name}): must specify 'version' or decorate 'F' with cdxbasics.version.version" )
                 
@@ -2128,26 +2133,37 @@ class SubDir(object):
             if override_cache_mode.delete:
                 self.delete( filename )
             elif override_cache_mode.read:
-                r = self.read( filename, None, version=version_ )
+                r = self.read( filename, None, version=version )
                 if not r is None:
                     if not track_cached_files is None:
                         track_cached_files += self.fullFileName(filename)
                     execute.cache_info.last_cached = True 
+                    if not debug_verbose is None:
+                        debug_verbose.write(f"cache_callable({name}): called with id {id_} with cache file name {self.path+filename}: result retrieved from cache.")
                     return r
             
+            if not debug_verbose is None:
+                debug_verbose.write(f"cache_callable({name}): calling function with id {id_} for cache file name {self.path+filename}.")
+
             r = F(*kargs, **kwargs)
             _log.verify( not r is None, "Cannot use caching with functions which return None")
             
             if override_cache_mode.write:
-                self.write(filename,r,version=version_)      
+                self.write(filename,r,version=version)      
                 if not track_cached_files is None:
                     track_cached_files += self.fullFileName(filename)
             execute.cache_info.last_cached = False
+            
+            if not debug_verbose is None:
+                debug_verbose.write(f"cache_callable({name}): called with id {id_} with cache file name {self.path+filename}: function was called.")
             return r
         update_wrapper( wrapper=execute, wrapped=F )
         execute.cache_info = pdct()
         execute.cache_info.name = name
         execute.cache_info.version = version
+        
+        if not debug_verbose is None:
+            debug_verbose.write(f"cache_callable({name}): function registered with version '{version}' for {self.path}.")
         return execute
             
     

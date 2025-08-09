@@ -17,12 +17,12 @@ class VersionController( object ):
     Enabes to to turn on/off caching, debugging and tracks all versions
     """
     
-    def __init__(self,
-                    cache_mode         : CacheMode = None,
-                    debug_verbose      : Context = None,
+    def __init__(self, *,
                     exclude_arg_types  : list[type] = None,
                     max_filename_length: int = 48,
-                    hash_length        : int = 16
+                    hash_length        : int = 16,
+                    cache_mode         : CacheMode = None,
+                    debug_verbose      : Context = None,
                     ):
         """ Initialize the controller """
         max_filename_length       = int(max_filename_length)
@@ -31,7 +31,7 @@ class VersionController( object ):
         assert hash_length>0, ("'hash_length' must be positive")
         assert max_filename_length>=hash_length, ("'hash_length' must not exceed 'max_filename_length")
         self._cache_mode          = CacheMode(cache_mode if not cache_mode is None else CacheMode.ON)
-        self._debug_verbose       = debug_verbose if not debug_verbose is None else Context.quiet
+        self._debug_verbose       = debug_verbose
         self._exclude_arg_types   = set(exclude_arg_types) if not exclude_arg_types is None else None
         self._max_filename_length = max_filename_length
         self._hash_length         = hash_length
@@ -207,7 +207,9 @@ class VersionedCacheDirectory( object ):
                                             include_args=include_args,
                                             exclude_arg_types=self._controller._exclude_arg_types,
                                             max_filename_length=self._controller._max_filename_length,
-                                            hash_length=self._controller._hash_length
+                                            hash_length=self._controller._hash_length,
+                                            debug_verbose=self._controller._debug_verbose,
+                                            cache_mode=self._controller._cache_mode
                                             ) 
             fname = f.cache_info.name
             self._controller._versioned[fname] = pdct(f=f, version=f.version.unique_id64, path=self._dir.path)
