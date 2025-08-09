@@ -29,8 +29,9 @@ class Context(object):
     QUIET   = "quiet"
     ALL     = "all"
 
-    def __init__(self,   verbose_or_init = None,
+    def __init__(self,   verbose_or_init = None, *,
                          indent    : int = 2,
+                         init_level: int = None,
                          fmt_level : str = "%02ld: " ):
         """
         Create a Context object.
@@ -51,7 +52,6 @@ class Context(object):
             Context( context )
             In this case all other parameters are ignored.
 
-
         Parameters
         ----------
             verbose_or_init : str, int, or Context
@@ -61,13 +61,19 @@ class Context(object):
                 if a Context: copy constructor.
             indent : int
                 How much to indent prints per level
+            init_level :
+                Initial level. This can also be set if verbose_or_init is another context.
+                If 'init_level' is None:
+                    If 'verbose_or_init' is another Context object, use that object's level
+                    If 'verbose_or_init' is an integer or one of the keywords above, use 0
             fmt_level :
-                How to format output given level*indent
+                How to format output given level*indentm using %ld for the current level.
         """
+        if not init_level is None: _log.verify( init_level>=0, "'init_level' must not be negative; found %ld", init_level)
         if isinstance( verbose_or_init, Context ) or type(verbose_or_init).__name__ == "Context":
             # copy constructor
             self.verbose     = verbose_or_init.verbose
-            self.level       = verbose_or_init.level
+            self.level       = verbose_or_init.level if init_level is None else init_level
             self.indent      = verbose_or_init.indent
             self.fmt_level   = verbose_or_init.fmt_level
             self.crman       = CRMan()
@@ -87,7 +93,7 @@ class Context(object):
         _log.verify( indent >=0, "'indent' cannot be negative. Found %ld", indent)
 
         self.verbose     = verbose_or_init    # print up to this level
-        self.level       = 0                  # current level
+        self.level       = 0 if init_level is None else init_level
         self.indent      = indent             # indentation level
         self.fmt_level   = str(fmt_level)     # output format
         self.crman       = CRMan()
@@ -343,8 +349,8 @@ class Context(object):
             ...
             verbose.write(f"this took {t}.", head=False)
         """
-        return Timer()        
-
+        return Timer()
+     
     # uniqueHash
     # ----------
 
@@ -373,3 +379,4 @@ Context.quiet = quiet
 all_ = Context(Context.ALL)
 Context.all = all_
 
+Context.Timer = Timer
