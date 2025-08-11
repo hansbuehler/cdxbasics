@@ -26,7 +26,7 @@ print("Done", cnt)
 """
 
 
-from joblib import Parallel as joblib_Parallel
+from joblib import Parallel as joblib_Parallel, delayed as jl_delayed
 from multiprocessing import Manager, Queue
 from threading import Thread, get_ident as get_thread_id
 import gc as gc
@@ -151,6 +151,75 @@ class _DictIterator(object):
     def __len__(self):#don't really need that but good to have
         return len(self._jobs)
             
+def _parallel(pool, jobs : Iterable) -> Iterable:
+    """
+    Process 'jobs' in parallel using the current multiprocessing pool.
+    All (function) values of 'jobs' must be generated using self.delayed.
+    See help(JCPool) for usage patterns.
+    
+    Parameters
+    ----------
+        jobs:
+            can be a sequence, a generator, or a dictionary.
+            Each function value must have been generated using JCPool.delayed()
+            
+    Returns
+    -------
+        An iterator which yields results as soon as they are available.   
+        If 'jobs' is a dictionary, then the resutling iterator will generate tuples with the first
+        element equal to the dictionary key of the respective function job.
+    """
+    if not isinstance(jobs, Mapping):
+        return pool( jobs )
+    return pool( _DictIterator(jobs,merge_tuple=True) )
+
+def _parallel_to_dict(pool, jobs : Mapping) -> Mapping:
+    """
+    Process 'jobs' in parallel using the current multiprocessing pool.
+    All values of the dictionary 'jobs' must be generated using self.delayed.
+    This function awaits the calculation of all elements of 'jobs' and
+    returns a dictionary with the results.
+    
+    See help(JCPool) for usage patterns.
+
+    Parameters
+    ----------
+        jobs:
+            A dictionary where all (function) values must have been generated using JCPool.delayed.
+            
+    Returns
+    -------
+        A dictionary with results.
+        If 'jobs' is an OrderedDict, then this function will return an OrderedDict
+        with the same order as 'jobs'.
+    """
+    assert isinstance(jobs, Mapping), ("'jobs' must be a Mapping.", type(jobs))
+    r = dict( pool( _DictIterator(jobs,merge_tuple=False) ) )
+    if isinstance( jobs, OrderedDict ):
+        q = OrderedDict()
+        for k in jobs:
+            q[k] = r[k]
+        r = q
+    return r
+            
+def _parallel_to_list(pool, jobs : Sequence ) -> Sequence:
+    """
+    Call parallel() and convert the resulting generator into a list.
+
+    Parameters
+    ----------
+        jobs:
+            can be a sequence, a generator, or a dictionary.
+            Each function value must have been generated using JCPool.delayed()
+            
+    Returns
+    -------
+        An list with the results in order of the input.
+    """
+    assert not isinstance( jobs, Mapping ), ("'jobs' is a Mapping. Use parallel_to_dict() instead.", type(jobs))
+    r = _parallel_to_dict( pool, { i: j for i, j in enumerate(jobs) } )
+    return list( r[i] for i in range(len(jobs)) ) 
+
 class JCPool( object ):
     """
     Parallel Job Context Pool
@@ -213,6 +282,7 @@ class JCPool( object ):
     Note that in this case the function returns after all items have been processed.
     """
     def __init__(self, num_workers      : int = 1,
+                       threading        : bool = False,
                        tmp_dir          : str = "!/.cdxmp",  *,
                        verbose          : Context = Context.quiet,
                        parallel_kwargs  : dict = {} ):
@@ -222,10 +292,14 @@ class JCPool( object ):
         num_workers            = int(num_workers)
         self._tmp_dir          = SubDir(tmp_dir, ext='')
         self._verbose          = verbose if not verbose is None else Context("quiet")
+        self._threading        = threading
         assert num_workers > 0, ("'num_workers' must be positive", num_workers)
         
         with self._verbose.write_t(f"Launching {num_workers} processes with temporary path '{self.tmp_path}'... ", end='') as tme:
-            self._pool = joblib_Parallel(n_jobs=num_workers, backend="loky", return_as="generator_unordered", temp_folder=self.tmp_path, **parallel_kwargs)
+            self._pool = joblib_Parallel( n_jobs=num_workers, 
+                                          backend="loky" if not threading else "threading", 
+                                          return_as="generator_unordered", 
+                                          temp_folder=self.tmp_path, **parallel_kwargs)
             self._verbose.write(f"done; this took {tme}.", head=False)
 
     def __del__(self):
@@ -234,6 +308,9 @@ class JCPool( object ):
     @property
     def tmp_path(self) -> str:
         return self._tmp_dir.path
+    @property
+    def is_threading(self) -> bool:
+        return self._threading
 
     def terminate(self):
         """
@@ -254,6 +331,8 @@ class JCPool( object ):
         
         See help(JCPool) for usage patterns.
         """
+        if self._threading:
+            return verbose
         return _ParallelContextOperator( pool_verbose=self._verbose, 
                                          f_verbose=verbose,
                                          verbose_interval=verbose_interval )
@@ -268,8 +347,7 @@ class JCPool( object ):
             if isinstance(v, Context) and not isinstance(v.channel, ParallelContextChannel):
                 raise RuntimeError(f"Keyword argument '{k}' for {F.__qualname__} is a Context object, but its channel is not set to 'ParallelContextChannel'. Use JPool.context().")
 
-    @staticmethod
-    def delayed(F : Callable):
+    def delayed(self, F : Callable):
         """
         Decorate a function F for parallel execution.
         Synthatical sugar aroud joblib.delayed().
@@ -283,6 +361,8 @@ class JCPool( object ):
         -------
             Decorated function.
         """
+        if self._threading:
+            return jl_delayed(F)
         def delayed_function( *args, **kwargs ):
             JCPool.validate( F, args, kwargs )
             return F, args, kwargs # mimic joblin.delayed()
@@ -310,9 +390,7 @@ class JCPool( object ):
             If 'jobs' is a dictionary, then the resutling iterator will generate tuples with the first
             element equal to the dictionary key of the respective function job.
         """
-        if not isinstance(jobs, Mapping):
-            return self._pool( jobs )
-        return self._pool( _DictIterator(jobs,merge_tuple=True) )
+        return _parallel( self._pool, jobs )
 
     def parallel_to_dict(self, jobs : Mapping) -> Mapping:
         """
@@ -334,14 +412,7 @@ class JCPool( object ):
             If 'jobs' is an OrderedDict, then this function will return an OrderedDict
             with the same order as 'jobs'.
         """
-        assert isinstance(jobs, Mapping), ("'jobs' must be a Mapping.", type(jobs))
-        r = dict( self._pool( _DictIterator(jobs,merge_tuple=False) ) )
-        if isinstance( jobs, OrderedDict ):
-            q = OrderedDict()
-            for k in jobs:
-                q[k] = r[k]
-            r = q
-        return r
+        return _parallel_to_dict( self._pool, jobs )
                 
     def parallel_to_list(self, jobs : Sequence ) -> Sequence:
         """
@@ -357,9 +428,5 @@ class JCPool( object ):
         -------
             An list with the results in order of the input.
         """
-        assert not isinstance( jobs, Mapping ), ("'jobs' is a Mapping. Use parallel_to_dict() instead.", type(jobs))
-        r = self.parallel_to_dict( { i: j for i, j in enumerate(jobs) } )
-        return list( r[i] for i in range(len(jobs)) ) 
-                            
-                
-        
+        return _parallel_to_list( self._pool, jobs )
+
