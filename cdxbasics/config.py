@@ -11,12 +11,16 @@ from .util import uniqueHashExt, fmt_list
 from .prettydict import PrettyDict as pdct
 from .logger import Logger
 from dataclasses import Field
+
 _log = Logger(__file__)
+
+__all__  = ["Config", "Int", "Float", "ConfigField"]
 
 class _ID(object):
     pass
 
-no_default = _ID()    # creates a unique object which can be used to detect if a default value was provided
+#@private
+no_default = _ID()    #@private creates a unique object which can be used to detect if a default value was provided
 
 # ==============================================================================
 #
@@ -24,28 +28,27 @@ no_default = _ID()    # creates a unique object which can be used to detect if a
 #
 # ==============================================================================
 
-BACKWARD_COMPATIBLE_ITEM_ACCESS = False
+BACKWARD_COMPATIBLE_ITEM_ACCESS = False  #@private
 
 class Config(OrderedDict):
     """
     A simple Config class.
     Main features
 
-    Write
+    Write:
+        
         Set data as usual:
-
             config = Config()
             config['features']  = [ 'time', 'spot' ]
             config['weights']   = [ 1, 2, 3 ]
 
         Use member notation
-
             config.network.samples    = 10000
             config.network.activation = 'relu'
 
-    Read
-        def read_config( confg ):
+    Read:
 
+        def read_config( confg ):
             features = config("features", [], list )          # reads features and returns a list
             weights  = config("weights", [], np.ndarray )     # reads features and returns a nump array
 
@@ -58,7 +61,6 @@ class Config(OrderedDict):
     use without triggering done() errors for its parent.
 
         def read_config( confg ):
-
             features = config("features", [], list )          # reads features and returns a list
             weights  = config("weights", [], np.ndarray )     # reads features and returns a nump array
 
@@ -81,45 +83,6 @@ class Config(OrderedDict):
             config.done()
 
             config.usage_report()   # prints help
-
-    Attributes
-    ----------
-        config_name : str
-            Qualified name of the config, useful for error messages
-        children : dict
-            Children of this config
-        not_done : dict
-            A dictionary of keywords and children which were not read yet.
-        recorder : dict
-            Records usage of the object and its children.
-
-    Methods
-    -------
-        done()
-            Checks that all arguments passed to the config, and its children have been read.
-            If not, a warning will be produced. This helps catching typos.
-            The function will the call mark_done() on itself and all children
-            such that subsequent calls to done() to not produce error messages
-
-        mark_done()
-            Marks all elements of this config and all children as 'read' (done).
-            Any elements not read explicitly will not be recorded for usage_report
-
-        reset_done()
-            Removes all usage information for all members of this config and its children.
-            Note: this does not affected recorded previous usage.
-
-        detach()
-            Create a copy of the current object; set it as 'done'; and return it.
-            The copy keeps the reference to the usage recorder.
-            This is used to defer using children of configs to a later stage.
-            See examples above
-
-        copy()
-            Returns a blank copy of the current config, with a new recorder.
-
-        as_dict()
-            Converts object into a dict of dict's.
     """
 
     def __init__(self, *args, config_name : str = None, **kwargs):
@@ -236,7 +199,7 @@ class Config(OrderedDict):
     def done(self, include_children : bool = True, mark_done : bool = True ):
         """
         Closes the config and checks that no unread parameters remain.
-        By default this function also validates that all child configs were done".
+        By default this function also validates that all child configs were "done".
 
         If you want to make a copy of a child config for later processing use detach() first
             config = Config()
@@ -1423,7 +1386,33 @@ class _CastCond(_Cast): # NOQA
         return _cast_name(self.cast)
 
 Float = _CastCond(float)
+"""
+Allows to apply conditions to float's as part of config's.
+For example
+```
+timeout = config("timeout", 0.5, Float>=0., "Timeout")
+```
+
+In combination with `&` we can limit a float to a range:
+```
+probability = config("probability", 0.5, (Float>=0.) & (Float <= 1.), "Probability")
+```
+"""
+
+
 Int   = _CastCond(int)
+"""
+Allows to apply conditions to int' as part of config's.
+For example
+```
+num_steps = config("num_steps", 1, Int>0., "Number of steps")
+```
+
+In combination with `&` we can limit an int to a range:
+```
+bus_days_per_year = config("bus_days_per_year", 255, (Int > 0) & (Int < 365), "Business days per year")
+```
+"""
 
 # ================================
 # Enum type for list 'cast's

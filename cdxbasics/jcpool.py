@@ -1,30 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Aug 11 00:06:52 2025
-
-@author: hans
-
-from cdxbasics.jcpool import JCPool, Context
-
-pool = JCPool( num_workers=4, verbose=Context.all )
-
-verbose = Context("all")
-cnt = 0
-with pool.context( verbose, 0. ) as verbose:
-    for r in pool.parallel( pool.delayed( func )( id=i, x=x, n=n, verbose=verbose ) for i, x, n in zip( range(N), xs, ns ) ):
-        verbose.write(f"Returned {r}")
-        cnt += 1
-print("Done", cnt)
-
-verbose = Context("all")
-cnt = 0
-with pool.context( verbose, 0. ) as verbose:
-    for k, r in pool.parallel( { i: pool.delayed( func )( id=i, x=x, n=n, verbose=verbose ) for i, x, n in zip( range(N), xs, ns ) } ).items():
-        verbose.write(f"Returned {k}: {r}")
-        cnt += 1
-print("Done", cnt)
+Simple multi-processing wrapper around the already great joblib.paralllel.
+The minor additions are that parallel processing will be a tad more convenient for dictionaries,
+and that it supports routing cdxbasics.cdxbasics.Context messaging via a Queue to a single thread.
 """
-
 
 from joblib import Parallel as joblib_Parallel, delayed as jl_delayed
 from multiprocessing import Manager, Queue
