@@ -4,7 +4,8 @@ Managing \r updates
 Hans Buehler 2023
 """
 
-from .logger import Logger
+from collections.abc import Callable
+from .logger import Logger#
 _log = Logger(__file__)
 
 class CRMan(object):
@@ -37,6 +38,7 @@ class CRMan(object):
     def __call__(self, message : str) -> str:
         """
         Convert 'message' containing '\r' and '\n' into a printable string which ensures that '\r' string do not lead to printed artifacts.
+        Afterwards, the object will retain any text not terminated by '\n'
         
         Parameters
         ----------
@@ -90,11 +92,14 @@ class CRMan(object):
         """ Reset object """
         self._current = ""
         
-    def write(self, text, end='', flush=True):
+    def write(self, text, end='', flush=True, channel : Callable = None ):
         """
         Write to stdout using \r and \n translations.
-        The 'end' and 'flush' parameters echo those of print()
+        The 'end' and 'flush' parameters mirror those of print()
         """
         text = self(text+end)
-        print( text, end='', flush=flush )
+        if channel is None:
+            print( text, end='', flush=flush )
+        else:
+            channel( text, flush=flush )
         return self

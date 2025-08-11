@@ -1254,6 +1254,9 @@ class Timer(object):
                 if tme.test_dt_seconds(2.): print(f"\r{i+1}/{n} done. Time taken so far {tme}.", end='', flush=True)
             print("\rDone. This took {tme}.")
         """
+        if interval is None:
+            self.intv = self.seconds
+            return True
         if self.intv is None:
             self.intv = self.seconds
             return True

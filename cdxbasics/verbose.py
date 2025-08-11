@@ -4,8 +4,9 @@ Utility for verbose printing with indentation
 Hans Buehler 2022
 """
 
+from multiprocessing import Queue
 from .util import fmt, Timer
-from .crman import CRMan
+from .crman import CRMan, Callable
 from .logger import Logger
 _log = Logger(__file__)
 
@@ -32,7 +33,8 @@ class Context(object):
     def __init__(self,   verbose_or_init = None, *,
                          indent    : int = 2,
                          fmt_level : str = "%02ld: ",
-                         level     : int = None                         
+                         level     : int = None,
+                         channel   : Callable = None
                          ):
         """
         Create a Context object.
@@ -62,13 +64,26 @@ class Context(object):
                 if a Context: copy constructor.
             indent : int
                 How much to indent prints per level
+            fmt_level :
+                How to format output given level*indentm using %ld for the current level.
+                
+        Advanced parameters
+        -------------------
             level :
                 Initial level. This can also be set if verbose_or_init is another context.
                 If 'level' is None:
                     If 'verbose_or_init' is another Context object, use that object's level
                     If 'verbose_or_init' is an integer or one of the keywords above, use 0
-            fmt_level :
-                How to format output given level*indentm using %ld for the current level.
+            channel :
+                A callable which is called to print text.
+                It will be called channel( msg : str, flush : bool ) which should mirror print( msg, end='', flush ).
+                In particular do not terminate with a new line.
+                This can also be set if verbose_or_init is another context, i.e.
+                    verbose = Context()
+                    ...
+                    cverbose = Context( verbose, channel=lambda msg, flush : pass )
+                will return a silenced verbose.
+                    
         """
         if not level is None: _log.verify( level>=0, "'level' must not be negative; found %ld", level)
         if isinstance( verbose_or_init, Context ) or type(verbose_or_init).__name__ == "Context":
@@ -78,6 +93,7 @@ class Context(object):
             self.indent      = verbose_or_init.indent
             self.fmt_level   = verbose_or_init.fmt_level
             self.crman       = CRMan()
+            self.channel     = verbose_or_init.channel if channel is None else channel
             return
 
         if isinstance( verbose_or_init, str ):
@@ -98,6 +114,7 @@ class Context(object):
         self.indent      = indent             # indentation level
         self.fmt_level   = str(fmt_level)     # output format
         self.crman       = CRMan()
+        self.channel     = channel
 
     def write( self, message : str, *args, end : str = "\n", head : bool = True, **kwargs ):
         """
@@ -179,7 +196,7 @@ class Context(object):
         """
         message = self.fmt( level, message, *args, head=head, **kwargs )
         if not message is None:
-            self.crman.write(message,end=end,flush=True)
+            self.crman.write(message,end=end,flush=True, channel=self.channel )
 
     def fmt( self, level : int, message : str, *args, head : bool = True, **kwargs ) -> str:
         """
@@ -349,6 +366,8 @@ class Context(object):
             verbose.write("Starting... ", end='')
             ...
             verbose.write(f"this took {t}.", head=False)
+            
+        Equivalent to Context.Timer()
         """
         return Timer()
      
@@ -361,7 +380,17 @@ class Context(object):
         This function always returns an empty string, which means that the object is never hashed.
         """
         return ""
+    
+    # Channels
+    # --------
 
+    def apply_channel( self, channel : Callable ):
+        """
+        Returns a new Context object with the same currrent state as 'self', but pointing to 'channel'
+        """
+        return Context( self, channel=channel ) if channel != self.channel else self
+    
+    
 # Recommended default parameter 'quiet' for functions accepting a context parameter
 quiet = Context(Context.QUIET)
 Context.quiet = quiet
@@ -370,3 +399,7 @@ all_ = Context(Context.ALL)
 Context.all = all_
 
 Context.Timer = Timer
+
+    
+
+
