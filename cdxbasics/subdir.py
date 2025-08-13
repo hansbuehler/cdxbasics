@@ -24,6 +24,7 @@ import platform as platform
 from functools import update_wrapper
 from .prettydict import pdct
 from .verbose import Context
+from .version import Version
 
 try:
     import numpy as np
@@ -1863,7 +1864,7 @@ class SubDir(object):
     # -------
     
     def cache_callable(self, F : Callable, 
-                             version             : str = "*", *,
+                             version             : str = None, *,
                              id                  : Callable = None,
                              name                : str = None, 
                              unique              : bool = False,
@@ -1958,7 +1959,7 @@ class SubDir(object):
         Pertinent parameters
         --------------------
         Often functions have parameters which do not alter the output of the function but control i/o or other aspects of the overall environment.
-        An example is a function parameter 'quiet', 
+        An example is a function parameter 'debug':
         
             def f(x,y,debug=False):
                 z = x*y
@@ -1986,8 +1987,8 @@ class SubDir(object):
             
         version : str, optional
             Version of the function.
-            * If set to '*' (the default) then F must be decorated with cdxbasics.version.version
-            * Specify the function 
+            * If None then F must be decorated with cdxbasics.version.version
+            * If set, this version string will be used.
             
 
         id : str, Callable
@@ -2057,12 +2058,13 @@ class SubDir(object):
             except:
                 _log.warning( f"Cannot determine module name for 'F' of {type(F)}")
     
-        if version == "*":
-            try:
-                version = F.version.unique_id64
-            except Exception:
-                _log.throw( f"Cannot determine version string for 'F' ({name}): must specify 'version' or decorate 'F' with cdxbasics.version.version" )
-                
+        if not version is None:
+            version_info = getattr(F,"version", None)
+            if version_info is None:
+                _log.throw(f"Cannot determine version for '{name}': if 'version' is not specified, then the function must be decoared using cdxbasics.version.version.")
+            if type(version_info).__name__ != Version.__name__:
+                _log.throw(f"Cannot determine version for '{name}': 'version' member of the class is of type '{type(version_info)}'")
+    
         uniqueNamedFileName    = namedUniqueHashExt(max_length=max_filename_length,id_length=hash_length,filename_by=DEF_FILE_NAME_MAP)
         uniqueLabelledFileName = uniqueLabelExt(max_length=max_filename_length,id_length=hash_length,filename_by=DEF_FILE_NAME_MAP)
 
@@ -2145,6 +2147,9 @@ class SubDir(object):
             execute.cache_info.last_id_arguments = str(arguments) if not arguments is None else None
             execute.cache_info.last_file_name = filename
 
+            # version
+            version_ = version if not version is None else F.version.unique_id64
+
             # determine cache mode
             override_cache_mode = CacheMode(override_cache_mode) if not override_cache_mode is None else cache_mode
 
@@ -2154,29 +2159,28 @@ class SubDir(object):
                 class Tag:
                     pass
                 tag = Tag()
-                r = self.read( filename, tag, version=version )
+                r = self.read( filename, tag, version=version_ )
                 if not r is tag:
                     if not track_cached_files is None:
                         track_cached_files += self.fullFileName(filename)
                     execute.cache_info.last_cached = True 
                     if not debug_verbose is None:
-                        debug_verbose.write(f"cache_callable({name}): called with id {id_} with cache file name {self.path+filename}: result retrieved from cache.")
+                        debug_verbose.write(f"cache_callable({name}): read '{id_}' version 'version {version_}' from cache '{self.path+filename}'.")
                     return r
             
             if not debug_verbose is None:
-                debug_verbose.write(f"cache_callable({name}): calling function with id {id_} for cache file name {self.path+filename}.")
+                debug_verbose.write(f"cache_callable({name}): calling '{id_}' version 'version {version_}' for cache file name {self.path+filename}.")
 
             r = F(*kargs, **kwargs)
-#            _log.verify( not r is None, "Cannot use caching with functions which return None")
             
             if override_cache_mode.write:
-                self.write(filename,r,version=version)      
+                self.write(filename,r,version=version_)      
                 if not track_cached_files is None:
                     track_cached_files += self.fullFileName(filename)
             execute.cache_info.last_cached = False
             
             if not debug_verbose is None:
-                debug_verbose.write(f"cache_callable({name}): called with id {id_} with cache file name {self.path+filename}: function was called.")
+                debug_verbose.write(f"cache_callable({name}): called '{id_}'  version 'version {version_}' with cache file name {self.path+filename}: function was called.")
             return r
         update_wrapper( wrapper=execute, wrapped=F )
         execute.cache_info = pdct()
@@ -2184,7 +2188,7 @@ class SubDir(object):
         execute.cache_info.version = version
         
         if not debug_verbose is None:
-            debug_verbose.write(f"cache_callable({name}): function registered with version '{version}' for {self.path}.")
+            debug_verbose.write(f"cache_callable({name}): function registered for {self.path}.")
         return execute
             
     
