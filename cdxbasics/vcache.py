@@ -216,7 +216,6 @@ class VersionedCacheDirectory( object ):
             return f
         return vwrap
 
-
 def VersionedCacheRoot( directory          : str, *,
                         ext                : str = None, 
                         fmt                : Format = None,
@@ -264,3 +263,4 @@ def VersionedCacheRoot( directory          : str, *,
     controller = VersionController(**controller_kwargs) if len(controller_kwargs) > 0 else None
     return VersionedCacheDirectory( directory=directory, ext=ext, fmt=fmt, createDirectory=createDirectory, controller=controller )
 
+version = version_version

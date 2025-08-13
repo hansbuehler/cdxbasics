@@ -434,8 +434,12 @@ class SubDir(object):
             return
         # create directory
         if not os.path.exists( self._path[:-1] ):
-            os.makedirs( self._path[:-1] )
-        elif not os.path.isdir(self._path[:-1]):
+            try:
+                os.makedirs( self._path[:-1] )
+                return
+            except FileExistsError:
+                pass
+        if not os.path.isdir(self._path[:-1]):
             _log.throw( "Cannot use sub directory %s: object exists but is not a directory", self._path[:-1] )
 
     def pathExists(self) -> bool:
@@ -775,9 +779,13 @@ class SubDir(object):
                     # handle version as byte string
                     ok      = True
                     if not version is None:
+                        #print("*** reading version 1")
                         test_len     = int( f.read( 1 )[0] )
+                        #print("*** reading version 2", test_len)
                         test_version = f.read(test_len)
+                        #print("*** reading version 3", test_version)
                         test_version = test_version.decode("utf-8")
+                        #print("*** reading version 4", test_version)
                         if handle_version == SubDir.VER_RETURN:
                             return test_version
                         ok = (version == "*" or test_version == version)
@@ -785,7 +793,10 @@ class SubDir(object):
                         if handle_version == SubDir.VER_CHECK:
                             return True
                         if fmt == Format.PICKLE:
+                            #print("*** reading version 5")
+                            #print("### ", f.read(100))
                             data = pickle.load(f)
+                            #print("*** reading version 6")
                         elif fmt == Format.BLOSC:
                             if blosc is None: _log.throw("Package 'blosc' not found. Please pip install")
                             nnbb       = f.read(2)
@@ -937,7 +948,14 @@ class SubDir(object):
             For a single 'key': Content of the file if successfully read, or 'default' otherwise.
             If 'key' is a list: list of contents.
         """
-        return self._read( key=key,default=default,raiseOnError=raiseOnError,version=version,ext=ext,fmt=fmt,delete_wrong_version=delete_wrong_version,handle_version=SubDir.VER_NORMAL )
+        return self._read( key=key,
+                           default=default,
+                           raiseOnError=raiseOnError,
+                           version=version,
+                           ext=ext,
+                           fmt=fmt,
+                           delete_wrong_version=delete_wrong_version,
+                           handle_version=SubDir.VER_NORMAL )
 
     get = read # backwards compatibility
 
@@ -2133,8 +2151,11 @@ class SubDir(object):
             if override_cache_mode.delete:
                 self.delete( filename )
             elif override_cache_mode.read:
-                r = self.read( filename, None, version=version )
-                if not r is None:
+                class Tag:
+                    pass
+                tag = Tag()
+                r = self.read( filename, tag, version=version )
+                if not r is tag:
                     if not track_cached_files is None:
                         track_cached_files += self.fullFileName(filename)
                     execute.cache_info.last_cached = True 
@@ -2146,7 +2167,7 @@ class SubDir(object):
                 debug_verbose.write(f"cache_callable({name}): calling function with id {id_} for cache file name {self.path+filename}.")
 
             r = F(*kargs, **kwargs)
-            _log.verify( not r is None, "Cannot use caching with functions which return None")
+#            _log.verify( not r is None, "Cannot use caching with functions which return None")
             
             if override_cache_mode.write:
                 self.write(filename,r,version=version)      

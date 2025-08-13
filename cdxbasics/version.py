@@ -1,11 +1,11 @@
 """
-Version handling for functions and classes
-Hans Buehler June 2023
+Version handling for functions and classes including their dependencies via decorators.
 """
 
 from .util import fmt_list, uniqueLabelExt
 from .logger import Logger
 from functools import partial
+import inspect
 
 uniqueLabel64 = uniqueLabelExt(max_length=64,id_length=8)
 uniqueLabel60 = uniqueLabelExt(max_length=60,id_length=8)
@@ -26,12 +26,14 @@ class Version(object):
         dependencies: hierarchy of versions
     """
 
-    def __init__(self, original, version : str, dependencies = [] ):
+    def __init__(self, original, version : str, dependencies : list[type], auto_class : bool ):
         """ Wrapper around a versioned function 'f' """
         self._original           = original
         self._input_version      = str(version)
         self._input_dependencies = list(dependencies)
         self._dependencies       = None
+        self._class              = None  # class defining this function
+        self._auto_class         = auto_class
 
     def __str__(self) -> str:
         """ Returns qualified version """
@@ -50,7 +52,7 @@ class Version(object):
         """ Tests inequality of two versions, or a string """
         other = other.full if isinstance(other, Version) else str(other)
         return self.full != other
-
+    
     @property
     def input(self) -> str:
         """ Returns the version of this function """
@@ -188,6 +190,9 @@ class Version(object):
 
         # collect full qualified dependencies resursively
         version_dependencies = dict()
+        
+        if self._auto_class and not self._class is None:
+            version_dependencies[self._class.__qualname__] = self._class.version.dependencies
 
         for dep in self._input_dependencies:
             # 'dep' can be a string or simply another decorated function
@@ -224,15 +229,19 @@ class Version(object):
                 ext  = "" if hierarchy[-1]==str_dep else ". (This is part of resoling dependency on '%s')" % str_dep
                 if dep is None: _log.throw( err_context() + ": cannot find '%s' in '%s'; known names: %s%s", hierarchy[-1], src_name, fmt_list(list(source.keys())), ext )
 
-            dep_ = getattr(dep, "version", None)
-            if dep_ is None: _log.throw( err_context() + ": cannot determine version of '%s': this is not a versioned function or class as it does not have a 'version' member", dep.__qualname__ )
-            if type(dep_).__name__ != "Version": _log.throw( err_context() + ": cannot determine version of '%s': 'version' member is of type '%s' not of type 'Version'", dep.__qualname__, type(dep_).__name__ )
+            if not isinstance( dep, Version ):
+                dep_v = getattr(dep, "version", None)
+                if dep_v is None: _log.throw( err_context() + ": cannot determine version of '%s': this is not a versioned function or class as it does not have a 'version' member", dep.__qualname__ )
+                if type(dep_v).__name__ != "Version": _log.throw( err_context() + ": cannot determine version of '%s': 'version' member is of type '%s' not of type 'Version'", dep.__qualname__, type(dep_v).__name__ )
+                qualname = dep.__qualname__
+            else:
+                dep_v    = dep
+                qualname = dep._original.__qualname__  
 
             # dynamically retrieve dependencies
-
-            dep.version._resolve_dependencies( top_context=top_context, recursive=recursive )
-            assert not dep.version._dependencies is None, ("Internal error\n", dep)
-            version_dependencies[dep.__qualname__] = dep.version._dependencies
+            dep_v._resolve_dependencies( top_context=top_context, recursive=recursive )
+            assert not dep_v._dependencies is None, ("Internal error", qualname, ":", dep, "//", dep_v)
+            version_dependencies[qualname] = dep_v._dependencies
 
         # add our own to 'resolved dependencies'
         self._dependencies = ( self._input_version, version_dependencies ) if len(version_dependencies) > 0 else self._input_version
@@ -251,12 +260,42 @@ class Version(object):
 # @version
 # =======================================================
 
-def version( version : str = "0.0.1" , dependencies : list = [], *, raise_if_has_version : bool = True ):
+def version( version              : str = "0.0.1" ,
+             dependencies         : list = [], *, 
+             auto_class           : bool = True,
+             raise_if_has_version : bool = True ):
     """
     Decorator for a versioned function or class, which may depend on other versioned functions or classes.
-    The point of this decorate is being able to find out the code version of a sequence of function calls, and be able to update cached or otherwise stored
-    results accordingly.
+    The point of this decorator is being able to find out the code version of a sequence of function calls,
+    and be able to update cached or otherwise stored results accordingly.
     Decoration also works for class members.
+    
+    You can 'version' fuunctions and classes.
+    When a class is 'versioned' it will automatically be dependent on the versions of any 'versioned' base classes. 
+    The same is true for 'versioned' member functions: they will be dependent on the version of the defining class (but not
+    of derived classes). Sometimes this behaviour is not helpful. In this case set 'auto_class' to False
+    when setting the 'version' for a member fiunction
+    
+    
+    @version("0.1")
+    class A(object):
+        @version("0.2") # automatically depends on A
+        def f(self, x):
+            return x
+        @version("0.3", auto_class=False ) # does not depend on A
+        def g(self, x):
+            return x
+        
+    @version("0.4") # automatically depends on A
+    class B(A):
+        pass
+    
+    @version("0.4", auto_class=False ) # does not depend on A
+    class C(A):
+        pass
+    
+    See cdxbasics.vcache as a high level caching mechanism based on version.
+    This wraps the more basic cdxbasics.subdir.SubDir.cache_callable.
 
     Parameters
     ----------
@@ -267,6 +306,9 @@ def version( version : str = "0.0.1" , dependencies : list = [], *, raise_if_has
         The list can contain explicit function references, or strings.
         If strings are used, then the function's global context and, if appliable, it 'self' will be searched
         for the respective function.
+    auto_class : bool
+        If True, the default, then the version of member function or an inherited class is automatically dependent
+        on the version of the defining/base class. Set to False to turn off.
     raise_if_has_version : bool
         Whether to throw an exception of version are already present.
         This is usually the desired behaviour except if used in another wrapper, see for example vcache.        
@@ -328,10 +370,22 @@ def version( version : str = "0.0.1" , dependencies : list = [], *, raise_if_has
                 _log.throw("@version: %s '%s' already has a member 'version'", "type" if isinstance(f,type) else "function", f.__qualname__ )
             # auto-create dependencies to base classes:
             # in this case 'existing' is a member of the base class.
-            if not existing._original in dependencies and not existing._original.__qualname__ in dependencies:
+            if not existing._original in dependencies and not existing._original.__qualname__ in dependencies and auto_class:
                 dep = list(dep)
                 dep.append( existing._original )
-        f.version = Version(f, version, dep)
+        if isinstance( f, type ):
+            funcs = list( inspect.getmembers(f, predicate=inspect.isfunction) )\
+                  + [ c for c in inspect.getmembers(f, predicate=inspect.isclass) if c[0] != "__class__" ]
+            for gname, gf in funcs:
+                gversion = getattr(gf, "version", None)
+                if gversion is None:
+                    #print(f"{gname} is not versioned")
+                    continue
+                if not gversion._class is None:
+                    #print(f"{gname} already has a class {gversion._class.__qualname__}, skipping {f.__qualname__}")
+                    continue
+                gversion._class = f
+        f.version = Version(f, version, dep, auto_class=auto_class )
         return f
     return wrap
 
