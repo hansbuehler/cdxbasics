@@ -1018,6 +1018,8 @@ class CacheMode(object):
             mode : str
                 Which mode to use.
         """
+        if isinstance( mode, CacheMode ):
+            return# id copy constuctor
         mode      = self.ON if mode is None else mode
         self.mode = mode.mode if isinstance(mode, CacheMode) else str(mode)
         if not self.mode in self.MODES:

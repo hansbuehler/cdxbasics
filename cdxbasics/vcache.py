@@ -8,6 +8,7 @@ from .logger import Logger
 from .subdir import SubDir, Format, CacheMode, CacheTracker, Callable
 from .verbose import Context
 from .prettydict import pdct
+import inspect as inspect
 
 _log = Logger(__file__)
 
@@ -215,6 +216,8 @@ class VersionedCacheDirectory( object ):
         """
 
         def vwrap(f):
+            if inspect.isclass(f):
+                raise RuntimeError(f"'{f.__qualname__}: cannot use cache() for types; use cache_class()")
             existing_version = getattr(f, 'version', None)
             if not existing_version is None:
                 # existing version -> use that
@@ -227,7 +230,7 @@ class VersionedCacheDirectory( object ):
             else:
                 # equip 'f' with a version and remember it
                 if version is None:
-                    raise AttributeError(f"Pleas set 'version' for '{f.__qualname__}' (or use cdxbasica.version.version to decorate the function)")
+                    raise AttributeError(f"Please set 'version' for '{f.__qualname__}' (or use cdxbasica.version.version to decorate the function)")
                 f_version = version_version( version=version,
                                              dependencies=dependencies if not dependencies is None else [],
                                              auto_class=version_auto_class,
@@ -245,10 +248,54 @@ class VersionedCacheDirectory( object ):
                                             debug_verbose=self._controller._debug_verbose,
                                             cache_mode=self._controller._cache_mode
                                             ) 
-            fname = f.cache_info.name
-            self._controller._versioned[fname] = pdct(f=f, path=self._dir.path)
+            if not getattr(f,"cache_info", None) is None:
+                fname = f.cache_info.name
+                self._controller._versioned[fname] = pdct(f=f, path=self._dir.path)
             return f
         return vwrap
+    
+    # caching class construction
+    # --------------------------
+    
+    def cache_class(self, version             : str = None , *,
+                          dependencies        : list = None, 
+                          auto_class          : bool = True
+                          ):
+        """
+        Caching for classes.
+        Caching for classes is implemented in two separate steps:
+            1) Decorate __init__. This wil determine relevant 
+        """
+        def wrap(C):
+            version_ = version
+            if not inspect.isclass( C ):
+                raise RuntimeError(f"Parameter is not a class but of type {type(C)}.")
+            existing_version = getattr(C, 'version', None)
+
+            if not existing_version is None:
+                # existing version -> use that
+                if type(existing_version).__name__ != Version.__name__:
+                    raise AttributeError(f"Cannot set class 'version' of '{C.__qualname__}': function already has a 'version' member, but it is of type '{type(existing_version)}' not '{Version}'")
+                if not version is None:
+                    raise AttributeError(f"Cannot set class 'version' of '{C.__qualname__}' to '{version}': function already has a 'version' member with version '{existing_version}'")
+                if not dependencies is None:
+                    raise AttributeError(f"Cannot set class 'dependencies' of '{C.__qualname__}': function already has a 'version' member with version '{existing_version}'")
+                version_ = existing_version
+            else:
+                # equip 'f' with a version and remember it
+                if version_ is None:
+                    raise AttributeError(f"Please set class 'version' for '{C.__qualname__}' (or use cdxbasica.version.version to decorate the function)")
+                f_version = version_version( version=version_,
+                                             dependencies=dependencies if not dependencies is None else [],
+                                             auto_class=auto_class,
+                                             raise_if_has_version=True )
+                C = f_version(C) # equip 'f' with a version string
+                version_ = C.version
+            
+            if not self._controller._debug_verbose is None:
+                self._controller._debug_verbose.write(f"Added caching to class '{C.__qualname__}'s __new__")
+            return C
+        return wrap
 
 def VersionedCacheRoot( directory          : str, *,
                         ext                : str = None, 

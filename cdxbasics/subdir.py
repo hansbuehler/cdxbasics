@@ -105,6 +105,12 @@ class CacheTracker(object):
     def __repr__(self) -> str:#NOQA
         return f"Tracked: {self._files}"
 
+class InitCacheInfo(object):
+    pass
+
+class CacheInfo(object):
+    pass
+    
 # SubDir
 # ======
 
@@ -400,12 +406,6 @@ class SubDir(object):
                 self.eraseEverything(keepDirectory=self._crt)
             if self._crt:
                 self.createDirectory()
-
-    def __new__(cls, *kargs, **kwargs):
-        """ Copy constructor """
-        if len(kargs) == 1 and len(kwargs) == 0 and isinstance( kargs[0], SubDir ):
-            return kargs[0]
-        return super().__new__(cls)
 
     @staticmethod
     def expandStandardRoot( name ):
@@ -780,13 +780,9 @@ class SubDir(object):
                     # handle version as byte string
                     ok      = True
                     if not version is None:
-                        #print("*** reading version 1")
                         test_len     = int( f.read( 1 )[0] )
-                        #print("*** reading version 2", test_len)
                         test_version = f.read(test_len)
-                        #print("*** reading version 3", test_version)
                         test_version = test_version.decode("utf-8")
-                        #print("*** reading version 4", test_version)
                         if handle_version == SubDir.VER_RETURN:
                             return test_version
                         ok = (version == "*" or test_version == version)
@@ -794,10 +790,7 @@ class SubDir(object):
                         if handle_version == SubDir.VER_CHECK:
                             return True
                         if fmt == Format.PICKLE:
-                            #print("*** reading version 5")
-                            #print("### ", f.read(100))
                             data = pickle.load(f)
-                            #print("*** reading version 6")
                         elif fmt == Format.BLOSC:
                             if blosc is None: _log.throw("Package 'blosc' not found. Please pip install")
                             nnbb       = f.read(2)
@@ -1738,7 +1731,7 @@ class SubDir(object):
             keyOrSub : str
                 identify the object requested. Should be a string or a list of strings.
             default:
-                If specified, this function reads 'keyOrSub' with read( keyOrSub, default, *kargs, **kwargs )
+                If specified, this function reads 'keyOrSub' with read( keyOrSub, default, *args, **kwargs )
                 If not specified, then this function calls SubDir(keyOrSub,parent=self,ext=ext,fmt=fmt)
 
         The following keywords are only relevant when reading files.
@@ -1862,7 +1855,9 @@ class SubDir(object):
         
     # caching
     # -------
-    
+
+   
+                
     def cache_callable(self, F : Callable, 
                              version             : str = None, *,
                              id                  : Callable = None,
@@ -2043,7 +2038,94 @@ class SubDir(object):
                 override_cache_mode : allows to override caching mode temporarily, in particular "off"
                 track_cached_files : pass a CacheTracker object to keep track of all files used (loaded from or saved to).
                       This can be used to delete intermediary files when a large operation was completed.
-        """ 
+        """
+        return CacheCallable(subdir = self,
+                             version = version,
+                             id = id,
+                             name = name,
+                             unique = unique,
+                             exclude_args = exclude_args,
+                             include_args = include_args,
+                             exclude_arg_types = exclude_arg_types,
+                             max_filename_length = max_filename_length,
+                             hash_length = hash_length,                  
+                             cache_mode = cache_mode,
+                             debug_verbose = debug_verbose)(F)
+
+
+class CacheCallable(object):
+    """
+    Utility class for SubDir.cache_callable.
+    See documentation for that function.
+    """
+    
+    def __init__(self, 
+                    subdir              : SubDir, *,
+                    version             : str = None,
+                    id                  : Callable = None,
+                    name                : str = None,
+                    unique              : bool = False,
+                    exclude_args        : set[str] = None,
+                    include_args        : set[str] = None,
+                    exclude_arg_types   : set[type] = None,
+                    max_filename_length : int = 48,
+                    hash_length         : int = 16,                             
+                    cache_mode          : CacheMode = CacheMode.ON,
+                    debug_verbose       : Context = None):
+        """
+        Utility class for SubDir.cache_callable.
+        See documentation for that function.
+        """
+        self.subdir              = SubDir(subdir)
+        self.version             = str(version) if not version is None else None
+        self.id                  = id
+        self.name                = str(name) if not name is None else None
+        self.unique              = bool(unique)
+        self.exclude_args        = set(exclude_args) if not exclude_args is None and len(exclude_args) > 0 else None
+        self.include_args        = set(include_args) if not include_args is None and len(include_args) > 0 else None
+        self.exclude_arg_types   = set(exclude_arg_types) if not exclude_arg_types is None and len(exclude_arg_types) > 0 else None
+        self.cache_mode          = CacheMode(cache_mode)
+        self.max_filename_length = int(max_filename_length)
+        self.hash_length         = int(hash_length)
+        self.debug_verbose       = debug_verbose        
+        _log.verify( self.max_filename_length > 1, "'max_filename_length' must exceed 1")
+        _log.verify( self.hash_length > 1 and self.hash_length <= self.max_filename_length, "'max_filename_length' must exceed 1 and must not exceed 'max_filename_length'")
+        
+    def __call__(self, F : Callable):
+        """
+        Decorate 'F' as cachable callable.
+        See SubDir.cache_callable for documentation.
+        """
+        
+        # check validity
+        # --------------
+        # Cannot currently decorate classes.
+        
+        if inspect.isclass(F):
+            _log.throw(f"'{F.__qualname__}': you cannot decorate classes for caching.") 
+            
+        is_func  = inspect.isfunction(F)
+        if not is_func:
+            # if F is neither a function or class, attempt to decorate (bound) __call__
+            if not callable(F):
+                _log.throw("{F._qualname_}' is not callable")                
+            F_ = getattr(F, "__call__", None)
+            if F_ is None:
+                _log.throw("{F._qualname_}' is callable, but has no '__call__'. F is of type {type(F)}")
+            if not self.debug_verbose is None:
+                self.debug_verbose.write("'{F._qualname_}' is an object; will use bound __call__")
+            F = F_
+            del F_
+        else:
+            if F.__name__ == "__new__":
+                _log.throw("You cannot decorate __new__ of '{F.__qualname__}'.")
+            if F.__name__ == "__init__":
+                _log.throw("You cannot decorate __init__ of '{F.__qualname__}'.")
+
+        # name
+        # ----
+
+        name = self.name
         if name is None:
             try:
                 name = F.__qualname__
@@ -2057,75 +2139,83 @@ class SubDir(object):
                 name = name + "@" + F.__module__
             except:
                 _log.warning( f"Cannot determine module name for 'F' of {type(F)}")
-    
-        if not version is None:
+
+        # version
+        # -------
+        # Ideally the function F was decorated with @version already.
+
+        if self.version is None:
             version_info = getattr(F,"version", None)
             if version_info is None:
-                _log.throw(f"Cannot determine version for '{name}': if 'version' is not specified, then the function must be decoared using cdxbasics.version.version.")
+                _log.throw(f"Cannot determine version for '{name}': if 'version' is not specified, then the function must be decorated using cdxbasics.version.version.")
             if type(version_info).__name__ != Version.__name__:
                 _log.throw(f"Cannot determine version for '{name}': 'version' member of the class is of type '{type(version_info)}'")
-    
-        uniqueNamedFileName    = namedUniqueHashExt(max_length=max_filename_length,id_length=hash_length,filename_by=DEF_FILE_NAME_MAP)
-        uniqueLabelledFileName = uniqueLabelExt(max_length=max_filename_length,id_length=hash_length,filename_by=DEF_FILE_NAME_MAP)
 
-        exclude_args      = set(exclude_args) if not exclude_args is None and len(exclude_args) > 0 else None
-        include_args      = set(include_args) if not include_args is None and len(include_args) > 0 else None
-        exclude_arg_types = set(exclude_arg_types) if not exclude_arg_types is None and len(exclude_arg_types) > 0 else None
-        cache_mode        = CacheMode(cache_mode)
-        sig               = inspect.signature(F)
-        
-        def execute( *kargs, override_cache_mode : CacheMode = None, track_cached_files : CacheTracker = None, **kwargs ):     
+        # wrap
+        # ----
+
+        sig                    = inspect.signature(F)
+        uniqueNamedFileName    = namedUniqueHashExt(max_length=self.max_filename_length,id_length=self.hash_length,filename_by=DEF_FILE_NAME_MAP)
+        uniqueLabelledFileName = uniqueLabelExt(max_length=self.max_filename_length,id_length=self.hash_length,filename_by=DEF_FILE_NAME_MAP)
+
+        def execute( *args, override_cache_mode : CacheMode = None, track_cached_files : CacheTracker = None, **kwargs ):     
             """
             Cached execution of the wrapped function
             """
             
+            # determine unique id_ for this function call
+            # -------------------------------------------
+            
             id_ = None
-            if isinstance(id, str) and unique:
-                # if 'id' does not contain formatting codes, and the result is 'unqiue' then do not bother collecting
+            if isinstance(self.id, str) and self.unique:
+                # if 'id' does not contain formatting codes, and the result is 'unique' then do not bother collecting
                 # function arguments
                 try:
-                    id_ = id.format()   # throws a KeyError if 'id' contains formatting information
+                    id_ = self.id.format()   # throws a KeyError if 'id' contains formatting information
                 except KeyError:
                     pass
 
             if not id_ is None:
                 # generate name with the unique args
-                filename = uniqueLabelledFileName( id )
+                filename = self.uniqueLabelledFileName( self.id )
                 arguments = None
                 id_ = None
                 
             else:
                 # get dictionary of named arguments
-                arguments = sig.bind(*kargs,**kwargs)
+                arguments = sig.bind(*args,**kwargs)
                 arguments.apply_defaults()
                 arguments = arguments.arguments # ordered dict
                 argus = set(arguments)
 
                 # filter dictionary
-                if not exclude_args is None or not include_args is None:
-                    excl = set(exclude_args) if not exclude_args is None else set()
-                    assert exclude_args is None or exclude_args <= argus, ("'exclude_args' contains unknown argument names. 'exclude_args'", exclude_args, "argument names", argus)
-                    if not include_args is None:     
-                        assert include_args is None or include_args <= argus, ("'include_args' contains unknown argument names. 'include_args'", include_args, "argument names", argus)
-                        excl = argus - include_args
-                    if not exclude_args is None:
-                        excl |= exclude_args
+                if not self.exclude_args is None or not self.include_args is None:
+                    excl = set(self.exclude_args) if not self.exclude_args is None else set()
+                    if not self.exclude_args is None: 
+                        if self.exclude_args > argus:
+                            _log.error(f"{name}: 'exclude_args' contains unknown argument names: exclude_args {sorted(self.exclude_args)} while argument names are {sorted(argus)}.")
+                    if not self.include_args is None:     
+                        if self.include_args > argus:
+                            _log.error(f"{name}: 'include_args' contains unknown argument names: include_args {sorted(self.iinclude_args)} while argument names are {sorted(argus)}.")
+                        excl = argus - self.iinclude_args
+                    if not self.exclude_args is None:
+                        excl |= self.exclude_args
                     for arg in excl:
                         if arg in arguments:
                             del arguments[arg]
                     del excl
 
-                if not exclude_arg_types is None:
+                if not self.exclude_arg_types is None:
                     excl = []
                     for k, v in arguments.items():
-                        if type(v) in exclude_arg_types or type(v).__name__ in exclude_arg_types:
+                        if type(v) in self.exclude_arg_types or type(v).__name__ in self.exclude_arg_types:
                             excl.append( k )
                     for arg in excl:
                         if arg in arguments:
                             del arguments[arg]
                       
                 # apply logics
-                id_ = id
+                id_ = self.id
                 
                 if id_ is None:
                     id_ = name
@@ -2137,64 +2227,69 @@ class SubDir(object):
                     id_ = id_(name=name, **arguments)
                     assert isinstance(id_, str), ("'id': callable must return a string. Found",type(id_))
 
-                if unique:
+                if self.unique:
                     filename = uniqueLabelledFileName( id_ )
                 else:
                     filename = uniqueNamedFileName( id_, name=name, **arguments )
 
-            # store information for calling entity
+            # determine version, cache mode
+            # ------------------
+
+            version_ = self.version if not self.version is None else F.version.unique_id64
+            override_cache_mode = CacheMode(override_cache_mode) if not override_cache_mode is None else self.cache_mode
+
+            # store process information
+            # -------------------------
+
             execute.cache_info.last_id = str(id_) if not id_ is None else None
             execute.cache_info.last_id_arguments = str(arguments) if not arguments is None else None
             execute.cache_info.last_file_name = filename
+            execute.cache_info._version = version_
 
-            # version
-            version_ = version if not version is None else F.version.unique_id64
-
-            # determine cache mode
-            override_cache_mode = CacheMode(override_cache_mode) if not override_cache_mode is None else cache_mode
+            # execute caching
+            # ---------------
 
             if override_cache_mode.delete:
-                self.delete( filename )
+                self.subdir.delete( filename )
             elif override_cache_mode.read:
                 class Tag:
                     pass
                 tag = Tag()
-                r = self.read( filename, tag, version=version_ )
+                r = self.subdir.read( filename, tag, version=version_ )
                 if not r is tag:
                     if not track_cached_files is None:
                         track_cached_files += self.fullFileName(filename)
                     execute.cache_info.last_cached = True 
-                    if not debug_verbose is None:
-                        debug_verbose.write(f"cache_callable({name}): read '{id_}' version 'version {version_}' from cache '{self.path+filename}'.")
+                    if not self.debug_verbose is None:
+                        self.debug_verbose.write(f"cache_callable({name}): read '{id_}' version 'version {version_}' from cache '{self.subdir.path+filename}'.")
                     return r
             
-            if not debug_verbose is None:
-                debug_verbose.write(f"cache_callable({name}): calling '{id_}' version 'version {version_}' for cache file name {self.path+filename}.")
-
-            r = F(*kargs, **kwargs)
+            r = F(*args, **kwargs)
             
             if override_cache_mode.write:
-                self.write(filename,r,version=version_)      
+                self.subdir.write(filename,r,version=version_)      
                 if not track_cached_files is None:
-                    track_cached_files += self.fullFileName(filename)
+                    track_cached_files += self.subdir.fullFileName(filename)
             execute.cache_info.last_cached = False
+            execute.cache_info.version = self.version if not self.version is None else F.version
             
-            if not debug_verbose is None:
-                debug_verbose.write(f"cache_callable({name}): called '{id_}'  version 'version {version_}' with cache file name {self.path+filename}: function was called.")
+            if not self.debug_verbose is None:
+                if override_cache_mode.write:
+                    self.debug_verbose.write(f"cache_callable({name}): called '{id_}' version 'version {version_}' and wrote result into '{self.subdir.path+filename}'.")
+                else:
+                    self.debug_verbose.write(f"cache_callable({name}): called '{id_}' version 'version {version_}' but did *not* write into '{self.subdir.path+filename}'.")
             return r
-        update_wrapper( wrapper=execute, wrapped=F )
-        execute.cache_info = pdct()
-        execute.cache_info.name = name
-        execute.cache_info.version = version
         
-        if not debug_verbose is None:
-            debug_verbose.write(f"cache_callable({name}): function registered for {self.path}.")
-        return execute
-            
-    
-    
-    
-    
-    
-    
+        update_wrapper( wrapper=execute, wrapped=F )
+        execute.cache_info = CacheInfo()
+        execute.cache_info.name = name
+        execute.cache_info.version = self.version if not self.version is None else getattr(F,"version", None)
+        
+        if not self.debug_verbose is None:
+            self.debug_verbose.write(f"cache_callable({name}): function registered for {self.subdir.path}.")   
+
+        return execute          
+
+                
+                
     
